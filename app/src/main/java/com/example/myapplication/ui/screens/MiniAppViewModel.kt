@@ -76,6 +76,9 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     var walletBalance by mutableStateOf<Double?>(null)
         private set
 
+    var walletAdjustedBalance by mutableStateOf<Double?>(null)
+        private set
+
     var walletBalanceError by mutableStateOf<String?>(null)
         private set
 
@@ -132,21 +135,21 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             walletBalanceError = null
             try {
                 val service = getService()
-                service.getWalletBalance()
-                    .onSuccess {
-                        walletBalance = it
+                service.getWalletBalanceDetails()
+                    .onSuccess { details ->
+                        walletBalance = details.balance
+                        walletAdjustedBalance = details.adjustedBalance
                         walletBalanceError = null
+                        details.accountNumber?.trim()?.takeIf { it.isNotEmpty() }?.let { accountNumber ->
+                            depositAccountNumber = accountNumber
+                            viewModelScope.launch {
+                                settingsManager.saveDepositAccountNumber(accountNumber)
+                            }
+                        }
                     }
                     .onFailure { error ->
                         walletBalanceError = error.message ?: "Could not load wallet balance."
                         Log.e("MiniAppViewModel", "Failed to refresh wallet balance", error)
-                    }
-                service.getWalletDepositAccount()
-                    .onSuccess { account ->
-                        depositAccountNumber = account.accountNumber
-                        viewModelScope.launch {
-                            settingsManager.saveDepositAccountNumber(account.accountNumber)
-                        }
                     }
             } catch (error: CancellationException) {
                 throw error

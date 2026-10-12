@@ -9,6 +9,7 @@ import com.example.myapplication.data.api.BackendPaymentLinkRequest
 import com.example.myapplication.data.api.BackendQrPaymentRequest
 import com.example.myapplication.data.api.BackendRecipientInformation
 import com.example.myapplication.data.api.BackendTransferInstitution
+import com.example.myapplication.data.api.BackendWalletBalanceResponse
 import com.example.myapplication.data.api.BackendWalletDepositAccount
 import com.example.myapplication.data.api.CardDetails
 import com.example.myapplication.data.api.InternalTransaction
@@ -218,39 +219,30 @@ class SwiftPayService(
         }
     }
 
-    suspend fun getWalletBalance(): Result<Double> {
+    suspend fun getWalletBalanceDetails(): Result<BackendWalletBalanceResponse> {
         if (!hasApiKey) return missingSession()
         return try {
             val response = api.getWalletBalance()
             if (!response.isSuccessful) return failure(response)
             val body = response.body() ?: return Result.failure(IllegalStateException("Empty wallet balance response"))
-            Result.success(body.balance)
+            Result.success(body)
         } catch (error: Exception) {
             Result.failure(error)
         }
     }
 
-    suspend fun getWalletDepositAccount(): Result<BackendWalletDepositAccount> {
-        if (!hasApiKey) return missingSession()
-        return try {
-            val response = api.getWalletBalance()
-            if (!response.isSuccessful) return failure(response)
-            val body = response.body()
-                ?: return Result.failure(IllegalStateException("Empty wallet account response"))
+    suspend fun getWalletBalance(): Result<Double> =
+        getWalletBalanceDetails().map { it.balance }
+
+    suspend fun getWalletDepositAccount(): Result<BackendWalletDepositAccount> =
+        getWalletBalanceDetails().mapCatching { body ->
             val accountNumber = body.accountNumber?.trim()?.takeIf { it.isNotEmpty() }
-                ?: return Result.failure(
-                    IllegalStateException("SwiftPay did not return the wallet's inbound deposit account number")
-                )
-            Result.success(
-                BackendWalletDepositAccount(
-                    accountNumber = accountNumber,
-                    balance = body.balance
-                )
+                ?: throw IllegalStateException("SwiftPay did not return the wallet's inbound deposit account number")
+            BackendWalletDepositAccount(
+                accountNumber = accountNumber,
+                balance = body.balance
             )
-        } catch (error: Exception) {
-            Result.failure(error)
         }
-    }
 
     suspend fun getInternalTransactions(): Result<List<InternalTransaction>> {
         if (!hasApiKey) return missingSession()

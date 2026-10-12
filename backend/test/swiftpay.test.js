@@ -253,7 +253,11 @@ test("wallet balance reads the documented account number and balance using Basic
     headers: { authorization: "Bearer valid-test-token" }
   });
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { balance: 12500.75, accountNumber: "001002003004" });
+  assert.deepEqual(await response.json(), {
+    balance: 12500.75,
+    adjustedBalance: 12500.75,
+    accountNumber: "001002003004"
+  });
   assert.equal(requests.at(-1).url, "https://provider.example/api/disbursements/account");
   assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
 });
@@ -265,7 +269,11 @@ test("wallet balance reads only the documented account number and balance fields
       headers: { authorization: "Bearer valid-test-token" }
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { balance: 9876.5, accountNumber: "009988776655" });
+    assert.deepEqual(await response.json(), {
+      balance: 9876.5,
+      adjustedBalance: 9876.5,
+      accountNumber: "009988776655"
+    });
   } finally {
     accountResponse = { number: "001002003004", balance: 12500.75 };
   }

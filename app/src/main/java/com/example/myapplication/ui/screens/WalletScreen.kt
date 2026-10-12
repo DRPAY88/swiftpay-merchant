@@ -79,6 +79,7 @@ fun WalletScreen(
     viewModel: MiniAppViewModel = viewModel()
 ) {
     val balance = viewModel.walletBalance
+    val adjustedBalance = viewModel.walletAdjustedBalance
     var transactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("All") }
@@ -187,6 +188,7 @@ fun WalletScreen(
             listPane = {
                 WalletListContent(
                     balance = balance,
+                    adjustedBalance = adjustedBalance,
                     accountNumber = depositAccountNumber,
                     transactions = filteredTransactions,
                     selectedFilter = selectedFilter,
@@ -221,6 +223,7 @@ fun WalletScreen(
 @Composable
 fun WalletListContent(
     balance: Double?,
+    adjustedBalance: Double? = null,
     accountNumber: String? = null,
     transactions: List<InternalTransaction>,
     selectedFilter: String,
@@ -249,6 +252,7 @@ fun WalletListContent(
         
         PremiumBalanceCard(
             balance = balance,
+            adjustedBalance = adjustedBalance,
             accountNumber = accountNumber,
             errorMessage = viewModel?.walletBalanceError,
             onRetry = { viewModel?.refreshBalance() }
@@ -305,6 +309,7 @@ fun WalletListContent(
 @Composable
 fun PremiumBalanceCard(
     balance: Double?,
+    adjustedBalance: Double? = null,
     accountNumber: String? = null,
     errorMessage: String? = null,
     onRetry: () -> Unit = {}
@@ -325,7 +330,7 @@ fun PremiumBalanceCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(210.dp)
+            .height(240.dp)
             .graphicsLayer {
                 translationY = -shadowOffset / 2
             },
@@ -438,17 +443,33 @@ fun PremiumBalanceCard(
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = if (errorMessage == null) Arrangement.End else Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (errorMessage != null) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = errorMessage,
+                            text = "ADJUSTED BALANCE",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.8f),
-                            maxLines = 1,
-                            modifier = Modifier.weight(1f)
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
                         )
+                        Text(
+                            text = adjustedBalance?.let { "₱ ${"%,.2f".format(it)}" } ?: "Unavailable",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        if (errorMessage != null) {
+                            Text(
+                                text = errorMessage,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.8f),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    if (errorMessage != null) {
                         TextButton(onClick = onRetry) {
                             Text("RETRY", color = Color.White, fontWeight = FontWeight.Bold)
                         }

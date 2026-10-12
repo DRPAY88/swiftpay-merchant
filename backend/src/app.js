@@ -387,8 +387,10 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     if (!balance.success || !accountNumber.success || !accountNumber.data) {
       throw new SwiftPayError(502, "SwiftPay returned an invalid wallet account response");
     }
+    const adjustmentTotal = userStore ? Number(await userStore.adjustmentTotal()) : 0;
     res.status(result.status).json({
       balance: balance.data,
+      adjustedBalance: balance.data + adjustmentTotal,
       accountNumber: accountNumber.data
     });
   }));

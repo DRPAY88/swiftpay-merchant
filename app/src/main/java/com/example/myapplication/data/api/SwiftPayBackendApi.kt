@@ -52,6 +52,7 @@ data class BackendStatusResponse(
 @Serializable
 data class BackendWalletBalanceResponse(
     val balance: Double,
+    val adjustedBalance: Double? = null,
     val accountNumber: String? = null
 )
 

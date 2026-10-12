@@ -116,6 +116,16 @@ test("internal adjustments are audited but do not affect the provider balance; a
   assert.equal(adjustment.status, 201);
   assert.equal((await adjustment.json()).affectsProviderFunds, false);
 
+  const wallet = await fetch(`${baseUrl}/v1/wallet/balance`, {
+    headers: { authorization: "Bearer merchant-token" }
+  });
+  assert.equal(wallet.status, 200);
+  assert.deepEqual(await wallet.json(), {
+    balance: 75,
+    adjustedBalance: 175,
+    accountNumber: "000123"
+  });
+
   const transfer = await fetch(`${baseUrl}/v1/disbursements`, {
     method: "POST",
     headers,
