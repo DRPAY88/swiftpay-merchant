@@ -50,11 +50,11 @@ fun ProfileScreen() {
     val navController = LocalNavController.current
 
     val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val bgColor = if (isDarkTheme) Color(0xFF121212) else Color.White
+    val bgColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F8FF)
     val surfaceColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color.White
-    val textColor = if (isDarkTheme) Color.White else FastPayNavy
-    val secondaryTextColor = if (isDarkTheme) Color.LightGray else Color.Gray
-    val borderColor = if (isDarkTheme) Color.DarkGray else Color(0xFFE3E8EF)
+    val textColor = if (isDarkTheme) Color.White else Color(0xFF10213D)
+    val secondaryTextColor = if (isDarkTheme) Color.LightGray else Color(0xFF65758B)
+    val borderColor = if (isDarkTheme) Color.DarkGray else Color(0xFFE1EAF5)
     val accountName = merchantAlias?.takeIf { it.isNotBlank() }
         ?: signedInEmail?.substringBefore('@')?.replace('.', ' ')?.replaceFirstChar { it.uppercase() }
         ?: "SwiftPay merchant"
@@ -82,7 +82,7 @@ fun ProfileScreen() {
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 color = surfaceColor,
                 border = BorderStroke(1.dp, borderColor)
             ) {
@@ -123,7 +123,7 @@ fun ProfileScreen() {
                 Text("PREFERENCES", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = surfaceColor,
                     border = BorderStroke(1.dp, borderColor)
                 ) {
@@ -149,7 +149,7 @@ fun ProfileScreen() {
                 Text("DEVELOPER", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = surfaceColor,
                     border = BorderStroke(1.dp, borderColor)
                 ) {
@@ -182,7 +182,7 @@ fun ProfileScreen() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.2f)),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
             ) {

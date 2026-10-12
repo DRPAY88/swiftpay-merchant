@@ -2,6 +2,7 @@ import { createJwtVerifier, createOtpAuth, sendOtpEmail } from "./auth.js";
 import { createAdminStore } from "./admin-store.js";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { createTransakWidgetService } from "./transak.js";
 
 const config = loadConfig();
 const userStore = config.databaseUrl ? createAdminStore(config.databaseUrl) : null;
@@ -19,6 +20,7 @@ const app = createApp({
   verifyAccessToken: createJwtVerifier(config),
   requestOtp: otpAuth.requestOtp,
   verifyOtp: otpAuth.verifyOtp,
+  cryptoWidgetService: createTransakWidgetService(config),
   userStore
 });
 const server = app.listen(config.port, "0.0.0.0", () => {

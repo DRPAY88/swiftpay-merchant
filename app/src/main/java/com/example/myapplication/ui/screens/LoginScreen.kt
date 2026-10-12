@@ -245,8 +245,10 @@ fun LandingContent(onLoginClick: () -> Unit) {
     val bgColors = if (isDarkTheme) {
         listOf(Color(0xFF0F172A), Color(0xFF020617))
     } else {
-        listOf(FastPayNavy, FastPayDarkNavy)
+        listOf(Color(0xFFF4F8FF), Color(0xFFE6F0FF))
     }
+    val headlineColor = if (isDarkTheme) Color.White else Color(0xFF102B59)
+    val supportingColor = if (isDarkTheme) Color.White.copy(alpha = 0.9f) else Color(0xFF526780)
 
     Box(
         modifier = Modifier
@@ -258,7 +260,7 @@ fun LandingContent(onLoginClick: () -> Unit) {
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 32.dp, vertical = 64.dp)
+                .padding(horizontal = 24.dp, vertical = 32.dp)
                 .graphicsLayer {
                     alpha = contentAlpha
                     translationY = contentOffset
@@ -266,7 +268,7 @@ fun LandingContent(onLoginClick: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            FastPayLogo(scale = 1.5f, isDark = true)
+            FastPayLogo(scale = 1.35f, isDark = isDarkTheme)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -277,19 +279,20 @@ fun LandingContent(onLoginClick: () -> Unit) {
                         fontWeight = FontWeight.Bold,
                         lineHeight = 42.sp
                     ),
-                    color = Color.White,
+                    color = headlineColor,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Surface(
-                    color = Color.White.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(12.dp)
+                    color = if (isDarkTheme) Color.White.copy(alpha = 0.12f) else Color.White,
+                    shape = RoundedCornerShape(14.dp),
+                    shadowElevation = if (isDarkTheme) 0.dp else 2.dp
                 ) {
                     Text(
                         text = "Hosted Checkout · Payment Links · Transfers",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White.copy(alpha = 0.9f),
+                        color = supportingColor,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }

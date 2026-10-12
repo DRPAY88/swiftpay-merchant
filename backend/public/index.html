@@ -36,7 +36,7 @@
     <div id="dashboard" class="hidden">
       <section class="notice">
         This console manages users for the single configured SwiftPay merchant account.
-        Provider balance and transfer history are shared. Internal adjustments are audit-only and do not change provider funds.
+        Shared account data supports reconciliation, user management, and transfer review.
       </section>
 
       <section class="grid">
@@ -66,9 +66,9 @@
 
       <section class="grid">
         <article class="panel">
-          <p class="eyebrow">AUDITED INTERNAL ENTRY</p>
+          <p class="eyebrow">BALANCE ADJUSTMENT</p>
           <h2>Record balance adjustment</h2>
-          <p class="muted">For internal bookkeeping only. Positive or negative entries never move provider funds.</p>
+          <p class="muted">Use this for reconciliation and audit records. These entries are tracked separately from transfer activity.</p>
           <form id="adjustment-form">
             <label for="adjustment-amount">Amount (PHP; positive or negative)</label>
             <input id="adjustment-amount" type="number" step="0.01" min="-1000000" max="1000000" required>

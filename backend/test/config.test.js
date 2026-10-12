@@ -29,3 +29,37 @@ test("invalid additional allowlist entries are rejected", () => {
     /AUTH_ALLOWED_EMAILS, AUTH_ADDITIONAL_ALLOWED_EMAILS, and SUPER_ADMIN_EMAILS/
   );
 });
+
+test("Transak is disabled without credentials and defaults to staging", () => {
+  const config = loadConfig(baseEnv);
+  assert.deepEqual(config.transak, {
+    apiKey: null,
+    apiSecret: null,
+    environment: "staging"
+  });
+});
+
+test("Transak credentials must be configured together and environment is constrained", () => {
+  assert.throws(
+    () => loadConfig({ ...baseEnv, TRANSAK_API_KEY: "partner-key" }),
+    /TRANSAK_API_KEY and TRANSAK_API_SECRET must be configured together/
+  );
+  assert.throws(
+    () => loadConfig({ ...baseEnv, TRANSAK_ENVIRONMENT: "live" }),
+    /TRANSAK_ENVIRONMENT must be staging or production/
+  );
+});
+
+test("Transak production environment retains private paired credentials", () => {
+  const config = loadConfig({
+    ...baseEnv,
+    TRANSAK_ENVIRONMENT: "production",
+    TRANSAK_API_KEY: "partner-key",
+    TRANSAK_API_SECRET: "partner-secret"
+  });
+  assert.deepEqual(config.transak, {
+    apiKey: "partner-key",
+    apiSecret: "partner-secret",
+    environment: "production"
+  });
+});

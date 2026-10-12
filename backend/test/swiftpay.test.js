@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { after, before, test } from "node:test";
 import { createApp } from "../src/app.js";
 import { canonicalOrderMessage, buildOrderPayload, buildQrPayload, verifySwiftPaySignature } from "../src/swiftpay.js";
+import { TransakError } from "../src/transak.js";
 
 const config = {
   swiftPayBaseUrl: new URL("https://provider.example/api/"),
@@ -21,6 +22,9 @@ let accountResponse;
 let accountResponseStatus;
 let qrBootstrapStatus;
 let disbursementPage;
+let disbursementFailure;
+let cryptoWidgetRequest;
+let cryptoWidgetFailure = false;
 
 before(async () => {
   requests = [];
@@ -39,6 +43,16 @@ before(async () => {
       if (!new Set(["valid-test-token", "read-only-test-token"]).has(token)) throw new Error("invalid token");
       if (token === "read-only-test-token") return { sub: "reader-1", scope: "swiftpay:payments:read" };
       return tokenPrincipal;
+    },
+    cryptoWidgetService: {
+      createWidgetUrl: async (request) => {
+        if (cryptoWidgetFailure) throw new TransakError(503, "USDT checkout is not configured for this service");
+        cryptoWidgetRequest = request;
+        return {
+          widgetUrl: "https://global-stg.transak.com/?sessionId=single-use-session",
+          partnerOrderId: "partner-order-1"
+        };
+      }
     },
     fetchImpl: async (url, options) => {
       requests.push({ url: url.toString(), options });
@@ -74,7 +88,7 @@ before(async () => {
           : url.pathname.endsWith("/disbursements/account")
             ? { status: accountResponseStatus, body: accountResponse }
           : url.pathname.endsWith("/disbursements/send")
-            ? { status: 200, body: { id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01" } }
+            ? disbursementFailure || { status: 200, body: { id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01" } }
             : url.pathname.endsWith("/disbursements")
               ? { status: 200, body: disbursementPage }
             : { status: 202, body: { customerRedirectUrl: "https://pay.example/checkout" } };
@@ -92,6 +106,75 @@ before(async () => {
 
 after(async () => {
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+});
+
+test("crypto checkout requires a merchant session and creates pinned buy and sell widget sessions", async () => {
+  const unauthorized = await fetch(`${baseUrl}/v1/crypto/widget-url`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode: "BUY", amount: 2000, walletAddress: "TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7" })
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const headers = {
+    authorization: "Bearer valid-test-token",
+    "content-type": "application/json",
+    "x-forwarded-for": "203.0.113.10"
+  };
+  const buy = await fetch(`${baseUrl}/v1/crypto/widget-url`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ mode: "BUY", amount: 2000, walletAddress: "TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7" })
+  });
+  assert.equal(buy.status, 200);
+  assert.deepEqual(await buy.json(), {
+    widgetUrl: "https://global-stg.transak.com/?sessionId=single-use-session",
+    partnerOrderId: "partner-order-1"
+  });
+  assert.equal(cryptoWidgetRequest.mode, "BUY");
+  assert.equal(cryptoWidgetRequest.amount, 2000);
+  assert.equal(cryptoWidgetRequest.walletAddress, "TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7");
+  assert.equal(cryptoWidgetRequest.userIp, "203.0.113.10");
+
+  const sell = await fetch(`${baseUrl}/v1/crypto/widget-url`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ mode: "SELL", amount: 12.5 })
+  });
+  assert.equal(sell.status, 200);
+  assert.equal(cryptoWidgetRequest.mode, "SELL");
+  assert.equal(cryptoWidgetRequest.amount, 12.5);
+  assert.equal(cryptoWidgetRequest.walletAddress, undefined);
+});
+
+test("crypto buy requires a TRON address and rejects unsupported fields", async () => {
+  const response = await fetch(`${baseUrl}/v1/crypto/widget-url`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ mode: "BUY", amount: 2000, walletAddress: "not-a-tron-address", apiSecret: "never-accepted" })
+  });
+  assert.equal(response.status, 400);
+});
+
+test("crypto checkout reports when Transak credentials are not configured", async () => {
+  cryptoWidgetFailure = true;
+  try {
+    const response = await fetch(`${baseUrl}/v1/crypto/widget-url`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-test-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ mode: "SELL", amount: 12 })
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "USDT checkout is not configured for this service" });
+  } finally {
+    cryptoWidgetFailure = false;
+  }
 });
 
 test("failed OTP delivery returns a retryable error without exposing provider details", async () => {
@@ -190,7 +273,10 @@ test("QR Ph collection does not fabricate a QR when bootstrap is unavailable", a
       body: JSON.stringify({ amount: 25, referenceNo: "QR-FALLBACK-1" })
     });
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "SwiftPay request failed (NOT_FOUND)" });
+    assert.deepEqual(await response.json(), {
+      error: "SwiftPay request failed (NOT_FOUND)",
+      errorCode: "NOT_FOUND"
+    });
     assert.equal(requests.some(({ url }) => url.endsWith("/orders")), false);
   } finally {
     qrBootstrapStatus = 200;
@@ -363,6 +449,37 @@ test("disbursement is represented as pending after provider acceptance", async (
   assert.equal((await appResponse.json()).status, "PENDING");
   assert.equal(requests.at(-1).url, "https://provider.example/api/disbursements/send");
   assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
+});
+
+test("transfer errors preserve SwiftPay error code and safe support reference", async () => {
+  disbursementFailure = {
+    status: 400,
+    body: { errorCode: "INVALID_INPUT", errorUuid: "support-ref-123", errorMessage: "Sensitive provider detail" }
+  };
+  try {
+    const response = await fetch(`${baseUrl}/v1/disbursements`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-test-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        amount: 75,
+        referenceNo: "TRANSFER-INVALID-1",
+        channel: "INSTAPAY",
+        institutionCode: "TESTBANK",
+        recipientInformation: { accountNumber: "123456", fullName: "Test Recipient" }
+      })
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "SwiftPay request failed (INVALID_INPUT)",
+      errorCode: "INVALID_INPUT",
+      supportReference: "support-ref-123"
+    });
+  } finally {
+    disbursementFailure = null;
+  }
 });
 
 test("disbursement history requests a provider page and returns its records as a list", async () => {

@@ -6,16 +6,16 @@
     <title>FastPay Merchant Portal</title>
     <style>
         :root {
-            --fp-blue: #0052CC;
-            --fp-navy: #002B5B;
-            --fp-sky: #E0F2FE;
-            --fp-accent: #00BFFF;
+            --fp-blue: #0757C8;
+            --fp-navy: #102B59;
+            --fp-sky: #E5F0FF;
+            --fp-accent: #45A1FF;
             --surface: #FFFFFF;
-            --bg-gray: #F8F9FA;
-            --text-main: #091E42;
-            --text-muted: #5E6C84;
-            --radius-xl: 32px;
-            --radius-lg: 20px;
+            --bg-gray: #F4F8FF;
+            --text-main: #10213D;
+            --text-muted: #65758B;
+            --radius-xl: 24px;
+            --radius-lg: 16px;
             --radius-md: 12px;
         }
 
@@ -26,7 +26,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: "Aptos", "Segoe UI", sans-serif;
             margin: 0;
             background-color: var(--bg-gray);
             color: var(--text-main);
@@ -74,7 +74,7 @@
             display: flex;
             flex-direction: column;
             transform: translate3d(100%, 0, 0);
-            transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+            transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
             visibility: hidden;
         }
 
@@ -84,12 +84,12 @@
         }
 
         .navbar {
-            padding: 0 16px;
-            background: white;
+            padding: max(8px, env(safe-area-inset-top)) 16px 0;
+            background: var(--bg-gray);
             display: flex;
             align-items: center;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
-            height: 56px;
+            border-bottom: 1px solid rgba(16,43,89,0.08);
+            height: 64px;
             position: sticky;
             top: 0;
             z-index: 100;
@@ -102,7 +102,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--fp-navy);
+            color: var(--fp-blue);
+            background: white;
             font-size: 24px;
             cursor: pointer;
         }
@@ -115,96 +116,96 @@
         }
 
         .page-content {
-            padding: 20px;
+            padding: 18px 18px max(24px, env(safe-area-inset-bottom));
             flex: 1;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
         }
 
         .hero {
-            background: var(--fp-navy);
-            padding: 40px 24px 60px;
+            background: linear-gradient(145deg, #1769E0, #0752C5);
+            padding: max(24px, env(safe-area-inset-top)) 20px 34px;
             color: white;
-            text-align: center;
-            border-bottom-left-radius: var(--radius-xl);
-            border-bottom-right-radius: var(--radius-xl);
+            text-align: left;
+            border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+            margin: 0 12px;
+            box-shadow: 0 10px 28px rgba(7,82,197,0.2);
         }
 
         .hero-logo {
-            width: 64px;
-            height: 64px;
-            background: white;
-            border-radius: 18px;
-            margin: 0 auto 20px;
+            min-height: 38px;
+            background: rgba(255,255,255,0.14);
+            border-radius: 12px;
+            margin: 0 0 28px;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
+            width: fit-content;
+            padding: 6px 10px;
         }
 
         .balance-badge {
-            background: rgba(255,255,255,0.12);
-            padding: 12px 24px;
-            border-radius: 100px;
-            display: inline-block;
-            margin-bottom: 12px;
-            font-weight: 600;
-            font-size: 14px;
-            backdrop-filter: blur(10px);
+            display: block;
+            margin-bottom: 6px;
+            color: rgba(255,255,255,0.76);
+            font-weight: 700;
+            font-size: 12px;
+            letter-spacing: 0.06em;
         }
 
         .balance-amount {
-            font-size: 38px;
+            font-size: 36px;
             font-weight: 800;
-            letter-spacing: -1px;
-            margin-bottom: 24px;
+            margin-bottom: 0;
         }
 
         .action-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-            margin-top: -30px;
-            padding: 0 24px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px 4px;
+            margin-top: 16px;
+            padding: 0 14px;
         }
 
         .action-card {
-            background: var(--surface);
-            padding: 20px;
-            border-radius: var(--radius-lg);
-            box-shadow: 0 10px 30px rgba(9,30,66,0.08);
+            background: transparent;
+            padding: 8px 2px;
+            border-radius: var(--radius-md);
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 12px;
+            gap: 7px;
             text-decoration: none;
             color: var(--text-main);
-            transition: transform 0.2s;
+            transition: transform 0.15s, background 0.15s;
             cursor: pointer;
         }
 
         .action-card:active {
-            transform: scale(0.96);
+            transform: scale(0.95);
+            background: rgba(7,87,200,0.06);
         }
 
         .action-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 14px;
+            width: 54px;
+            height: 54px;
+            border-radius: 17px;
             background: var(--fp-sky);
             color: var(--fp-blue);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+            font-size: 25px;
         }
 
         .action-title {
             font-weight: 700;
-            font-size: 15px;
+            font-size: 12px;
+            text-align: center;
         }
 
         .section-title {
-            font-size: 16px;
+            font-size: 17px;
             font-weight: 800;
             margin: 24px 0 12px;
             color: var(--fp-navy);
@@ -213,18 +214,140 @@
             align-items: center;
         }
 
+        .transfer-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 12px 36px rgba(9, 30, 66, 0.08);
+            overflow: hidden;
+            border: 1px solid rgba(0, 82, 204, 0.08);
+        }
+
+        .transfer-hero {
+            padding: 20px 20px 12px;
+            background: linear-gradient(135deg, rgba(0,82,204,0.08), rgba(0,191,255,0.05));
+            border-bottom: 1px solid rgba(9,30,66,0.06);
+        }
+
+        .transfer-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(0, 82, 204, 0.1);
+            color: var(--fp-blue);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .transfer-hero h2 {
+            margin: 12px 0 8px;
+            font-size: 28px;
+            line-height: 1.2;
+            color: var(--fp-navy);
+        }
+
+        .transfer-hero p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .transfer-body {
+            padding: 20px;
+        }
+
+        .transfer-summary {
+            background: var(--bg-gray);
+            border: 1px solid rgba(9,30,66,0.06);
+            border-radius: 18px;
+            padding: 14px 16px;
+            margin: 8px 0 16px;
+        }
+
+        .summary-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+            color: var(--text-muted);
+            padding: 7px 0;
+        }
+
+        .summary-row strong {
+            color: var(--fp-navy);
+            font-size: 16px;
+        }
+
+        .helper-copy {
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.45;
+            margin-top: 12px;
+        }
+
         .modern-input {
             width: 100%;
             padding: 16px;
-            border: 2px solid #DFE1E6;
+            border: 1px solid #D9E2F0;
             border-radius: var(--radius-md);
             font-size: 16px;
             margin-bottom: 16px;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fff;
         }
 
         .modern-input:focus {
             border-color: var(--fp-blue);
+            box-shadow: 0 0 0 4px rgba(0, 82, 204, 0.08);
+        }
+
+        .api-card {
+            background: white;
+            border: 1px solid rgba(16,43,89,0.08);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 14px;
+            box-shadow: 0 5px 16px rgba(16,43,89,0.04);
+        }
+
+        .btn-action {
+            border: 0;
+            border-radius: 14px;
+            background: var(--fp-blue);
+            color: white;
+            min-height: 52px;
+            width: 100%;
+            font-size: 15px;
+            font-weight: 750;
+            box-shadow: 0 6px 16px rgba(7,87,200,0.18);
+        }
+
+        .btn-action:disabled {
+            opacity: 0.55;
+            box-shadow: none;
+        }
+
+        .section-title {
+            margin-top: 0;
+        }
+
+        .collect-heading h1 {
+            color: var(--fp-navy);
+        }
+
+        .input-label {
+            color: var(--fp-navy);
+            font-weight: 700;
+        }
+
+        @media (max-width: 360px) {
+            .action-grid { padding-inline: 8px; gap: 8px 2px; }
+            .action-icon { width: 48px; height: 48px; }
+            .action-title { font-size: 11px; }
+            .balance-amount { font-size: 32px; }
         }
 
         .btn-action {
@@ -390,6 +513,120 @@
             margin-top: 2px;
         }
 
+        .collect-content {
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 24px 20px 36px;
+        }
+
+        .collect-heading { margin-bottom: 22px; }
+        .collect-eyebrow {
+            margin: 0 0 8px;
+            color: var(--fp-blue);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+        .collect-heading h1 {
+            margin: 0;
+            color: var(--fp-navy);
+            font-size: 25px;
+            line-height: 1.2;
+        }
+        .collect-heading p {
+            margin: 8px 0 0;
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .collect-amount-panel {
+            padding: 20px;
+            border: 1px solid #D9E2EF;
+            border-radius: 16px;
+            background: white;
+        }
+        .collect-amount-panel .input-label { color: var(--text-main); }
+        .collect-amount-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid #CBD5E1;
+            padding: 8px 0 12px;
+        }
+        .collect-amount-control:focus-within { border-color: var(--fp-blue); }
+        .collect-currency {
+            color: var(--fp-blue);
+            font-size: 30px;
+            font-weight: 700;
+        }
+        .collect-amount-input {
+            width: 100%;
+            min-width: 0;
+            border: 0;
+            background: transparent;
+            color: var(--fp-navy);
+            font-size: 34px;
+            font-weight: 750;
+        }
+        .collect-amount-input::placeholder { color: #AAB6C5; }
+        .collect-presets {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .collect-preset {
+            min-height: 40px;
+            border: 1px solid #D9E2EF;
+            border-radius: 8px;
+            background: white;
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .collect-preset.is-selected {
+            border-color: var(--fp-blue);
+            background: #EAF2FF;
+            color: var(--fp-blue);
+        }
+        .collect-description { margin-top: 20px; }
+        .collect-checkout {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin: 22px 0 18px;
+        }
+        .collect-checkout-mark {
+            width: 36px;
+            height: 36px;
+            flex: 0 0 36px;
+            display: grid;
+            place-items: center;
+            border-radius: 10px;
+            background: #EAF2FF;
+            color: var(--fp-blue);
+            font-size: 19px;
+            font-weight: 800;
+        }
+        .collect-checkout-title { color: var(--fp-navy); font-size: 14px; font-weight: 750; }
+        .collect-checkout-copy { margin-top: 3px; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+        .collect-summary {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            border-top: 1px solid #E2E8F0;
+            padding: 14px 0 0;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+        .collect-summary strong { color: var(--fp-navy); font-size: 15px; }
+        .collect-note {
+            margin: 12px 0 0;
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
         .summary-card {
             background: white;
             border-radius: 18px;
@@ -454,19 +691,17 @@
 <body>
     <div id="action-notice" class="action-notice" role="status" aria-live="polite"></div>
 
-    <!-- Main Dashboard Hero -->
     <div class="hero">
-        <div class="hero-logo" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 14px; background: #FFFFFF; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);">
+        <div class="hero-logo" style="display: inline-flex; align-items: center; gap: 8px;">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0052CC" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/>
             </svg>
-            <span style="font-weight: 800; font-size: 15px; color: #0052CC; letter-spacing: -0.3px;">NetBank</span>
+            <span style="font-weight: 800; font-size: 15px; color: #FFFFFF;">SwiftPay</span>
         </div>
-        <div class="balance-badge">NetBank Account: 041-105-00037-6</div>
+        <div class="balance-badge">AVAILABLE BALANCE</div>
         <div id="balance-display" class="balance-amount">₱ --.--</div>
     </div>
 
-    <!-- Quick Actions -->
     <div class="action-grid">
         <div class="action-card" onclick="openPage('topup-page')">
             <div class="action-icon">💳</div>
@@ -482,7 +717,7 @@
         </div>
         <div class="action-card" onclick="startDepositWizard()">
             <div class="action-icon">🏦</div>
-            <div class="action-title">Deposit</div>
+            <div class="action-title">Cash in</div>
         </div>
         <div class="action-card" onclick="openPage('disbursement-page')">
             <div class="action-icon">↗</div>
@@ -513,49 +748,48 @@
     <div id="topup-page" class="page">
         <div class="navbar">
             <div class="btn-back" onclick="closePage('topup-page')" aria-label="Go back">‹</div>
-            <span class="navbar-title">Collect Payment</span>
-            <div style="margin-left:auto; font-size:11px; background:#DCFCE7; color:#15803D; font-weight:800; padding:6px 12px; border-radius:100px;">
-                🔒 SSL Encrypted
-            </div>
+            <span class="navbar-title">Collect</span>
         </div>
-        <div class="page-content">
-            <div class="tap-pay-card">
-                <div class="input-label" style="text-align:center;">Payment Amount</div>
-                <div class="amount-field">
-                    <div class="amount-currency">₱</div>
-                    <input type="number" id="topup-amount" class="amount-input" placeholder="0.00" oninput="updateTopUpSummary()">
+        <div class="page-content collect-content">
+            <header class="collect-heading">
+                <p class="collect-eyebrow">PAYMENT COLLECTION</p>
+                <h1>Collect a payment</h1>
+                <p>Set the amount and a short description. Your customer will complete payment on SwiftPay checkout.</p>
+            </header>
+
+            <section class="collect-amount-panel" aria-label="Payment amount">
+                <label class="input-label" for="topup-amount">Amount to collect</label>
+                <div class="collect-amount-control">
+                    <span class="collect-currency">₱</span>
+                    <input type="number" id="topup-amount" class="collect-amount-input" min="0.01" max="1000000" step="0.01" inputmode="decimal" placeholder="0.00" oninput="updateTopUpSummary()">
                 </div>
-                <div class="amount-presets" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px">
-                    <button class="preset-chip" onclick="setTopUpPreset(500)">500</button>
-                    <button class="preset-chip" onclick="setTopUpPreset(1000)">1K</button>
-                    <button class="preset-chip" onclick="setTopUpPreset(2500)">2.5K</button>
-                    <button class="preset-chip" onclick="setTopUpPreset(5000)">5K</button>
+                <div class="collect-presets" aria-label="Common amounts">
+                    <button type="button" class="collect-preset" data-amount="500" aria-pressed="false" onclick="setTopUpPreset(500)">₱500</button>
+                    <button type="button" class="collect-preset" data-amount="1000" aria-pressed="false" onclick="setTopUpPreset(1000)">₱1,000</button>
+                    <button type="button" class="collect-preset" data-amount="2500" aria-pressed="false" onclick="setTopUpPreset(2500)">₱2,500</button>
+                    <button type="button" class="collect-preset" data-amount="5000" aria-pressed="false" onclick="setTopUpPreset(5000)">₱5,000</button>
+                </div>
+            </section>
+
+            <div class="input-group collect-description">
+                <label class="input-label" for="topup-description">Payment description <span style="font-weight:400;">(optional)</span></label>
+                <input type="text" id="topup-description" class="modern-input" maxlength="120" placeholder="e.g. Order 1042 or lunch">
+            </div>
+
+            <div class="collect-checkout">
+                <div class="collect-checkout-mark" aria-hidden="true">↗</div>
+                <div>
+                    <div class="collect-checkout-title">SwiftPay hosted checkout</div>
+                    <div class="collect-checkout-copy">Your customer chooses an available payment method on SwiftPay.</div>
                 </div>
             </div>
 
-            <div class="section-title">Checkout Method</div>
-            <div class="channel-grid">
-                <div class="channel-card selected">
-                    <div class="channel-icon">⚡</div>
-                    <div class="channel-info">
-                        <div class="channel-title">SwiftPay Hosted Checkout</div>
-                        <div class="channel-desc">Continue to SwiftPay to choose an available payment method.</div>
-                    </div>
-                </div>
+            <div class="collect-summary">
+                <span>Amount to collect</span>
+                <strong id="sum-amount">₱0.00</strong>
             </div>
-
-            <div class="summary-card">
-                <div class="summary-row">
-                    <span>Payment Amount</span>
-                    <span id="sum-amount">₱ 0.00</span>
-                </div>
-            </div>
-
-            <div class="security-badge">
-                <span>🔒 Payment details are handled on SwiftPay checkout</span>
-            </div>
-
-            <button class="btn-action" id="topup-submit-btn" onclick="executeTopUp()" style="margin-top:20px">
+            <p class="collect-note">Any applicable fees are shown to the customer before they pay.</p>
+            <button class="btn-action" id="topup-submit-btn" onclick="executeTopUp()" style="margin-top:18px">
                 <span id="topup-btn-label">Continue to Checkout</span>
             </button>
         </div>
@@ -654,35 +888,75 @@
             <span class="navbar-title">Transfer</span>
         </div>
         <div class="page-content">
-            <div class="input-group">
-                <label class="input-label">Destination Bank / E-Wallet</label>
-                <select id="disb-bank" class="modern-input" style="background:#fff;">
-                    <option value="">Loading supported institutions...</option>
-                </select>
-                <div id="disb-institutions-error" role="alert" hidden>
-                    Unable to load supported institutions.
-                    <button type="button" onclick="loadTransferInstitutions()">Retry</button>
+            <div class="transfer-card">
+                <div class="transfer-hero">
+                    <span class="transfer-badge">SwiftPay transfer</span>
+                    <h2>Send money</h2>
+                    <p>Move funds from your wallet to a recipient using an InstaPay-supported institution.</p>
+                </div>
+                <div class="transfer-body">
+                    <div class="input-group">
+                        <label class="input-label">Destination Bank / E-Wallet</label>
+                        <select id="disb-bank" class="modern-input" style="background:#fff;">
+                            <option value="">Loading supported institutions...</option>
+                        </select>
+                        <div id="disb-institutions-error" role="alert" hidden>
+                            Unable to load supported institutions.
+                            <button type="button" onclick="loadTransferInstitutions()">Retry</button>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Account / Mobile Number</label>
+                        <input type="text" id="disb-acc" class="modern-input" placeholder="e.g. 09171234567 or Account No." autocomplete="off">
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Recipient Name</label>
+                        <input type="text" id="disb-name" class="modern-input" placeholder="First and Last Name" autocomplete="name">
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Amount (₱)</label>
+                        <input type="number" id="disb-amount" class="modern-input" placeholder="0.00" min="0.01" max="50000" step="0.01">
+                    </div>
+                    <div class="transfer-summary">
+                        <div class="summary-row">
+                            <span>Estimated transfer</span>
+                            <strong id="disb-summary">₱0.00</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Transfer limit</span>
+                            <strong>₱50,000</strong>
+                        </div>
+                    </div>
+                    <button class="btn-action" onclick="sendDisbursement()">Confirm Transfer</button>
+                    <p class="helper-copy">Transfers are accepted asynchronously and stay pending until SwiftPay reports a terminal status.</p>
                 </div>
             </div>
-            <div class="input-group">
-                <label class="input-label">Account / Mobile Number</label>
-                <input type="text" id="disb-acc" class="modern-input" placeholder="e.g. 09171234567 or Account No.">
-            </div>
-            <div class="input-group">
-                <label class="input-label">Recipient Name</label>
-                <input type="text" id="disb-name" class="modern-input" placeholder="First and Last Name">
-            </div>
-            <div class="input-group">
-                <label class="input-label">Amount (₱)</label>
-                <input type="number" id="disb-amount" class="modern-input" placeholder="0.00">
-            </div>
-            <button class="btn-action" onclick="sendDisbursement()">Confirm Transfer</button>
         </div>
     </div>
 
     <script>
         let noticeTimer;
         let transferInstitutionsTimer;
+
+        function formatPhp(value) {
+            const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
+            return new Intl.NumberFormat('en-PH', {
+                style: 'currency',
+                currency: 'PHP',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(numeric);
+        }
+
+        function updateDisbursementSummary() {
+            const amount = Number(document.getElementById('disb-amount').value || 0);
+            document.getElementById('disb-summary').textContent = formatPhp(amount);
+        }
+
+        function normalizeTransferName(value) {
+            return (value || '').replace(/\s+/g, ' ').trim();
+        }
+
         function showNotice(message, isError = false) {
             const notice = document.getElementById('action-notice');
             notice.textContent = message;
@@ -719,7 +993,10 @@
         function openPage(id) {
             const p = document.getElementById(id); if (p) p.classList.add('active');
             if (id === 'api-docs-page') post("get_settings");
-            if (id === 'disbursement-page') loadTransferInstitutions();
+            if (id === 'disbursement-page') {
+                updateDisbursementSummary();
+                loadTransferInstitutions();
+            }
         }
         function closePage(id) { const p = document.getElementById(id); if (p) p.classList.remove('active'); }
         function getBalance() { post("get_balance"); }
@@ -746,44 +1023,80 @@
 
         function setTopUpPreset(a) {
             document.getElementById('topup-amount').value = a;
+            document.querySelectorAll('.collect-preset').forEach(button => {
+                const selected = Number(button.dataset.amount) === a;
+                button.classList.toggle('is-selected', selected);
+                button.setAttribute('aria-pressed', String(selected));
+            });
             updateTopUpSummary();
         }
         function updateTopUpSummary() {
             const a = parseFloat(document.getElementById('topup-amount').value) || 0;
-            const formatted = "₱ " + a.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            const formatted = "₱" + a.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
             document.getElementById('sum-amount').innerText = formatted;
             document.getElementById('topup-btn-label').innerText = a > 0 ? `Continue with ${formatted}` : "Continue to Checkout";
+            document.querySelectorAll('.collect-preset').forEach(button => {
+                const selected = Number(button.dataset.amount) === a;
+                button.classList.toggle('is-selected', selected);
+                button.setAttribute('aria-pressed', String(selected));
+            });
         }
         function executeTopUp() {
-            const a = parseFloat(document.getElementById('topup-amount').value) || 0;
-            if (a > 0) {
-                document.getElementById('topup-submit-btn').disabled = true;
-                document.getElementById('topup-btn-label').innerText = "Opening hosted checkout...";
-                post("request_payment", { amount: a, currency: "PHP", description: "Payment collection" });
-                setTimeout(() => {
-                    document.getElementById('topup-submit-btn').disabled = false;
-                    updateTopUpSummary();
-                }, 3000);
+            const a = Number(document.getElementById('topup-amount').value);
+            if (!Number.isFinite(a) || a < 0.01 || a > 1000000) {
+                showNotice("Enter an amount between ₱0.01 and ₱1,000,000.00.", true);
+                return;
             }
+            const description = document.getElementById('topup-description').value.trim() || "Payment collection";
+            const button = document.getElementById('topup-submit-btn');
+            button.disabled = true;
+            document.getElementById('topup-btn-label').innerText = "Opening SwiftPay checkout...";
+            if (!post("request_payment", { amount: a, currency: "PHP", description })) {
+                button.disabled = false;
+                updateTopUpSummary();
+                return;
+            }
+            setTimeout(() => {
+                button.disabled = false;
+                updateTopUpSummary();
+            }, 3000);
         }
 
         function sendDisbursement() {
-            const a = parseFloat(document.getElementById('disb-amount').value) || 0;
+            const a = Number(document.getElementById('disb-amount').value);
             const b = document.getElementById('disb-bank').value;
-            const acc = document.getElementById('disb-acc').value || "";
-            const name = document.getElementById('disb-name').value || "Recipient";
-            if (!Number.isFinite(a) || a <= 0 || a > 50000 || !b || acc.length === 0 || name === "Recipient") {
-                showNotice("Enter a valid amount (up to PHP 50,000), choose an institution, and provide the recipient's account number and full name.", true);
+            const acc = (document.getElementById('disb-acc').value || '').trim();
+            const name = normalizeTransferName(document.getElementById('disb-name').value || '');
+            const supportedBanks = Array.from(document.getElementById('disb-bank').options)
+                .map(option => option.value)
+                .filter(Boolean);
+
+            if (!Number.isFinite(a) || a <= 0 || a > 50000) {
+                showNotice("Enter a valid transfer amount up to PHP 50,000.00.", true);
                 return;
             }
+            if (!b || !supportedBanks.includes(b)) {
+                showNotice("Please choose a supported institution before sending the transfer.", true);
+                return;
+            }
+            if (!acc || acc.length < 4 || acc.length > 64) {
+                showNotice("Provide a valid account or mobile number for the recipient.", true);
+                return;
+            }
+            if (!name || name.length < 2 || name.length > 100 || !/^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$/.test(name)) {
+                showNotice("Enter the recipient's full name using letters and standard separators only.", true);
+                return;
+            }
+
             const button = document.querySelector('#disbursement-page .btn-action');
             button.disabled = true;
-            button.textContent = "Submitting transfer...";
-            if (!post("send_disbursement", { amount: a, bankCode: b, accountNumber: acc, recipientName: name })) {
+            button.textContent = 'Submitting transfer...';
+            if (!post('send_disbursement', { amount: a, bankCode: b, accountNumber: acc, recipientName: name })) {
                 button.disabled = false;
-                button.textContent = "Confirm Transfer";
+                button.textContent = 'Confirm Transfer';
             }
         }
+
         window.onSwiftPayResponse = window.onMayaResponse = function(json) {
             const res = JSON.parse(json);
             if (res.action === 'get_transfer_institutions') {
@@ -791,44 +1104,45 @@
                 if (res.status === 'error') {
                     document.getElementById('disb-institutions-error').hidden = false;
                     document.getElementById('disb-bank').replaceChildren(
-                        new Option("Unable to load supported institutions", "")
+                        new Option('Unable to load supported institutions', '')
                     );
-                    showNotice(res.message || "Could not load supported institutions.", true);
+                    showNotice(res.message || 'Could not load supported institutions.', true);
                     return;
                 }
             }
             const transferButton = document.querySelector('#disbursement-page .btn-action');
             if (transferButton && transferButton.disabled) {
                 transferButton.disabled = false;
-                transferButton.textContent = "Confirm Transfer";
+                transferButton.textContent = 'Confirm Transfer';
             }
             if (res.status === 'error') {
                 resetQrButton();
-                showNotice(res.message || "The request failed. Please try again.", true);
+                showNotice(res.message || 'The request failed. Please try again.', true);
                 return;
             }
             if (Array.isArray(res.data)) {
                 const select = document.getElementById('disb-bank');
+                const supported = res.data.filter(institution => institution && institution.instapayEnabled === true && typeof institution.code === 'string' && institution.code.trim().length > 0);
                 select.replaceChildren();
-                if (res.data.length === 0) {
-                    select.add(new Option("No supported institutions available", ""));
+                if (supported.length === 0) {
+                    select.add(new Option('No supported institutions available', ''));
                 } else {
-                    res.data.forEach(institution => {
-                        select.add(new Option(institution.name, institution.code));
+                    supported.forEach(institution => {
+                        select.add(new Option(`${institution.name} (${institution.code})`, institution.code));
                     });
                 }
             }
             if (res.data && typeof res.data.qrCodeBody === 'string') {
                 resetQrButton();
-                showNotice("QR Ph code generated. Scan the code in the native dialog.");
+                showNotice('QR Ph code generated. Scan the code in the native dialog.');
             }
             if (res.data && typeof res.data.checkoutUrl === 'string') {
                 resetQrButton();
-                showNotice("SwiftPay checkout opened. Choose QR Ph on the secure checkout page.");
+                showNotice('SwiftPay checkout opened. Choose QR Ph on the secure checkout page.');
             }
-            if (typeof res.data === 'number') { document.getElementById('balance-display').innerText = "₱ " + res.data.toLocaleString(undefined, {minimumFractionDigits: 2}); return; }
+            if (typeof res.data === 'number') { document.getElementById('balance-display').innerText = '₱ ' + res.data.toLocaleString(undefined, {minimumFractionDigits: 2}); return; }
             if (res.data && res.data.managedByServer) {
-                const status = res.data.hasApiKey === "true" ? "Merchant session active" : "Sign in required";
+                const status = res.data.hasApiKey === 'true' ? 'Merchant session active' : 'Sign in required';
                 document.getElementById('payment-service-status').innerText = status;
                 document.getElementById('payment-service-detail-status').innerText = status;
             }
@@ -836,7 +1150,8 @@
         };
         const initialPage = decodeURIComponent(window.location.hash.slice(1));
         if (initialPage && document.getElementById(initialPage)) openPage(initialPage);
-        setTimeout(() => { getBalance(); post("get_settings"); }, 800);
+        setTimeout(() => { getBalance(); post('get_settings'); }, 800);
+        document.getElementById('disb-amount').addEventListener('input', updateDisbursementSummary);
     </script>
 </body>
 </html>

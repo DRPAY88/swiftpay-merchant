@@ -41,6 +41,15 @@ export function loadConfig(env = process.env) {
   if (allowedEmails.some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
     throw new Error("AUTH_ALLOWED_EMAILS, AUTH_ADDITIONAL_ALLOWED_EMAILS, and SUPER_ADMIN_EMAILS must contain valid comma-separated email addresses");
   }
+  const transakApiKey = env.TRANSAK_API_KEY?.trim() || null;
+  const transakApiSecret = env.TRANSAK_API_SECRET?.trim() || null;
+  if (Boolean(transakApiKey) !== Boolean(transakApiSecret)) {
+    throw new Error("TRANSAK_API_KEY and TRANSAK_API_SECRET must be configured together");
+  }
+  const transakEnvironment = (env.TRANSAK_ENVIRONMENT || "staging").trim().toLowerCase();
+  if (!["staging", "production"].includes(transakEnvironment)) {
+    throw new Error("TRANSAK_ENVIRONMENT must be staging or production");
+  }
 
   return {
     port: Number(env.PORT || 3000),
@@ -52,6 +61,11 @@ export function loadConfig(env = process.env) {
     superAdminEmails,
     databaseUrl: env.DATABASE_URL?.trim() || null,
     resendApiKey: env.RESEND_API_KEY,
-    otpFromEmail: env.OTP_FROM_EMAIL
+    otpFromEmail: env.OTP_FROM_EMAIL,
+    transak: {
+      apiKey: transakApiKey,
+      apiSecret: transakApiSecret,
+      environment: transakEnvironment
+    }
   };
 }

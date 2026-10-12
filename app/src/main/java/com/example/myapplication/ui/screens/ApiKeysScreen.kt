@@ -44,7 +44,7 @@ fun ApiKeysScreen() {
     val clipboardManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val bgColor = if (isDarkTheme) Color(0xFF121212) else FastPaySurface
+    val bgColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F8FF)
     val surfaceColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color.White
     val textColor = if (isDarkTheme) Color.White else FastPayNavy
     val secondaryTextColor = if (isDarkTheme) Color.LightGray else Color.Gray

@@ -4,6 +4,8 @@ import com.example.myapplication.BuildConfig
 import com.example.myapplication.bridge.PaymentData
 import com.example.myapplication.data.api.BackendDisbursementRecord
 import com.example.myapplication.data.api.BackendDisbursementRequest
+import com.example.myapplication.data.api.CryptoWidgetRequest
+import com.example.myapplication.data.api.CryptoWidgetResponse
 import com.example.myapplication.data.api.BackendOrderRequest
 import com.example.myapplication.data.api.BackendPaymentLinkRequest
 import com.example.myapplication.data.api.BackendQrPaymentRequest
@@ -20,6 +22,7 @@ import com.example.myapplication.data.api.SwiftPayOrderResponse
 import com.example.myapplication.data.api.SwiftPayPaymentLinkResponse
 import com.example.myapplication.data.api.SwiftPayQrResponse
 import com.example.myapplication.data.api.SwiftPayStatusResponse
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -76,9 +79,16 @@ class SwiftPayService(
                 runCatching {
                     val rawBody = response.errorBody()?.string().orEmpty()
                     val jsonObj = json.parseToJsonElement(rawBody).jsonObject
-                    jsonObj["error"]?.jsonPrimitive?.contentOrNull
+                    val errorCode = jsonObj["errorCode"]?.jsonPrimitive?.contentOrNull
+                    val baseMessage = if (response.code() == 400 && errorCode == "INVALID_INPUT") {
+                        "SwiftPay rejected the transfer details. Verify the account number and recipient's full legal name."
+                    } else {
+                        jsonObj["error"]?.jsonPrimitive?.contentOrNull
                         ?: jsonObj["message"]?.jsonPrimitive?.contentOrNull
                         ?: rawBody
+                    }
+                    val supportReference = jsonObj["supportReference"]?.jsonPrimitive?.contentOrNull
+                    if (supportReference.isNullOrBlank()) baseMessage else "$baseMessage (Reference: $supportReference)"
                 }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Backend request failed (${response.code()})"
             }
         )
@@ -231,6 +241,37 @@ class SwiftPayService(
 
     suspend fun getWalletBalance(): Result<Double> =
         getWalletBalanceDetails().map { it.balance }
+
+    suspend fun createCryptoWidgetUrl(
+        mode: String,
+        amount: Double,
+        walletAddress: String? = null
+    ): Result<CryptoWidgetResponse> {
+        if (!hasApiKey) return missingSession()
+        if (mode !in setOf("BUY", "SELL")) {
+            return Result.failure(IllegalArgumentException("Choose buy or sell USDT."))
+        }
+        if (!amount.isFinite() || amount <= 0.0) {
+            return Result.failure(IllegalArgumentException("Enter a valid amount."))
+        }
+        if (mode == "BUY" && walletAddress.isNullOrBlank()) {
+            return Result.failure(IllegalArgumentException("Enter your TRON wallet address."))
+        }
+        return try {
+            val response = api.createCryptoWidgetUrl(CryptoWidgetRequest(mode, amount, walletAddress?.trim()))
+            if (!response.isSuccessful) return failure(response)
+            val body = response.body() ?: return Result.failure(IllegalStateException("Empty Transak checkout response"))
+            val widgetUrl = java.net.URI(body.widgetUrl)
+            if (widgetUrl.scheme != "https" || widgetUrl.host !in setOf("global-stg.transak.com", "global.transak.com")) {
+                return Result.failure(IllegalStateException("Transak returned an invalid checkout URL"))
+            }
+            Result.success(body)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
 
     suspend fun getWalletDepositAccount(): Result<BackendWalletDepositAccount> =
         getWalletBalanceDetails().mapCatching { body ->

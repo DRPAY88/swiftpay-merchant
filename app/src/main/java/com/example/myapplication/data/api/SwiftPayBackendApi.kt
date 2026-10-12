@@ -38,6 +38,19 @@ data class BackendQrPaymentResponse(
 )
 
 @Serializable
+data class CryptoWidgetRequest(
+    val mode: String,
+    val amount: Double,
+    val walletAddress: String? = null
+)
+
+@Serializable
+data class CryptoWidgetResponse(
+    val widgetUrl: String,
+    val partnerOrderId: String
+)
+
+@Serializable
 data class BackendOrderResponse(
     val paymentId: String,
     val referenceNo: String,
@@ -131,6 +144,9 @@ data class BackendTransferInstitution(
 )
 
 interface SwiftPayBackendApi {
+    @POST("v1/crypto/widget-url")
+    suspend fun createCryptoWidgetUrl(@Body request: CryptoWidgetRequest): Response<CryptoWidgetResponse>
+
     @GET("v1/wallet/balance")
     suspend fun getWalletBalance(): Response<BackendWalletBalanceResponse>
 

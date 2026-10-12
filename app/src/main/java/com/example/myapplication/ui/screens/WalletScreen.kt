@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import com.example.myapplication.ui.components.FastPayLogo
@@ -258,6 +259,10 @@ fun WalletListContent(
             onRetry = { viewModel?.refreshBalance() }
         )
 
+        Spacer(Modifier.height(20.dp))
+
+        UsdtTradePanel()
+
         Spacer(Modifier.height(32.dp))
 
         QuickActionsRow()
@@ -307,6 +312,135 @@ fun WalletListContent(
 }
 
 @Composable
+private fun UsdtTradePanel() {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val settingsManager = remember { SettingsManager(context) }
+    val scope = rememberCoroutineScope()
+    var mode by remember { mutableStateOf("BUY") }
+    var amountInput by remember { mutableStateOf("") }
+    var walletAddress by remember { mutableStateOf("") }
+    var isSubmitting by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.CurrencyExchange, contentDescription = null, tint = FastPayBlue)
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("USDT on TRON", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = textColor)
+                    Text("Buy or sell through Transak", style = MaterialTheme.typography.bodySmall, color = secondaryTextColor)
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = mode == "BUY",
+                    onClick = { mode = "BUY"; errorMessage = null },
+                    label = { Text("Buy") },
+                    leadingIcon = if (mode == "BUY") ({ Icon(Icons.Rounded.Add, contentDescription = null) }) else null
+                )
+                FilterChip(
+                    selected = mode == "SELL",
+                    onClick = { mode = "SELL"; errorMessage = null },
+                    label = { Text("Sell") },
+                    leadingIcon = if (mode == "SELL") ({ Icon(Icons.Rounded.SouthWest, contentDescription = null) }) else null
+                )
+            }
+
+            OutlinedTextField(
+                value = amountInput,
+                onValueChange = { value ->
+                    if (value.isEmpty() || value.matches(Regex("^\\d{0,9}(\\.\\d{0,2})?$"))) amountInput = value
+                    errorMessage = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(if (mode == "BUY") "Spend (PHP)" else "Sell (USDT)") },
+                leadingIcon = { Text(if (mode == "BUY") "₱" else "₮", fontWeight = FontWeight.SemiBold) },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)
+            )
+
+            if (mode == "BUY") {
+                OutlinedTextField(
+                    value = walletAddress,
+                    onValueChange = { value -> walletAddress = value.trim().take(48); errorMessage = null },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Your TRON wallet address") },
+                    placeholder = { Text("T...") },
+                    singleLine = true,
+                    supportingText = { Text("Check the destination again in Transak before confirming.") }
+                )
+            } else {
+                Text(
+                    "Transak will show the deposit address, PHP payout options, and final fees before you confirm.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = secondaryTextColor
+                )
+            }
+
+            errorMessage?.let { message ->
+                Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+
+            Button(
+                onClick = {
+                    val amount = amountInput.toDoubleOrNull()
+                    if (amount == null || !amount.isFinite() || amount <= 0.0) {
+                        errorMessage = "Enter a valid ${if (mode == "BUY") "PHP" else "USDT"} amount."
+                        return@Button
+                    }
+                    if (mode == "BUY" && !walletAddress.matches(Regex("^T[1-9A-HJ-NP-Za-km-z]{33}$"))) {
+                        errorMessage = "Enter a valid TRON mainnet wallet address."
+                        return@Button
+                    }
+                    scope.launch {
+                        isSubmitting = true
+                        errorMessage = null
+                        try {
+                            val service = settingsManager.createSwiftPayService()
+                            service.createCryptoWidgetUrl(mode, amount, walletAddress.takeIf { mode == "BUY" })
+                                .onSuccess { session -> uriHandler.openUri(session.widgetUrl) }
+                                .onFailure { failure -> errorMessage = failure.message ?: "Could not open Transak checkout." }
+                        } catch (exception: Exception) {
+                            errorMessage = exception.message ?: "Could not open Transak checkout."
+                        } finally {
+                            isSubmitting = false
+                        }
+                    }
+                },
+                enabled = !isSubmitting,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                if (isSubmitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    Spacer(Modifier.width(10.dp))
+                }
+                Text(if (isSubmitting) "Opening Transak..." else "Continue with Transak")
+            }
+
+            Text(
+                "Transak handles checkout and verification. This app does not custody USDT.",
+                style = MaterialTheme.typography.labelSmall,
+                color = secondaryTextColor
+            )
+        }
+    }
+}
+
+@Composable
 fun PremiumBalanceCard(
     balance: Double?,
     adjustedBalance: Double? = null,
@@ -316,24 +450,12 @@ fun PremiumBalanceCard(
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
-    val infiniteTransition = rememberInfiniteTransition(label = "cardPulse")
-    val shadowOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "shadowOffset"
-    )
+    var isBalanceVisible by remember { mutableStateOf(true) }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(240.dp)
-            .graphicsLayer {
-                translationY = -shadowOffset / 2
-            },
+            .heightIn(min = 204.dp),
         shape = RoundedCornerShape(28.dp),
         color = FastPayNavy,
     ) {
@@ -359,104 +481,63 @@ fun PremiumBalanceCard(
                         center = Offset(0f, size.height)
                     )
                 }
-                .padding(28.dp)
+                .padding(horizontal = 22.dp, vertical = 20.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "AVAILABLE TRANSFER BALANCE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.2.sp
-                        )
-                        
-                        Text(
-                            text = balance?.let { "₱ ${"%,.2f".format(it)}" } ?: "Unavailable",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            fontSize = 32.sp,
-                            letterSpacing = (-0.5).sp
-                        )
-                    }
-                    
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        modifier = Modifier.padding(start = 8.dp)
-                    ) {
-                        Text(
-                            text = "MANUAL DEPOSIT ACCOUNT",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp,
-                            letterSpacing = 0.8.sp
-                        )
-                        
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable {
-                                    if (!accountNumber.isNullOrBlank()) {
-                                        clipboardManager.setText(AnnotatedString(accountNumber))
-                                        Toast.makeText(context, "Account number copied to clipboard", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                                .padding(vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = accountNumber?.takeIf { it.isNotBlank() } ?: "Loading...",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = FastPayGreen,
-                                fontSize = 14.sp
-                            )
-                            if (!accountNumber.isNullOrBlank()) {
-                                Spacer(Modifier.width(4.dp))
-                                Icon(
-                                    Icons.Rounded.ContentCopy,
-                                    contentDescription = "Copy Account Number",
-                                    tint = FastPayGreen,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = "Tap to copy",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.4f),
-                            fontSize = 9.sp
+                    Text(
+                        text = "AVAILABLE BALANCE",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { isBalanceVisible = !isBalanceVisible }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = if (isBalanceVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+                            contentDescription = if (isBalanceVisible) "Hide balance" else "Show balance",
+                            tint = Color.White,
+                            modifier = Modifier.size(19.dp)
                         )
                     }
                 }
-                
+                Text(
+                    text = when {
+                        balance == null -> "Unavailable"
+                        isBalanceVisible -> "₱ ${"%,.2f".format(balance)}"
+                        else -> "₱ ••••••"
+                    },
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    fontSize = 32.sp,
+                    letterSpacing = (-0.5).sp,
+                    maxLines = 1
+                )
+                HorizontalDivider(color = Color.White.copy(alpha = 0.18f))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.weight(1.15f)) {
                         Text(
                             text = "ADJUSTED BALANCE",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.5f),
+                            color = Color.White.copy(alpha = 0.62f),
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.2.sp
+                            letterSpacing = 0.6.sp
                         )
                         Text(
-                            text = adjustedBalance?.let { "₱ ${"%,.2f".format(it)}" } ?: "Unavailable",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = adjustedBalance?.let { "₱ ${"%,.2f".format(it)}" } ?: "--",
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -496,6 +577,37 @@ fun PremiumBalanceCard(
                                     fontWeight = FontWeight.Black
                                 )
                             }
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f).padding(start = 8.dp),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text("DEPOSIT ACCOUNT", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.62f), fontWeight = FontWeight.Bold)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        if (!accountNumber.isNullOrBlank()) {
+                                            clipboardManager.setText(AnnotatedString(accountNumber))
+                                            Toast.makeText(context, "Account number copied to clipboard", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = accountNumber?.takeIf { it.isNotBlank() } ?: "Loading...",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 1
+                                )
+                                if (!accountNumber.isNullOrBlank()) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy account number", tint = Color.White, modifier = Modifier.size(13.dp))
+                                }
+                            }
+                            Text("Tap to copy", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.48f))
                         }
                     }
                 }

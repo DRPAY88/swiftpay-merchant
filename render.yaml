@@ -32,6 +32,12 @@ services:
         sync: false
       - key: OTP_FROM_EMAIL
         value: "SwiftPay <login@swiftpay.site>"
+      - key: TRANSAK_ENVIRONMENT
+        value: production
+      - key: TRANSAK_API_KEY
+        sync: false
+      - key: TRANSAK_API_SECRET
+        sync: false
 
 databases:
   - name: swiftpay-merchant-db

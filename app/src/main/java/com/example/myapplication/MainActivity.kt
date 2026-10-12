@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.PersonOutline
+import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -198,6 +200,7 @@ fun SwiftPayApp() {
                 navigationSuiteItems = {
                     val activeColor = FastPayBlue
                     val inactiveColor = Color.Gray.copy(alpha = 0.6f)
+                    val collectRouteSelected = currentRoute is Route.MiniApp && currentRoute.initialPath == "qr-page"
 
                     item(
                         selected = currentRoute == Route.Home,
@@ -219,6 +222,25 @@ fun SwiftPayApp() {
                         },
                     )
                     item(
+                        selected = collectRouteSelected,
+                        onClick = { navController.navigate(Route.MiniApp("qr-page")) },
+                        icon = {
+                            Icon(
+                                Icons.Rounded.QrCode2,
+                                contentDescription = "Collect",
+                                tint = if (collectRouteSelected) activeColor else inactiveColor
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Collect",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (collectRouteSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (collectRouteSelected) activeColor else inactiveColor
+                            )
+                        },
+                    )
+                    item(
                         selected = currentRoute == Route.Wallet,
                         onClick = { navController.navigate(Route.Wallet) },
                         icon = {
@@ -234,6 +256,25 @@ fun SwiftPayApp() {
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = if (currentRoute == Route.Wallet) FontWeight.ExtraBold else FontWeight.Medium,
                                 color = if (currentRoute == Route.Wallet) activeColor else inactiveColor
+                            )
+                        },
+                    )
+                    item(
+                        selected = currentRoute == Route.Profile,
+                        onClick = { navController.navigate(Route.Profile) },
+                        icon = {
+                            Icon(
+                                Icons.Rounded.PersonOutline,
+                                contentDescription = "Profile",
+                                tint = if (currentRoute == Route.Profile) activeColor else inactiveColor
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Profile",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (currentRoute == Route.Profile) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (currentRoute == Route.Profile) activeColor else inactiveColor
                             )
                         },
                     )

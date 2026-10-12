@@ -2,9 +2,7 @@ package com.example.myapplication.ui.screens
 
 import android.content.Context
 import android.util.Log
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -15,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.HelpOutline
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.TextButton
@@ -22,9 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -62,6 +60,7 @@ fun HomeScreen(
     var recentTransactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
     var isLoadingTransactions by remember { mutableStateOf(true) }
     var transactionHistoryUnavailable by remember { mutableStateOf(false) }
+    var isBalanceVisible by remember { mutableStateOf(true) }
 
     LaunchedEffect(refreshKey) {
         try {
@@ -89,8 +88,7 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.White)) {
-        MeshBackground()
+    Box(modifier = modifier.fillMaxSize().background(Color(0xFFF4F8FF))) {
         Column(
             modifier = Modifier
                 .widthIn(max = 560.dp)
@@ -99,35 +97,37 @@ fun HomeScreen(
                 .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
-            HeaderSection(
+            Spacer(modifier = Modifier.height(12.dp))
+            HomeGreeting(
+                onProfileClick = onProfileClick,
+                onHelpClick = onHelpClick
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+            WalletBalanceCard(
                 balance = balance,
                 isLoading = isLoading,
                 balanceError = balanceError,
+                isBalanceVisible = isBalanceVisible,
+                onToggleBalance = { isBalanceVisible = !isBalanceVisible },
+                onDeposit = { onLaunchMiniApp("deposit-page") },
                 onBalanceRetry = {
                     isLoading = true
                     balanceError = null
                     refreshKey++
-                },
-                onProfileClick = onProfileClick,
-                onHelpClick = onHelpClick
+                }
             )
             Spacer(modifier = Modifier.height(24.dp))
-            PrimaryActionRow(
-                onCollect = { onLaunchMiniApp(null) },
+            QuickActionsSection(
+                onCollect = { onLaunchMiniApp("topup-page") },
                 onTransfer = { onLaunchMiniApp("disbursement-page") },
                 onPaymentLink = { onLaunchMiniApp("payment-link-page") },
-                onQr = { onLaunchMiniApp("qr-page") }
-            )
-            Spacer(modifier = Modifier.height(28.dp))
-            SecondaryToolGrid(
                 onNavigateToWallet = onNavigateToWallet,
                 onDeposit = { onLaunchMiniApp("deposit-page") },
                 onDeveloperDocs = { onLaunchMiniApp("api-docs-page") },
-                onHelpClick = onHelpClick
+                onProfileClick = onProfileClick
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            PromotionalBanner()
+            Spacer(modifier = Modifier.height(22.dp))
+            MerchantToolsBanner(onCreatePaymentLink = { onLaunchMiniApp("payment-link-page") })
             Spacer(modifier = Modifier.height(24.dp))
             TransactionHistorySection(
                 transactions = recentTransactions,
@@ -135,252 +135,195 @@ fun HomeScreen(
                 hasError = transactionHistoryUnavailable,
                 onClick = onNavigateToWallet
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            RewardsHubSection()
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
         }
     }
 }
 
 @Composable
-fun MeshBackground() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(400.dp)
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val canvasWidth = size.width
-            val canvasHeight = size.height
-
-            drawCircle(
-                color = Color(0xFFE0E7FF),
-                center = Offset(x = canvasWidth * 0.1f, y = canvasHeight * 0.2f),
-                radius = canvasWidth * 0.4f
-            )
-
-            drawCircle(
-                color = Color(0xFFEFF6FF),
-                center = Offset(x = canvasWidth * 0.85f, y = canvasHeight * 0.1f),
-                radius = canvasWidth * 0.5f
-            )
-
-            drawCircle(
-                color = Color(0xFFF1F5F9),
-                center = Offset(x = canvasWidth * 0.5f, y = canvasHeight * 0.4f),
-                radius = canvasWidth * 0.6f
-            )
-        }
-    }
-}
-
-@Composable
-fun HeaderSection(
-    balance: Double?,
-    isLoading: Boolean,
-    balanceError: String?,
-    onBalanceRetry: () -> Unit,
+fun HomeGreeting(
     onProfileClick: () -> Unit,
     onHelpClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
-            if (isLoading) {
-                Box(modifier = Modifier.width(120.dp).height(32.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
-            } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(14.dp), color = Color(0xFFDCEBFF), modifier = Modifier.size(44.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.AccountBalanceWallet, "SwiftPay", tint = Color(0xFF0757C8), modifier = Modifier.size(25.dp))
+                }
+            }
+            Spacer(modifier = Modifier.width(11.dp))
+            Column {
+                Text("Hello!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
+                Text("Your merchant wallet", style = MaterialTheme.typography.labelMedium, color = FastPayTextSecondary)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onHelpClick, modifier = Modifier.size(42.dp)) {
+                Icon(Icons.AutoMirrored.Rounded.HelpOutline, "Help", tint = FastPayTextPrimary, modifier = Modifier.size(23.dp))
+            }
+            IconButton(onClick = onProfileClick, modifier = Modifier.size(42.dp)) {
+                Icon(Icons.Rounded.AccountCircle, "Profile", tint = FastPayTextPrimary, modifier = Modifier.size(26.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun WalletBalanceCard(
+    balance: Double?,
+    isLoading: Boolean,
+    balanceError: String?,
+    isBalanceVisible: Boolean,
+    onToggleBalance: () -> Unit,
+    onDeposit: () -> Unit,
+    onBalanceRetry: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+        shape = RoundedCornerShape(22.dp),
+        color = Color.Transparent,
+        shadowElevation = 5.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .background(Brush.linearGradient(listOf(Color(0xFF1769E0), Color(0xFF0752C5))))
+                .padding(horizontal = 20.dp, vertical = 18.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = balance?.let { "₱${"%,.2f".format(it)}" } ?: "Unavailable",
-                    style = MaterialTheme.typography.headlineMedium,
+                    "AVAILABLE BALANCE",
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = FastPayTextPrimary,
-                    fontSize = 26.sp
+                    color = Color.White.copy(alpha = 0.76f)
                 )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(onClick = onToggleBalance, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        if (isBalanceVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+                        contentDescription = if (isBalanceVisible) "Hide balance" else "Show balance",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                Text(
-                    text = "Available transfer balance",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = FastPayTextSecondary,
-                    fontWeight = FontWeight.Medium
-                )
-                Icon(
-                    Icons.Rounded.ArrowDropDown,
-                    null,
-                    tint = FastPayTextSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            if (!isLoading && balanceError != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = balanceError,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
+            Spacer(modifier = Modifier.height(3.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                when {
+                    isLoading -> Box(Modifier.width(168.dp).height(38.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.22f)))
+                    balance != null && isBalanceVisible -> Text(
+                        text = "₱${"%,.2f".format(balance)}",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontSize = 30.sp,
                         maxLines = 1
                     )
-                    TextButton(onClick = onBalanceRetry) {
-                        Text("Retry")
-                    }
+                    balance != null -> Text("₱ ••••••", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    else -> Text("Unavailable", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+                Button(
+                    onClick = onDeposit,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF0752C5)),
+                    contentPadding = PaddingValues(horizontal = 14.dp),
+                    modifier = Modifier.height(42.dp)
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(19.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Cash in", fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
+            if (!isLoading && balanceError != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                    Text(balanceError, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 2, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onBalanceRetry) { Text("Retry", color = Color.White, fontWeight = FontWeight.Bold) }
                 }
             }
         }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onProfileClick) {
-                Icon(Icons.Rounded.AccountCircle, null, tint = FastPayTextPrimary, modifier = Modifier.size(28.dp))
-            }
-            IconButton(onClick = onHelpClick) {
-                Icon(Icons.AutoMirrored.Rounded.HelpOutline, null, tint = FastPayTextPrimary, modifier = Modifier.size(26.dp))
-            }
-        }
     }
 }
 
 @Composable
-fun PrimaryActionRow(
+fun QuickActionsSection(
     onCollect: () -> Unit,
     onTransfer: () -> Unit,
     onPaymentLink: () -> Unit,
-    onQr: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        PrimaryActionButton(icon = Icons.Rounded.Payments, label = "Collect", onClick = onCollect, modifier = Modifier.weight(1f))
-        PrimaryActionButton(icon = Icons.AutoMirrored.Rounded.Send, label = "Transfer", onClick = onTransfer, modifier = Modifier.weight(1f))
-        PrimaryActionButton(icon = Icons.Rounded.Link, label = "Payment Link", onClick = onPaymentLink, modifier = Modifier.weight(1f))
-        PrimaryActionButton(icon = Icons.Rounded.QrCode2, label = "QR", onClick = onQr, modifier = Modifier.weight(1f))
-    }
-}
-
-@Composable
-fun PrimaryActionButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(
-            onClick = onClick,
-            shape = RoundedCornerShape(16.dp),
-            color = Color.White,
-            modifier = Modifier.size(72.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = FastPayTextPrimary, modifier = Modifier.size(28.dp))
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = FastPayTextPrimary,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
-@Composable
-fun SecondaryToolGrid(
     onNavigateToWallet: () -> Unit,
     onDeposit: () -> Unit,
     onDeveloperDocs: () -> Unit,
-    onHelpClick: () -> Unit
+    onProfileClick: () -> Unit
 ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Text(
-            text = "More",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = FastPayTextPrimary
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+    Column(modifier = Modifier.padding(horizontal = 18.dp)) {
+        Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
+        Spacer(modifier = Modifier.height(13.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            ToolItem(Icons.Rounded.AccountBalanceWallet, "Wallet", Modifier.weight(1f), onNavigateToWallet)
-            ToolItem(Icons.Rounded.AccountBalance, "Deposit", Modifier.weight(1f), onDeposit)
-            ToolItem(Icons.Rounded.Terminal, "API Docs", Modifier.weight(1f), onDeveloperDocs)
-            ToolItem(Icons.AutoMirrored.Rounded.HelpOutline, "Help", Modifier.weight(1f), onHelpClick)
+            QuickAction(Icons.Rounded.Payments, "Collect", Color(0xFFE5F0FF), onCollect, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", Color(0xFFE8F4FF), onTransfer, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Link, "Payment link", Color(0xFFE8F8F5), onPaymentLink, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.AccountBalanceWallet, "Wallet", Color(0xFFFFF3E5), onNavigateToWallet, Modifier.weight(1f))
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            QuickAction(Icons.Rounded.AccountBalance, "Cash in", Color(0xFFE8F8F5), onDeposit, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Activity", Color(0xFFE5F0FF), onNavigateToWallet, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Terminal, "API docs", Color(0xFFF0ECFF), onDeveloperDocs, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Person, "Profile", Color(0xFFFFF0EA), onProfileClick, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-fun ToolItem(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun QuickAction(icon: ImageVector, label: String, background: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
-            ),
+            )
+            .padding(vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(icon, null, tint = Color(0xFF475569), modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = FastPayTextSecondary,
-            textAlign = TextAlign.Center,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Surface(shape = RoundedCornerShape(17.dp), color = background, modifier = Modifier.size(56.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, label, tint = Color(0xFF0757C8), modifier = Modifier.size(29.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(7.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = FastPayTextPrimary, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1, fontSize = 11.sp)
     }
 }
 
 @Composable
-fun PromotionalBanner() {
+fun MerchantToolsBanner(onCreatePaymentLink: () -> Unit) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
         shape = RoundedCornerShape(20.dp),
-        color = Color(0xFFEFF6FF)
+        color = Color(0xFF102B59)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "SwiftPay Deals",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = FastPayTextSecondary,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Loyalty Rewards\nProgram Is Live!",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = FastPayTextPrimary,
-                    lineHeight = 24.sp
-                )
-                Text(
-                    text = "Powered by SwiftPay",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = FastPayTextSecondary,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-
-                Button(
-                    onClick = { },
-                    colors = ButtonDefaults.buttonColors(containerColor = FastPayActionIcon),
-                    shape = RoundedCornerShape(20.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    modifier = Modifier.height(36.dp)
-                ) {
-                    Text("Get Started", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("BUILT FOR YOUR BUSINESS", style = MaterialTheme.typography.labelSmall, color = Color(0xFFA9CBFF), fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(5.dp))
+                Text("Get paid your way", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                Text("QR collections, payment links and transfers.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.76f))
+                TextButton(onClick = onCreatePaymentLink, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                    Text("Create a payment link", color = Color.White, fontWeight = FontWeight.Bold)
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = Color.White, modifier = Modifier.padding(start = 5.dp).size(16.dp))
                 }
             }
-
-            Icon(Icons.Rounded.DonutLarge, null, tint = Color(0xFFF97316).copy(alpha = 0.8f), modifier = Modifier.size(64.dp))
+            Icon(Icons.Rounded.CurrencyExchange, null, tint = Color(0xFF79B1FF), modifier = Modifier.size(48.dp))
         }
     }
 }
@@ -392,27 +335,19 @@ fun TransactionHistorySection(
     hasError: Boolean,
     onClick: () -> Unit
 ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = 18.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().clickable { onClick() },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.width(4.dp).height(20.dp).clip(CircleShape).background(Color(0xFF818CF8)))
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Transaction History",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = FastPayTextPrimary
-                )
+                Text("See all", style = MaterialTheme.typography.labelMedium, color = Color(0xFF0757C8), fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Rounded.ChevronRight, null, tint = Color(0xFF0757C8), modifier = Modifier.size(18.dp))
             }
-            Icon(Icons.Rounded.ChevronRight, null, tint = Color.LightGray, modifier = Modifier.size(20.dp))
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+        Spacer(modifier = Modifier.height(14.dp))
         when {
             isLoading -> Box(Modifier.fillMaxWidth().height(72.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
@@ -484,58 +419,3 @@ fun TransactionListItem(transaction: InternalTransaction) {
     }
 }
 
-@Composable
-fun RewardsHubSection() {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.width(4.dp).height(20.dp).clip(CircleShape).background(Color(0xFF2DD4BF)))
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Rewards Hub",
-                    style = MaterialTheme.typography.titleMedium.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-                    fontWeight = FontWeight.ExtraBold,
-                    color = FastPayTextPrimary
-                )
-            }
-            Icon(Icons.Rounded.ChevronRight, null, tint = Color.LightGray, modifier = Modifier.size(20.dp))
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFFF0FDFA)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text("Points & Deals", style = MaterialTheme.typography.labelSmall, color = Color(0xFF0D9488), fontWeight = FontWeight.Bold)
-                Text(
-                    "Earn points with every payment\nand unlock exclusive merchant rewards.",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = FastPayTextPrimary,
-                    lineHeight = 22.sp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Icon(Icons.Rounded.CardGiftcard, null, tint = Color(0xFF2DD4BF), modifier = Modifier.size(60.dp).alpha(0.3f).align(Alignment.End))
-            }
-        }
-    }
-}
-
-fun Modifier.shimmerEffect(): Modifier = this.then(
-    background(
-        brush = Brush.linearGradient(
-            colors = listOf(
-                Color.LightGray.copy(alpha = 0.3f),
-                Color.LightGray.copy(alpha = 0.5f),
-                Color.LightGray.copy(alpha = 0.3f)
-            )
-        )
-    )
-)

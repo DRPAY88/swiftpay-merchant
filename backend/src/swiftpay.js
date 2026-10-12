@@ -56,9 +56,11 @@ export function buildQrPayload(input, config) {
 }
 
 export class SwiftPayError extends Error {
-  constructor(status, message) {
+  constructor(status, message, { errorCode, supportReference } = {}) {
     super(message);
     this.status = status;
+    this.errorCode = errorCode;
+    this.supportReference = supportReference;
   }
 }
 
@@ -98,7 +100,12 @@ export async function callSwiftPay(config, fetchImpl, path, options = {}) {
       }
       const code = data?.errorCode || data?.code;
       const message = code ? `SwiftPay request failed (${code})` : "SwiftPay request failed";
-      throw new SwiftPayError(response.status >= 500 ? 502 : response.status, message);
+      const supportReference = [data?.errorUuid, data?.requestUuid]
+        .find((value) => typeof value === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(value));
+      throw new SwiftPayError(response.status >= 500 ? 502 : response.status, message, {
+        errorCode: typeof code === "string" ? code : undefined,
+        supportReference
+      });
     }
     const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
     if (contentType !== "image/png") {
@@ -123,7 +130,12 @@ export async function callSwiftPay(config, fetchImpl, path, options = {}) {
   if (!response.ok) {
     const code = data?.errorCode || data?.code;
     const message = code ? `SwiftPay request failed (${code})` : "SwiftPay request failed";
-    throw new SwiftPayError(response.status >= 500 ? 502 : response.status, message);
+    const supportReference = [data?.errorUuid, data?.requestUuid]
+      .find((value) => typeof value === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(value));
+    throw new SwiftPayError(response.status >= 500 ? 502 : response.status, message, {
+      errorCode: typeof code === "string" ? code : undefined,
+      supportReference
+    });
   }
   return { status: response.status, data };
 }

@@ -12,6 +12,7 @@ import {
   SwiftPayError,
   verifySwiftPaySignature
 } from "./swiftpay.js";
+import { TransakError } from "./transak.js";
 
 const amountSchema = z.number().finite().min(0.01).max(1_000_000);
 const referenceSchema = z.string().trim().min(1).max(50);
@@ -113,7 +114,7 @@ function requireSuperAdmin(req, res, next) {
   next();
 }
 
-export function createApp({ config, fetchImpl = fetch, verifyAccessToken, requestOtp, verifyOtp, userStore }) {
+export function createApp({ config, fetchImpl = fetch, verifyAccessToken, requestOtp, verifyOtp, cryptoWidgetService, userStore }) {
   if (!verifyAccessToken) throw new Error("A JWT verifier is required");
   if (!requestOtp || !verifyOtp) throw new Error("OTP auth handlers are required");
   const app = express();
@@ -224,6 +225,25 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
   }));
 
   app.use("/v1", createAuthMiddleware(verifyAccessToken, userStore));
+
+  app.post("/v1/crypto/widget-url", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
+    if (!cryptoWidgetService) throw new SwiftPayError(503, "USDT checkout is not configured for this service");
+    const tronAddressSchema = z.string().trim().regex(/^T[1-9A-HJ-NP-Za-km-z]{33}$/, "must be a valid TRON mainnet address");
+    const input = parse(z.discriminatedUnion("mode", [
+      z.object({
+        mode: z.literal("BUY"),
+        amount: z.number().finite().min(1).max(1_000_000),
+        walletAddress: tronAddressSchema
+      }).strict(),
+      z.object({ mode: z.literal("SELL"), amount: z.number().finite().min(0.01).max(1_000_000) }).strict()
+    ]), req.body);
+    const session = await cryptoWidgetService.createWidgetUrl({
+      ...input,
+      userIp: req.ip,
+      customerId: req.principal.sub
+    });
+    res.json(session);
+  }));
 
   app.get("/v1/admin/me", requireSuperAdmin, (req, res) => {
     res.json({ email: req.principal.sub, role: req.principal.role });
@@ -483,14 +503,18 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
 
   app.use((_req, res) => res.status(404).json({ error: "not_found" }));
   app.use((error, _req, res, _next) => {
-    const status = error instanceof SwiftPayError
+    const status = error instanceof SwiftPayError || error instanceof TransakError
       ? error.status
       : Number.isInteger(error.status) && error.status >= 400 && error.status < 500
         ? error.status
         : 500;
-    const message = status >= 500 ? "Internal server error" : error.message;
+    const message = status >= 500 && !(error instanceof TransakError) ? "Internal server error" : error.message;
     if (status >= 500) console.error("SwiftPay backend request failed");
-    res.status(status).json({ error: message });
+    res.status(status).json({
+      error: message,
+      ...(error instanceof SwiftPayError && error.errorCode ? { errorCode: error.errorCode } : {}),
+      ...(error instanceof SwiftPayError && error.supportReference ? { supportReference: error.supportReference } : {})
+    });
   });
   return app;
 }

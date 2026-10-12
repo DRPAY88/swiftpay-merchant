@@ -16,6 +16,12 @@ The API refuses to start without SwiftPay credentials, an allowlist, a session-s
 
 The Render blueprint configures `OTP_FROM_EMAIL` as `SwiftPay <login@swiftpay.site>`, matching the Resend DKIM and sending records for `swiftpay.site`. Keep `RESEND_API_KEY` configured as a Render secret with a valid production Resend API key.
 
+## USDT buy and sell
+
+The wallet opens Transak's hosted, non-custodial checkout for USDT on TRON. The backend creates a single-use widget URL; BUY requires the customer's TRON destination address, while SELL sends the entered USDT amount to Transak's sell flow. The app does not custody USDT or treat the SwiftPay PHP wallet as a crypto balance. Transak performs its own KYC, quotes, fees, and transaction handling.
+
+The Render blueprint is configured for the live Transak production environment, but the backend remains fail-closed until `TRANSAK_API_KEY` and `TRANSAK_API_SECRET` are provided as Render secrets. Set the approved partner credentials, ensure the deployed service's static egress IP is allowlisted by Transak, and confirm the merchant account has PHP/Philippines USDT TRON buy/sell support before enabling live traffic. Without these settings, the app reports checkout as unavailable and cannot submit a trade.
+
 If sign-in requests return HTTP 503, check the backend logs for the Resend HTTP status and provider error code. Verify the `swiftpay.site` domain is marked verified in the same Resend account as `RESEND_API_KEY`; redeploy after updating the key or sender. The API intentionally returns a generic error and never exposes provider details to the app.
 
 ## Super-admin backoffice

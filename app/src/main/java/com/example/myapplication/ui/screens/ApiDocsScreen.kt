@@ -27,8 +27,8 @@ import com.example.myapplication.ui.theme.FastPayNavy
 @Composable
 fun ApiDocsScreen() {
     val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val bgColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF8F9FA)
-    val textColor = if (isDarkTheme) Color.White else FastPayNavy
+    val bgColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F8FF)
+    val textColor = if (isDarkTheme) Color.White else Color(0xFF10213D)
     val cardColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color.White
 
     Scaffold(
@@ -46,7 +46,7 @@ fun ApiDocsScreen() {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             DocHeader(
                 title = "Integration Overview",
@@ -110,7 +110,7 @@ fun ApiDocsScreen() {
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = FastPayBlue),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
@@ -150,8 +150,9 @@ fun DocSection(
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = cardColor),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(14.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -165,12 +166,12 @@ fun DocSection(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1E1E2F), RoundedCornerShape(12.dp))
-                    .padding(16.dp)
+                    .background(if (MaterialTheme.colorScheme.background == FastPayBlack) Color(0xFF1E1E2F) else Color(0xFFF0F5FC), RoundedCornerShape(10.dp))
+                    .padding(14.dp)
             ) {
                 Text(
                     text = code,
-                    color = Color(0xFFCE9178),
+                    color = if (MaterialTheme.colorScheme.background == FastPayBlack) Color(0xFFCE9178) else Color(0xFF0757C8),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
