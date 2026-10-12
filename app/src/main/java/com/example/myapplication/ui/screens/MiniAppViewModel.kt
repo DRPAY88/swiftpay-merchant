@@ -36,6 +36,7 @@ sealed interface MiniAppUiState {
     data class DynamicQrReady(
         val qrImageBase64: String,
         val amount: Double,
+        val currency: String,
         val bankAccountNumber: String?,
         val instapayBankCode: String?
     ) : MiniAppUiState
@@ -85,6 +86,18 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         private set
 
     var walletBalanceError by mutableStateOf<String?>(null)
+        private set
+
+    var krwReceiptBalance by mutableStateOf<Double?>(null)
+        private set
+
+    var krwReceiptPaymentCount by mutableStateOf(0)
+        private set
+
+    var krwReceiptBalanceError by mutableStateOf<String?>(null)
+        private set
+
+    var isLoadingKrwReceiptBalance by mutableStateOf(false)
         private set
 
     var depositAccountNumber by mutableStateOf<String?>(null)
@@ -161,6 +174,29 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             } catch (error: Exception) {
                 walletBalanceError = error.message ?: "Could not load wallet balance."
                 Log.e("MiniAppViewModel", "Failed to refresh wallet balance", error)
+            }
+        }
+    }
+
+    fun refreshKrwReceiptBalance() {
+        viewModelScope.launch {
+            isLoadingKrwReceiptBalance = true
+            krwReceiptBalanceError = null
+            try {
+                getService().getKrwReceiptBalance()
+                    .onSuccess { result ->
+                        krwReceiptBalance = result.balance
+                        krwReceiptPaymentCount = result.paymentCount
+                    }
+                    .onFailure { error ->
+                        krwReceiptBalanceError = error.message ?: "Could not load executed KRW QR Ph receipts."
+                    }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                krwReceiptBalanceError = error.message ?: "Could not load executed KRW QR Ph receipts."
+            } finally {
+                isLoadingKrwReceiptBalance = false
             }
         }
     }
@@ -276,9 +312,9 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun onGenerateDynamicQr(amount: Double) {
+    fun onGenerateDynamicQr(amount: Double, currency: String = "PHP") {
         launchProcessingAction("Generating dynamic QR Ph code...") {
-            val result = getService().createDynamicQr(amount)
+            val result = getService().createDynamicQr(amount, currency)
 
             result.onSuccess { response ->
                 val qrCode = response.qrCodeBody ?: response.qrCode
@@ -306,6 +342,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                     uiState = MiniAppUiState.DynamicQrReady(
                         qrImageBase64 = qrImageBase64,
                         amount = amount,
+                        currency = response.currency ?: currency,
                         bankAccountNumber = response.bankAccountNumber,
                         instapayBankCode = response.instapayBankCode
                     )
@@ -370,6 +407,12 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         val scanned = parseScannedQrPayment(payload)
         if (scanned == null) {
             val message = "This QR code could not be read as a supported payment QR."
+            bridge?.sendError(message)
+            uiState = MiniAppUiState.Error(message)
+            return
+        }
+        if (scanned.currencyCode != "608") {
+            val message = "This QR code is denominated in KRW. QR transfers currently require a PHP amount; no exchange conversion was applied."
             bridge?.sendError(message)
             uiState = MiniAppUiState.Error(message)
             return
@@ -458,7 +501,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                 uiState = MiniAppUiState.Idle
             }.onFailure { error ->
                 val errorMsg = error.message ?: "Transfer failed"
-                bridge?.sendError(errorMsg)
+                bridge?.sendError(errorMsg, action = "send_disbursement")
                 uiState = MiniAppUiState.Error(errorMsg)
             }
         }

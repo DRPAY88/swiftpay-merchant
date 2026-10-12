@@ -36,12 +36,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.data.BackendAuthService
+import com.example.myapplication.data.DevicePinCheck
+import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.ui.components.FastPayLogo
 import com.example.myapplication.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import android.util.Patterns
 
@@ -50,6 +53,8 @@ sealed interface LoginState {
     object Credentials : LoginState
     object WaitingApproval : LoginState
     data class Otp(val email: String) : LoginState
+    object MpinSetup : LoginState
+    object MpinConfirmation : LoginState
 }
 
 class LoginViewModel(application: Application) : AndroidViewModel(application) {
@@ -64,8 +69,18 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
     var resendTimer by mutableStateOf(0)
+    private var pendingMpin: String? = null
 
     private var timerJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            val token = settingsManager.backendAccessToken.first()
+            if (!token.isNullOrBlank() && !settingsManager.hasDevicePin()) {
+                state = LoginState.MpinSetup
+            }
+        }
+    }
 
     fun navigateToCredentials() {
         isLoading = false
@@ -123,7 +138,8 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 authService.verifyOtp(currentOtp, otpCode).onSuccess { session ->
                     settingsManager.saveBackendAccessToken(session.accessToken)
                     settingsManager.setLoggedIn(session.email, true)
-                    onSuccess()
+                    errorMessage = null
+                    state = LoginState.MpinSetup
                 }.onFailure { error ->
                     errorMessage = error.message ?: "Invalid or expired verification code"
                 }
@@ -131,6 +147,41 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 throw e
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Network error"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun onMpinCreated(pin: String) {
+        if (!pin.matches(Regex("^\\d{6}$"))) {
+            errorMessage = "Enter a six-digit MPIN."
+            return
+        }
+        pendingMpin = pin
+        errorMessage = null
+        state = LoginState.MpinConfirmation
+    }
+
+    fun onMpinConfirmationBack() {
+        errorMessage = null
+        state = LoginState.MpinSetup
+    }
+
+    fun onMpinConfirmed(pin: String, onSuccess: () -> Unit) {
+        if (pin != pendingMpin) {
+            errorMessage = "Those MPINs do not match. Try again."
+            return
+        }
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                settingsManager.saveDevicePin(pin)
+                pendingMpin = null
+                onSuccess()
+            } catch (error: Exception) {
+                errorMessage = error.message ?: "Could not secure the MPIN on this device."
             } finally {
                 isLoading = false
             }
@@ -206,7 +257,171 @@ fun LoginScreen(
                 onResendClick = { viewModel.onResendOtpClick() },
                 onVerifyClick = { viewModel.onVerifyOtpClick(onLoginSuccess) }
             )
+            LoginState.MpinSetup -> MpinEnrollmentContent(
+                isConfirmation = false,
+                isLoading = viewModel.isLoading,
+                errorMessage = viewModel.errorMessage,
+                onSubmit = viewModel::onMpinCreated
+            )
+            LoginState.MpinConfirmation -> MpinEnrollmentContent(
+                isConfirmation = true,
+                isLoading = viewModel.isLoading,
+                errorMessage = viewModel.errorMessage,
+                onBack = viewModel::onMpinConfirmationBack,
+                onSubmit = { viewModel.onMpinConfirmed(it, onLoginSuccess) }
+            )
         }
+    }
+}
+
+@Composable
+fun MpinEnrollmentContent(
+    isConfirmation: Boolean,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onBack: (() -> Unit)? = null,
+    onSubmit: (String) -> Unit
+) {
+    var pin by remember(isConfirmation) { mutableStateOf("") }
+    val isDarkTheme = isSystemInDarkTheme()
+    val textColor = MaterialTheme.colorScheme.onBackground
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F8FF))
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = textColor)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        Surface(shape = CircleShape, color = FastPayBlue.copy(alpha = 0.1f), modifier = Modifier.size(76.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Lock, contentDescription = null, tint = FastPayBlue, modifier = Modifier.size(34.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(22.dp))
+        Text(
+            if (isConfirmation) "Confirm your MPIN" else "Create a device MPIN",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = textColor,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            if (isConfirmation) "Enter it once more to finish securing this device."
+            else "Use this six-digit code to unlock SwiftPay on this device. OTP sign-in is only needed to register another device.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 10.dp)
+        )
+        Spacer(modifier = Modifier.height(30.dp))
+        OutlinedTextField(
+            value = pin,
+            onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) pin = value },
+            modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth(),
+            label = { Text("6-digit MPIN") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            visualTransformation = PasswordVisualTransformation(),
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            textStyle = MaterialTheme.typography.headlineSmall.copy(textAlign = TextAlign.Center, letterSpacing = 10.sp),
+            isError = errorMessage != null,
+            supportingText = { if (errorMessage != null) Text(errorMessage) }
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(
+            onClick = { onSubmit(pin) },
+            enabled = pin.length == 6 && !isLoading,
+            modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth().height(54.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            else Text(if (isConfirmation) "Confirm MPIN" else "Continue", fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+fun DevicePinScreen(
+    email: String?,
+    onUnlocked: () -> Unit,
+    onUseAnotherAccount: () -> Unit
+) {
+    val context = LocalContext.current
+    val pinManager = remember { DevicePinManager(context) }
+    var pin by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf<String?>(null) }
+    val textColor = MaterialTheme.colorScheme.onBackground
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(if (isSystemInDarkTheme()) Color(0xFF121212) else Color(0xFFF4F8FF))
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.weight(1f))
+        Surface(shape = CircleShape, color = FastPayBlue.copy(alpha = 0.1f), modifier = Modifier.size(76.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Lock, contentDescription = null, tint = FastPayBlue, modifier = Modifier.size(34.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+        Text("Welcome back", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textColor)
+        Text(email.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f))
+        Spacer(modifier = Modifier.height(28.dp))
+        OutlinedTextField(
+            value = pin,
+            onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) pin = value },
+            modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth(),
+            label = { Text("Enter your MPIN") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            visualTransformation = PasswordVisualTransformation(),
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            textStyle = MaterialTheme.typography.headlineSmall.copy(textAlign = TextAlign.Center, letterSpacing = 10.sp),
+            isError = message != null,
+            supportingText = { message?.let { Text(it) } }
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = {
+                when (val result = pinManager.verifyPin(pin)) {
+                    DevicePinCheck.Verified -> onUnlocked()
+                    is DevicePinCheck.Rejected -> {
+                        message = if (result.attemptsRemaining > 0) "Incorrect MPIN. ${result.attemptsRemaining} attempts remaining."
+                        else "MPIN is unavailable. Sign in again to secure this device."
+                        pin = ""
+                    }
+                    is DevicePinCheck.Locked -> {
+                        message = "Too many attempts. Try again in ${result.secondsRemaining} seconds."
+                        pin = ""
+                    }
+                }
+            },
+            enabled = pin.length == 6,
+            modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth().height(54.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text("Unlock", fontWeight = FontWeight.Bold)
+        }
+        TextButton(onClick = onUseAnotherAccount, modifier = Modifier.padding(top = 8.dp)) {
+            Text("Use another account")
+        }
+        Spacer(modifier = Modifier.weight(1f))
     }
 }
 

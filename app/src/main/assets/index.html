@@ -838,7 +838,14 @@
         <div class="page-content" style="text-align:center">
             <div class="api-card">
                 <div class="input-group">
-                    <label class="input-label" for="qr-amount">Amount (₱)</label>
+                    <label class="input-label" for="qr-currency">Settlement currency</label>
+                    <select id="qr-currency" class="modern-input" onchange="updateQrCurrency()">
+                        <option value="PHP">PHP · Philippine peso</option>
+                        <option value="KRW">KRW · Korean won</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label id="qr-amount-label" class="input-label" for="qr-amount">Amount (₱)</label>
                     <input type="number" id="qr-amount" class="modern-input" min="0.01" max="1000000" step="0.01" placeholder="0.00">
                 </div>
                 <p class="channel-desc">Generate a one-time QR Ph payment code. The QR code will appear in a secure native dialog.</p>
@@ -1009,15 +1016,22 @@
         }
         function generateQr() {
             const amount = Number(document.getElementById('qr-amount').value);
+            const currency = document.getElementById('qr-currency').value;
             if (!Number.isFinite(amount) || amount < 0.01 || amount > 1000000) {
-                showNotice("Enter an amount between ₱0.01 and ₱1,000,000.00.", true);
+                showNotice(`Enter a ${currency} amount between 0.01 and 1,000,000.00.`, true);
                 return;
             }
 
             const button = document.getElementById('qr-create-button');
             button.disabled = true;
             button.textContent = "Generating QR Ph code...";
-            if (!post("generate_dynamic_qr", { amount })) resetQrButton();
+            if (!post("generate_dynamic_qr", { amount, currency })) resetQrButton();
+        }
+        function updateQrCurrency() {
+            const isKrw = document.getElementById('qr-currency').value === 'KRW';
+            document.getElementById('qr-amount-label').textContent = isKrw ? 'Amount (₩)' : 'Amount (₱)';
+            document.getElementById('qr-amount').step = isKrw ? '1' : '0.01';
+            document.getElementById('qr-amount').placeholder = isKrw ? '0' : '0.00';
         }
         function scanQrToSend() { post("scan_qr_to_send"); }
 

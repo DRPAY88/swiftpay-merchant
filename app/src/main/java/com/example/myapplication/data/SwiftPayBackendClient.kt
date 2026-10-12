@@ -12,6 +12,7 @@ import com.example.myapplication.data.api.BackendQrPaymentRequest
 import com.example.myapplication.data.api.BackendRecipientInformation
 import com.example.myapplication.data.api.BackendTransferInstitution
 import com.example.myapplication.data.api.BackendWalletBalanceResponse
+import com.example.myapplication.data.api.BackendKrwReceiptBalanceResponse
 import com.example.myapplication.data.api.BackendWalletDepositAccount
 import com.example.myapplication.data.api.CardDetails
 import com.example.myapplication.data.api.InternalTransaction
@@ -81,7 +82,7 @@ class SwiftPayService(
                     val jsonObj = json.parseToJsonElement(rawBody).jsonObject
                     val errorCode = jsonObj["errorCode"]?.jsonPrimitive?.contentOrNull
                     val baseMessage = if (response.code() == 400 && errorCode == "INVALID_INPUT") {
-                        "SwiftPay rejected the transfer details. Verify the account number and recipient's full legal name."
+                        "SwiftPay rejected the transfer details. Confirm the selected InstaPay institution matches the recipient's account, then verify the account number and recipient's exact legal name. Contact SwiftPay with the support reference if those details are correct."
                     } else {
                         jsonObj["error"]?.jsonPrimitive?.contentOrNull
                         ?: jsonObj["message"]?.jsonPrimitive?.contentOrNull
@@ -188,15 +189,17 @@ class SwiftPayService(
         }
     }
 
-    suspend fun createDynamicQr(amount: Double): Result<SwiftPayQrResponse> {
+    suspend fun createDynamicQr(amount: Double, currency: String = "PHP"): Result<SwiftPayQrResponse> {
         if (!hasApiKey) return missingSession()
         if (!amount.isFinite() || amount <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid QR Ph amount"))
+        if (currency !in setOf("PHP", "KRW")) return Result.failure(IllegalArgumentException("Choose PHP or KRW for QR Ph"))
         return try {
             val refNo = "QR-${UUID.randomUUID()}"
             val response = api.createQrPayment(
                 BackendQrPaymentRequest(
                     amount = amount,
-                    referenceNo = refNo
+                    referenceNo = refNo,
+                    currency = currency
                 )
             )
             if (!response.isSuccessful) return failure(response)
@@ -215,7 +218,7 @@ class SwiftPayService(
                     checkoutUrl = null,
                     status = body.status,
                     amount = body.amount,
-                    currency = body.currency ?: "PHP",
+                    currency = body.currency ?: currency,
                     qrCodeBody = qrCodeValue,
                     qrImageBase64 = qrImageBase64,
                     bankAccountNumber = body.bankAccountNumber,
@@ -241,6 +244,23 @@ class SwiftPayService(
 
     suspend fun getWalletBalance(): Result<Double> =
         getWalletBalanceDetails().map { it.balance }
+
+    suspend fun getKrwReceiptBalance(): Result<BackendKrwReceiptBalanceResponse> {
+        if (!hasApiKey) return missingSession()
+        return try {
+            val response = api.getKrwReceiptBalance()
+            if (!response.isSuccessful) return failure(response)
+            val body = response.body() ?: return Result.failure(IllegalStateException("Empty KRW receipt balance response"))
+            if (body.currency != "KRW" || !body.balance.isFinite() || body.balance < 0.0) {
+                return Result.failure(IllegalStateException("Backend returned an invalid KRW receipt balance"))
+            }
+            Result.success(body)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
 
     suspend fun createCryptoWidgetUrl(
         mode: String,

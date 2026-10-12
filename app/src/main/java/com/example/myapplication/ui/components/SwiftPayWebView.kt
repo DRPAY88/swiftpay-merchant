@@ -54,6 +54,7 @@ fun SwiftPayWebView(
     onScanQrToSend: () -> Unit,
     onGetTransferInstitutions: () -> Unit,
     onSendDisbursement: ((Double, String, String, String) -> Unit)? = null,
+    onGenerateDynamicQrWithCurrency: ((Double, String) -> Unit)? = null,
     onBridgeReady: (SwiftPaySDKBridge) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -199,7 +200,8 @@ fun SwiftPayWebView(
                             onStartDepositWizard = onStartDepositWizard,
                             onScanQrToSend = onScanQrToSend,
                             onGetTransferInstitutions = onGetTransferInstitutions,
-                            onSendDisbursement = onSendDisbursement
+                            onSendDisbursement = onSendDisbursement,
+                            onGenerateDynamicQrWithCurrency = onGenerateDynamicQrWithCurrency
                         )
 
                         addJavascriptInterface(bridge, "SwiftPaySDK")

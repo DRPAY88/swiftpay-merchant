@@ -52,6 +52,18 @@ test("admin store persists merchant status, internal adjustments, and atomic aud
       await store.getPaymentWebhookStatus(webhook.paymentId),
       { status: "EXECUTED" }
     );
+
+    const krwPayment = {
+      eventKey: "payment:00000000-0000-4000-8000-000000000002",
+      eventType: "payment",
+      paymentId: "00000000-0000-4000-8000-000000000002",
+      referenceNo: "QR-KRW-1",
+      status: "PENDING",
+      details: { amount: 12000, currency: "KRW" }
+    };
+    await store.recordWebhookEvent(krwPayment);
+    await store.recordWebhookEvent({ ...krwPayment, status: "EXECUTED", details: {} });
+    assert.deepEqual(await store.getKrwQrPaymentBalance(), { balance: "12000", paymentCount: 1 });
   } finally {
     await store.close();
   }

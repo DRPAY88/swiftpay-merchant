@@ -25,6 +25,7 @@ let disbursementPage;
 let disbursementFailure;
 let cryptoWidgetRequest;
 let cryptoWidgetFailure = false;
+const storedPaymentEvents = new Map();
 
 before(async () => {
   requests = [];
@@ -32,6 +33,7 @@ before(async () => {
   accountResponseStatus = 200;
   qrBootstrapStatus = 200;
   disbursementPage = { pageNo: 0, result: [], totalCount: 0, resultCount: 0 };
+  storedPaymentEvents.clear();
   let app;
   app = createApp({
     config,
@@ -39,6 +41,13 @@ before(async () => {
       if (failOtpRequest) throw new Error("OTP email provider rejected request (HTTP 403)");
     },
     verifyOtp: async () => null,
+    userStore: {
+      getUser: async () => ({ status: "active", role: "merchant" }),
+      recordWebhookEvent: async (event) => storedPaymentEvents.set(event.eventKey, event),
+      adjustmentTotal: async () => 0,
+      createTransferIntent: async () => null,
+      finishTransferIntent: async () => {}
+    },
     verifyAccessToken: async (token) => {
       if (!new Set(["valid-test-token", "read-only-test-token"]).has(token)) throw new Error("invalid token");
       if (token === "read-only-test-token") return { sub: "reader-1", scope: "swiftpay:payments:read" };
@@ -72,17 +81,18 @@ before(async () => {
         ? { status: 200, body: { code: "PL-1", paymentUrl: "https://pay.example/link/PL-1" } }
         : url.pathname.endsWith("/bootstrap/qrph")
           ? {
-            status: 200,
-            body: {
-              paymentId: "5008f066-d68a-4ef2-b794-8596bac268f6",
-              paymentStatus: "PENDING",
-              referenceNo: "QR-1",
-              amount: "500.75",
-              bankAccountNumber: "120000234109",
-              instapayBankCode: "CUOBPHM2XXX",
-              qrCode: "000201010212"
-            }
-          }
+                status: 200,
+                body: {
+                  paymentId: "5008f066-d68a-4ef2-b794-8596bac268f6",
+                  paymentStatus: "PENDING",
+                  referenceNo: "QR-1",
+                  amount: JSON.parse(options.body).x_amount,
+                  currency: JSON.parse(options.body).x_currency,
+                  bankAccountNumber: "120000234109",
+                  instapayBankCode: "CUOBPHM2XXX",
+                  qrCode: "000201010212"
+                }
+              }
         : url.pathname.endsWith("/payments/status")
           ? { status: 200, body: "EXECUTED" }
           : url.pathname.endsWith("/disbursements/account")
@@ -252,6 +262,28 @@ test("QR Ph bootstrap signs amount and returns the provider PNG", async () => {
   const imageRequest = requests.findLast(({ url }) => url.endsWith("/payments/qrph/image?type=P2M"));
   assert.equal(imageRequest.options.headers["X-Swiftpay-Payment-Token"], payment.paymentId);
   assert.equal(imageRequest.options.headers.Accept, "image/png");
+});
+
+test("KRW QR Ph bootstrap signs and returns KRW without changing the amount", async () => {
+  const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 12000, referenceNo: "QR-KRW-1", currency: "KRW" })
+  });
+  assert.equal(response.status, 201);
+  const payment = await response.json();
+  assert.equal(payment.amount, 12000);
+  assert.equal(payment.currency, "KRW");
+
+  const bootstrapRequest = requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M"));
+  const payload = JSON.parse(bootstrapRequest.options.body);
+  assert.equal(payload.x_amount, 12000);
+  assert.equal(payload.x_currency, "KRW");
+  assert.equal(verifySwiftPaySignature(payload, payload.signature, config.swiftPaySecretKey), true);
+  assert.deepEqual(storedPaymentEvents.get(`payment:${payment.paymentId}`).details, { amount: 12000, currency: "KRW" });
 });
 
 test("QR Ph signature verification rejects altered fields and malformed signatures", () => {

@@ -8,6 +8,9 @@ sealed interface Route {
     data object Login : Route
 
     @Serializable
+    data object DeviceLock : Route
+
+    @Serializable
     data object Home : Route
 
     @Serializable

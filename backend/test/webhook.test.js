@@ -31,6 +31,17 @@ before(async () => {
       getPaymentWebhookStatus: async (id) => {
         const event = events.get(`payment:${id}`);
         return event ? { status: event.status } : null;
+      },
+      getKrwQrPaymentBalance: async () => {
+        const krwEvents = [...events.values()].filter((event) =>
+          event.eventType === "payment" &&
+          event.status === "EXECUTED" &&
+          event.details.currency === "KRW"
+        );
+        return {
+          balance: krwEvents.reduce((total, event) => total + event.details.amount, 0).toString(),
+          paymentCount: krwEvents.length
+        };
       }
     },
     fetchImpl: async () => {
@@ -86,6 +97,27 @@ test("verified payment webhooks are idempotently stored and become the status so
     source: "webhook"
   });
   assert.equal(fetchCount, 0);
+});
+
+test("KRW receipt balance counts executed signed KRW payments once", async () => {
+  events.clear();
+  const fields = {
+    x_payment_id: paymentId,
+    x_payment_status: "EXECUTED",
+    x_reference_no: "QR-KRW-1",
+    x_amount: "12000",
+    x_currency: "KRW",
+    x_access_key: config.swiftPayAccessKey
+  };
+  fields.signature = signOrder(fields, config.swiftPaySecretKey);
+
+  assert.equal((await sendWebhook(fields)).status, 200);
+  assert.equal((await sendWebhook(fields)).status, 200);
+  const response = await fetch(`${baseUrl}/v1/wallet/krw-receipts`, {
+    headers: { authorization: "Bearer valid-test-token" }
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { currency: "KRW", balance: 12000, paymentCount: 1 });
 });
 
 test("webhook signature, access key and event schema are validated", async () => {

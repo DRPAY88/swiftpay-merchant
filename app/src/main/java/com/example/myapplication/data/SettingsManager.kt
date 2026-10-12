@@ -17,6 +17,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 class SettingsManager(val context: Context) {
     private val encryptedTokenStore = EncryptedTokenStore(context)
+    private val devicePinManager = DevicePinManager(context)
 
     fun getAccessToken(): String? = encryptedTokenStore.read()
 
@@ -107,6 +108,7 @@ class SettingsManager(val context: Context) {
 
     suspend fun clearSession() {
         encryptedTokenStore.clear()
+        devicePinManager.clear()
         context.dataStore.edit { preferences ->
             preferences[IS_LOGGED_IN] = "false"
             preferences.remove(LOGGED_IN_EMAIL)
@@ -121,6 +123,12 @@ class SettingsManager(val context: Context) {
             preferences[IS_LOGGED_IN] = "true"
         }
     }
+
+    fun hasDevicePin(): Boolean = devicePinManager.hasPin()
+
+    fun saveDevicePin(pin: String) = devicePinManager.savePin(pin)
+
+    fun verifyDevicePin(pin: String): DevicePinCheck = devicePinManager.verifyPin(pin)
 
     private fun clearLegacySwiftPayKeys(preferences: androidx.datastore.preferences.core.MutablePreferences) {
         preferences.remove(SWIFTPAY_ACCESS_KEY)

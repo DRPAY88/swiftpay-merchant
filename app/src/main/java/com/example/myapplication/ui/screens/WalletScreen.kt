@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
@@ -84,6 +86,7 @@ fun WalletScreen(
     var transactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("All") }
+    var selectedWallet by remember { mutableStateOf("PHP") }
     val scope = rememberCoroutineScope()
 
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
@@ -193,6 +196,8 @@ fun WalletScreen(
                     accountNumber = depositAccountNumber,
                     transactions = filteredTransactions,
                     selectedFilter = selectedFilter,
+                    selectedWallet = selectedWallet,
+                    onWalletSelected = { selectedWallet = it },
                     onFilterSelected = { selectedFilter = it },
                     onTransactionClick = { tx ->
                         scope.launch {
@@ -228,6 +233,8 @@ fun WalletListContent(
     accountNumber: String? = null,
     transactions: List<InternalTransaction>,
     selectedFilter: String,
+    selectedWallet: String = "PHP",
+    onWalletSelected: (String) -> Unit = {},
     onFilterSelected: (String) -> Unit,
     onTransactionClick: (InternalTransaction) -> Unit,
     viewModel: MiniAppViewModel? = null
@@ -244,67 +251,192 @@ fun WalletListContent(
         }
     }
 
+    LaunchedEffect(selectedWallet) {
+        if (selectedWallet == "KRW") viewModel?.refreshKrwReceiptBalance()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp)
     ) {
         Spacer(Modifier.height(12.dp))
-        
-        PremiumBalanceCard(
-            balance = balance,
-            adjustedBalance = adjustedBalance,
-            accountNumber = accountNumber,
-            errorMessage = viewModel?.walletBalanceError,
-            onRetry = { viewModel?.refreshBalance() }
-        )
+        WalletTypeSelector(selected = selectedWallet, onSelect = onWalletSelected)
+        Spacer(Modifier.height(18.dp))
 
-        Spacer(Modifier.height(20.dp))
+        when (selectedWallet) {
+            "CRYPTO" -> CryptoWalletContent(modifier = Modifier.weight(1f))
+            "KRW" -> KrwWalletContent(
+                balance = viewModel?.krwReceiptBalance,
+                paymentCount = viewModel?.krwReceiptPaymentCount ?: 0,
+                isLoading = viewModel?.isLoadingKrwReceiptBalance == true,
+                errorMessage = viewModel?.krwReceiptBalanceError,
+                onRetry = { viewModel?.refreshKrwReceiptBalance() },
+                modifier = Modifier.weight(1f)
+            )
+            else -> {
+                PremiumBalanceCard(
+                    balance = balance,
+                    adjustedBalance = adjustedBalance,
+                    accountNumber = accountNumber,
+                    errorMessage = viewModel?.walletBalanceError,
+                    onRetry = { viewModel?.refreshBalance() }
+                )
 
-        UsdtTradePanel()
+                Spacer(Modifier.height(18.dp))
+                QuickActionsRow()
+                Spacer(Modifier.height(22.dp))
+                SectionHeader(
+                    title = "Transaction History",
+                    subtitle = "Recent activity on your PHP wallet",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(14.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val filters = listOf("All", "Income", "Expense", "Failed")
+                    items(filters) { filter ->
+                        PremiumFilterChip(
+                            selected = selectedFilter == filter,
+                            text = filter,
+                            onClick = { onFilterSelected(filter) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 28.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (transactions.isEmpty()) {
+                        item { EmptyHistoryState() }
+                    } else {
+                        items(transactions, key = { it.transactionId }) { tx ->
+                            AnimatedTransactionItem(tx = tx, onClick = { onTransactionClick(tx) }, viewModel = viewModel)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
-        Spacer(Modifier.height(32.dp))
+@Composable
+private fun WalletTypeSelector(selected: String, onSelect: (String) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("PHP" to "Peso", "CRYPTO" to "Crypto", "KRW" to "KRW").forEach { (value, label) ->
+            FilterChip(
+                selected = selected == value,
+                onClick = { onSelect(value) },
+                label = { Text(label, maxLines = 1) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
 
-        QuickActionsRow()
-
-        Spacer(Modifier.height(32.dp))
-
-        SectionHeader(
-            title = "Transaction History",
-            subtitle = "Recent activity on your account",
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth()
+@Composable
+private fun CryptoWalletContent(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = Color(0xFF102B59)
         ) {
-            val filters = listOf("All", "Income", "Expense", "Failed")
-            items(filters) { filter ->
-                PremiumFilterChip(
-                    selected = selectedFilter == filter,
-                    text = filter,
-                    onClick = { onFilterSelected(filter) }
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(12.dp), color = Color.White.copy(alpha = 0.12f), modifier = Modifier.size(42.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Rounded.CurrencyBitcoin, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("USDT wallet", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("TRON network", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.72f))
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                Text("External wallet", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                Text("Balance is not connected", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "SwiftPay does not custody USDT or read an on-chain balance. Buy and sell orders open in Transak.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.72f),
+                    modifier = Modifier.padding(top = 5.dp)
                 )
             }
         }
+        UsdtTradePanel()
+        Text(
+            "Review the destination address, network, quote and fees in Transak before confirming a trade.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+}
 
-        Spacer(Modifier.height(20.dp))
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            contentPadding = PaddingValues(bottom = 32.dp),
-            modifier = Modifier.weight(1f)
+@Composable
+private fun KrwWalletContent(
+    balance: Double?,
+    paymentCount: Int,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            if (transactions.isEmpty()) {
-                item {
-                    EmptyHistoryState()
+            Column(modifier = Modifier.padding(22.dp)) {
+                Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFE5F0FF), modifier = Modifier.size(46.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("₩", style = MaterialTheme.typography.headlineSmall, color = FastPayBlue, fontWeight = FontWeight.Bold)
+                    }
                 }
-            } else {
-                items(transactions, key = { it.transactionId }) { tx ->
-                    AnimatedTransactionItem(tx = tx, onClick = { onTransactionClick(tx) }, viewModel = viewModel)
+                Spacer(Modifier.height(18.dp))
+                Text("KRW wallet", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                Text("Korean won account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(18.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(18.dp))
+                Text("KRW QR Ph receipts", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = when {
+                        isLoading -> "Loading..."
+                        balance != null -> "₩${"%,.0f".format(balance)}"
+                        else -> "Unavailable"
+                    },
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+                if (balance != null) {
+                    Text("$paymentCount executed QR Ph payment${if (paymentCount == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(
+                    "This total includes verified executed QR Ph payments marked KRW. It is not a provider-reported account balance and does not include withdrawals or manual adjustments.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                if (errorMessage != null) {
+                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+                    TextButton(onClick = onRetry) { Text("Retry") }
                 }
             }
         }

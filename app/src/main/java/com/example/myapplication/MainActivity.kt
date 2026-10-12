@@ -24,25 +24,33 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import com.example.myapplication.data.SessionManager
 import com.example.myapplication.data.SettingsManager
+import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.navigation.Route
 import com.example.myapplication.ui.screens.ApiDocsScreen
 import com.example.myapplication.ui.screens.ApiKeysScreen
 import com.example.myapplication.ui.screens.HomeScreen
 import com.example.myapplication.ui.screens.LoginScreen
+import com.example.myapplication.ui.screens.DevicePinScreen
 import com.example.myapplication.ui.screens.MiniAppScreen
 import com.example.myapplication.ui.screens.MiniAppViewModel
 import com.example.myapplication.ui.screens.ProfileScreen
@@ -54,7 +62,9 @@ import com.example.myapplication.util.DeepLinkBus
 import com.example.myapplication.util.DeepLinkExtractor
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 val LocalMiniAppViewModel = compositionLocalOf<MiniAppViewModel> { error("No MiniAppViewModel provided") }
 val LocalNavController = compositionLocalOf<NavController> { error("No NavController provided") }
@@ -113,26 +123,54 @@ fun MayaApp() = SwiftPayApp()
 fun SwiftPayApp() {
     val context = LocalContext.current
     val settings = remember { SettingsManager(context) }
+    val devicePinManager = remember { DevicePinManager(context) }
     val sessionManager = remember { SessionManager(context, settings) }
     val isLoggedInFlag by settings.isLoggedIn.collectAsState(initial = false)
     val backendAccessToken by settings.backendAccessToken.collectAsState(initial = null)
     val isLoggedIn = isLoggedInFlag && !backendAccessToken.isNullOrBlank()
     val loggedInEmail by settings.loggedInEmail.collectAsState(initial = null)
+    var hasDevicePin by remember { mutableStateOf(false) }
+    var isDeviceUnlocked by remember { mutableStateOf(false) }
 
     DebugLogger.logAuthCheck(isLoggedIn, loggedInEmail)
     DebugLogger.logDeviceInfo()
 
-    val backStack = remember { mutableStateListOf<Route>(if (isLoggedIn) Route.Home else Route.Login) }
+    val backStack = remember { mutableStateListOf<Route>(Route.Login) }
     val currentRoute = backStack.lastOrNull() ?: Route.Login
 
     androidx.compose.runtime.LaunchedEffect(isLoggedIn) {
-        if (isLoggedIn && backStack.contains(Route.Login)) {
-            backStack.clear()
-            backStack.add(Route.Home)
-        } else if (!isLoggedIn && !backStack.contains(Route.Login)) {
-            backStack.clear()
-            backStack.add(Route.Login)
+        hasDevicePin = isLoggedIn && withContext(Dispatchers.IO) { devicePinManager.hasPin() }
+        if (!isLoggedIn) isDeviceUnlocked = false
+    }
+
+    androidx.compose.runtime.LaunchedEffect(isLoggedIn, hasDevicePin, isDeviceUnlocked) {
+        when {
+            isLoggedIn && hasDevicePin && !isDeviceUnlocked && currentRoute != Route.DeviceLock -> {
+                backStack.clear()
+                backStack.add(Route.DeviceLock)
+            }
+            isLoggedIn && !hasDevicePin && currentRoute != Route.Login -> {
+                backStack.clear()
+                backStack.add(Route.Login)
+            }
+            !isLoggedIn && currentRoute != Route.Login -> {
+                backStack.clear()
+                backStack.add(Route.Login)
+            }
         }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, isLoggedIn, hasDevicePin, isDeviceUnlocked, currentRoute) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP && isLoggedIn && hasDevicePin && isDeviceUnlocked && currentRoute != Route.DeviceLock) {
+                isDeviceUnlocked = false
+            backStack.clear()
+                backStack.add(Route.DeviceLock)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val miniAppViewModel: MiniAppViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -152,6 +190,8 @@ fun SwiftPayApp() {
                 if (backStack.size > 1) backStack.removeAt(backStack.size - 1)
             }
             override fun logout() {
+                isDeviceUnlocked = false
+                hasDevicePin = false
                 (context as? ComponentActivity)?.lifecycleScope?.launch {
                     settings.clearSession()
                     sessionManager.clearSession()
@@ -179,7 +219,7 @@ fun SwiftPayApp() {
                 }
             }
         }
-        if (currentRoute == Route.Login) {
+        if (currentRoute == Route.Login || currentRoute == Route.DeviceLock) {
             NavDisplay(
                 modifier = Modifier.fillMaxSize(),
                 backStack = backStack,
@@ -189,7 +229,21 @@ fun SwiftPayApp() {
             ) { key ->
                 when (key) {
                     Route.Login -> NavEntry(key) {
-                        LoginScreen(onLoginSuccess = { navController.navigate(Route.Home) })
+                        LoginScreen(onLoginSuccess = {
+                            hasDevicePin = true
+                            isDeviceUnlocked = true
+                            navController.navigate(Route.Home)
+                        })
+                    }
+                    Route.DeviceLock -> NavEntry(key) {
+                        DevicePinScreen(
+                            email = loggedInEmail,
+                            onUnlocked = {
+                                isDeviceUnlocked = true
+                                navController.navigate(Route.Home)
+                            },
+                            onUseAnotherAccount = { navController.logout() }
+                        )
                     }
                     else -> NavEntry(key) {}
                 }

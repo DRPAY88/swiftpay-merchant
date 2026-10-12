@@ -256,7 +256,8 @@ fun SwiftPayQrDialog(
     amount: Double,
     bankAccountNumber: String?,
     instapayBankCode: String?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    currency: String = "PHP"
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -264,7 +265,7 @@ fun SwiftPayQrDialog(
     SwiftPayBaseDialog(
         onDismissRequest = onDismiss,
         title = "SwiftPay QR Ph Payment",
-        description = "Pay the PHP amount using a supported QR Ph banking app.",
+        description = "Pay the ${currency.uppercase()} amount using a supported QR Ph banking app.",
         content = {
             val qrImage = remember(qrImageBase64) {
                 runCatching {
@@ -281,7 +282,7 @@ fun SwiftPayQrDialog(
                 if (qrImage != null) {
                     Image(
                         bitmap = qrImage,
-                        contentDescription = "QR Ph code for ₱${"%,.2f".format(amount)}",
+                        contentDescription = "QR Ph code for ${if (currency == "KRW") "₩${"%,.0f".format(amount)}" else "₱${"%,.2f".format(amount)}"}",
                         modifier = Modifier.fillMaxSize().background(Color.White).padding(12.dp),
                         contentScale = ContentScale.Fit
                     )
@@ -304,7 +305,7 @@ fun SwiftPayQrDialog(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "₱${"%,.2f".format(amount)} PHP",
+                text = if (currency == "KRW") "₩${"%,.0f".format(amount)} KRW" else "₱${"%,.2f".format(amount)} PHP",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onSurface

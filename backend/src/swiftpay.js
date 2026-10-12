@@ -45,7 +45,7 @@ export function buildQrPayload(input, config) {
   const fields = {
     x_access_key: config.swiftPayAccessKey,
     x_amount: Number(input.amount.toFixed(2)),
-    x_currency: "PHP",
+    x_currency: input.currency || "PHP",
     x_reference_no: input.referenceNo
   };
   return {

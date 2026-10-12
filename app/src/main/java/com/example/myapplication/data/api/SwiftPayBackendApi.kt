@@ -20,6 +20,7 @@ data class BackendOrderRequest(
 data class BackendQrPaymentRequest(
     val amount: Double,
     val referenceNo: String,
+    val currency: String = "PHP",
     val rejectDuplicatedPayments: Boolean = true
 )
 
@@ -69,6 +70,13 @@ data class BackendWalletBalanceResponse(
     val balance: Double,
     val adjustedBalance: Double? = null,
     val accountNumber: String? = null
+)
+
+@Serializable
+data class BackendKrwReceiptBalanceResponse(
+    val currency: String = "KRW",
+    val balance: Double,
+    val paymentCount: Int
 )
 
 data class BackendWalletDepositAccount(
@@ -149,6 +157,9 @@ interface SwiftPayBackendApi {
 
     @GET("v1/wallet/balance")
     suspend fun getWalletBalance(): Response<BackendWalletBalanceResponse>
+
+    @GET("v1/wallet/krw-receipts")
+    suspend fun getKrwReceiptBalance(): Response<BackendKrwReceiptBalanceResponse>
 
     @POST("v1/payments/orders")
     suspend fun createOrder(@Body request: BackendOrderRequest): Response<BackendOrderResponse>

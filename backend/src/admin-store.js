@@ -43,8 +43,12 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
         reference_no TEXT NOT NULL,
         status TEXT NOT NULL,
         details JSONB NOT NULL DEFAULT '{}'::jsonb,
+        amount NUMERIC(14, 2),
+        currency TEXT,
         received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE swiftpay_webhook_events ADD COLUMN IF NOT EXISTS amount NUMERIC(14, 2);
+      ALTER TABLE swiftpay_webhook_events ADD COLUMN IF NOT EXISTS currency TEXT;
       CREATE INDEX IF NOT EXISTS swiftpay_webhook_events_payment_id
         ON swiftpay_webhook_events (payment_id)
         WHERE payment_id IS NOT NULL;
@@ -187,17 +191,23 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
   async function recordWebhookEvent(event) {
     await pool.query(
       `INSERT INTO swiftpay_webhook_events
-         (event_key, event_type, payment_id, reference_no, status, details)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (event_key, event_type, payment_id, reference_no, status, details, amount, currency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (event_key) DO UPDATE
-       SET status = EXCLUDED.status, details = EXCLUDED.details, received_at = NOW()`,
+         SET status = EXCLUDED.status,
+           details = EXCLUDED.details,
+           amount = COALESCE(EXCLUDED.amount, swiftpay_webhook_events.amount),
+           currency = COALESCE(EXCLUDED.currency, swiftpay_webhook_events.currency),
+           received_at = NOW()`,
       [
         event.eventKey,
         event.eventType,
         event.paymentId || null,
         event.referenceNo,
         event.status,
-        JSON.stringify(event.details)
+        JSON.stringify(event.details),
+        event.amount ?? event.details?.amount ?? null,
+        event.currency ?? event.details?.currency ?? null
       ]
     );
   }
@@ -210,6 +220,22 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
       [paymentId]
     );
     return result.rows[0] || null;
+  }
+
+  async function getKrwQrPaymentBalance() {
+    const result = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0)::text AS balance,
+              COUNT(*)::text AS payment_count
+       FROM swiftpay_webhook_events
+       WHERE event_type = 'payment'
+         AND status = 'EXECUTED'
+        AND currency = 'KRW'
+        AND amount IS NOT NULL`
+    );
+    return {
+      balance: result.rows[0]?.balance ?? "0",
+      paymentCount: Number(result.rows[0]?.payment_count ?? 0)
+    };
   }
 
   async function listAdjustments(limit) {
@@ -244,6 +270,7 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
     finishTransferIntent,
     recordWebhookEvent,
     getPaymentWebhookStatus,
+    getKrwQrPaymentBalance,
     listAdjustments,
     adjustmentTotal,
     recordAudit: (actor, action, target, details) =>

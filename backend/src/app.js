@@ -17,6 +17,7 @@ import { TransakError } from "./transak.js";
 const amountSchema = z.number().finite().min(0.01).max(1_000_000);
 const referenceSchema = z.string().trim().min(1).max(50);
 const currencySchema = z.literal("PHP");
+const qrCurrencySchema = z.enum(["PHP", "KRW"]);
 
 const orderSchema = z.object({
   amount: amountSchema,
@@ -30,6 +31,7 @@ const orderSchema = z.object({
 const qrPaymentSchema = z.object({
   amount: amountSchema,
   referenceNo: referenceSchema,
+  currency: qrCurrencySchema.default("PHP"),
   rejectDuplicatedPayments: z.boolean().default(true)
 }).strict();
 
@@ -184,10 +186,15 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     const paymentEvent = z.object({
       x_payment_id: z.string().uuid(),
       x_payment_status: z.enum(["EXECUTED", "REJECTED", "CANCELED", "EXPIRED"]),
-      x_reference_no: referenceSchema
-    }).safeParse(fields);
+      x_reference_no: referenceSchema,
+      x_amount: z.coerce.number().finite().positive().optional(),
+      x_currency: qrCurrencySchema.optional()
+    }).refine((event) => (event.x_amount === undefined) === (event.x_currency === undefined))
+      .safeParse(fields);
     if (paymentEvent.success) {
       const details = {
+        ...(paymentEvent.data.x_amount !== undefined ? { amount: paymentEvent.data.x_amount } : {}),
+        ...(paymentEvent.data.x_currency ? { currency: paymentEvent.data.x_currency } : {}),
         ...(fields.institution_reference_no ? { institutionReferenceNo: fields.institution_reference_no } : {}),
         ...(fields.channel_reference_no ? { channelReferenceNo: fields.channel_reference_no } : {})
       };
@@ -317,6 +324,9 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
 
   app.post("/v1/payments/qrph", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
     const input = parse(qrPaymentSchema, req.body);
+    if (input.currency === "KRW" && !userStore?.recordWebhookEvent) {
+      throw new SwiftPayError(503, "KRW QR payment receipt storage is unavailable");
+    }
     const bootstrap = await requestProvider("bootstrap/qrph?type=P2M", {
       method: "POST",
       body: buildQrPayload(input, config)
@@ -326,6 +336,7 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       paymentStatus: z.string().min(1),
       referenceNo: z.string().min(1),
       amount: z.union([z.number(), z.string()]),
+      currency: qrCurrencySchema.optional(),
       qrCode: z.string().min(1),
       bankAccountNumber: z.string().nullable().optional(),
       instapayBankCode: z.string().nullable().optional()
@@ -335,6 +346,22 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     }
 
     const payment = providerPayment.data;
+    if (payment.currency && payment.currency !== input.currency) {
+      throw new SwiftPayError(502, "SwiftPay returned a QR Ph payment in a different currency");
+    }
+    if (userStore?.recordWebhookEvent) {
+      await userStore.recordWebhookEvent({
+        eventKey: `payment:${payment.paymentId}`,
+        eventType: "payment",
+        paymentId: payment.paymentId,
+        referenceNo: payment.referenceNo,
+        status: payment.paymentStatus,
+        details: {
+          amount: Number(payment.amount),
+          currency: payment.currency || input.currency
+        }
+      });
+    }
     let qrImageBase64;
     try {
       const image = await requestProvider("payments/qrph/image?type=P2M", {
@@ -351,7 +378,7 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       referenceNo: payment.referenceNo,
       status: payment.paymentStatus,
       amount: Number(payment.amount),
-      currency: "PHP",
+      currency: payment.currency || input.currency,
       qrCode: payment.qrCode,
       qrImageBase64: qrImageBase64,
       bankAccountNumber: payment.bankAccountNumber ?? null,
@@ -386,6 +413,18 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       adjustedBalance: balance.data + adjustmentTotal,
       accountNumber: accountNumber.data
     });
+  }));
+
+  app.get("/v1/wallet/krw-receipts", requireScope("swiftpay:payments:read"), asyncRoute(async (_req, res) => {
+    if (!userStore?.getKrwQrPaymentBalance) {
+      return res.status(503).json({ error: "KRW payment receipt storage is unavailable" });
+    }
+    const ledger = await userStore.getKrwQrPaymentBalance();
+    const balance = Number(ledger.balance);
+    if (!Number.isFinite(balance) || balance < 0) {
+      throw new SwiftPayError(502, "Stored KRW payment receipt balance is invalid");
+    }
+    res.json({ currency: "KRW", balance, paymentCount: ledger.paymentCount });
   }));
 
   app.post("/v1/payment-links", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {

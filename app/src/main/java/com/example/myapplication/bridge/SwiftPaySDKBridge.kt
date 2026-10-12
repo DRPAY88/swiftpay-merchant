@@ -35,7 +35,8 @@ class SwiftPaySDKBridge(
     private val onStartDepositWizard: () -> Unit,
     private val onScanQrToSend: () -> Unit,
     private val onGetTransferInstitutions: () -> Unit,
-    private val onSendDisbursement: ((Double, String, String, String) -> Unit)? = null
+    private val onSendDisbursement: ((Double, String, String, String) -> Unit)? = null,
+    private val onGenerateDynamicQrWithCurrency: ((Double, String) -> Unit)? = null
 ) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -107,7 +108,8 @@ class SwiftPaySDKBridge(
             }
             "generate_dynamic_qr" -> {
                 val amount = request.data?.jsonObject?.get("amount")?.jsonPrimitive?.doubleOrNull ?: 0.0
-                onGenerateDynamicQr(amount)
+                val currency = request.data?.jsonObject?.get("currency")?.jsonPrimitive?.content ?: "PHP"
+                onGenerateDynamicQrWithCurrency?.invoke(amount, currency) ?: onGenerateDynamicQr(amount)
             }
             "start_deposit_wizard" -> onStartDepositWizard()
             "scan_qr_to_send" -> onScanQrToSend()

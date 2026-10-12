@@ -44,9 +44,10 @@ The old app login creates a local UUID and is not accepted by this backend. The 
 ## Routes
 
 - `POST /v1/payments/orders` creates an HMAC-signed SwiftPay order and returns a hosted checkout URL. The `details` field is sent as a JSON-encoded string, as required by the provider contract.
-- `POST /v1/payments/qrph` requests a signed P2M QR Ph payment and its PNG image when the provider QR bootstrap endpoint is available. If that endpoint returns `404`, the backend creates a documented hosted order instead, allowing the payer to choose QR Ph on SwiftPay checkout; the Android app opens that checkout rather than pretending an in-app QR image was returned.
+- `POST /v1/payments/qrph` requests a signed P2M QR Ph payment in PHP or KRW and its PNG image when the provider QR bootstrap endpoint is available. If that endpoint returns `404`, the request fails rather than converting currencies or fabricating a QR.
 - `GET /v1/payments/:paymentToken/status` checks payment status using the payment-scoped token.
 - `GET /v1/wallet/balance` uses SwiftPay's documented `GET /api/disbursements/account` endpoint with HTTP Basic authentication. SwiftPay returns the inbound top-up account in `number` and the available disbursement-wallet funds in `balance`; the backend returns those as `accountNumber` and `balance`. If SwiftPay returns `404` because no disbursement account is configured for the merchant, the backend returns an actionable error instead of an unavailable balance.
+- `GET /v1/wallet/krw-receipts` returns the total of verified, executed KRW payment webhooks. This is an app-side receipt total, not a provider-reported spendable KRW account balance; the provider callback must include signed `x_amount` and `x_currency` fields for a payment to contribute.
 - `POST /v1/payment-links` creates a fixed-amount hosted payment link.
 - `GET /v1/payment-links/:code` reads a link; `DELETE` invalidates it.
 - `POST /v1/disbursements` submits an InstaPay or PESONet transfer. InstaPay may specify SwiftPay's documented `P2P`, `QR_P2P`, `QR_P2M`, or `QR_P2MICRO` transfer type; PESONet supports only `P2P`.
@@ -58,7 +59,7 @@ All `/v1` routes require an issuer- and audience-verified JWT. Order creation re
 
 OTP challenges are currently held in process memory. Run a single backend instance until a shared persistent challenge store is configured; otherwise a restart or load balancing between instances can invalidate sign-in challenges.
 
-The published SwiftPay API exposes the available disbursement-wallet ledger balance, not a combined settlement or card balance. The wallet account number can be used as the destination for inbound top-ups, but the published API does not provide the receiving institution or beneficiary name and does not initiate or confirm inbound transfers; users must verify transfer details with their merchant administrator. Payment status, disbursement history, and the disbursement balance are read from SwiftPay; the app does not treat a locally cached value as authoritative.
+The published SwiftPay API exposes the PHP disbursement-wallet ledger balance, not a combined settlement or card balance. The KRW wallet view is derived only from verified executed QR payment webhooks and does not include withdrawals or manual adjustments. The wallet account number can be used as the destination for inbound top-ups, but the published API does not provide the receiving institution or beneficiary name and does not initiate or confirm inbound transfers; users must verify transfer details with their merchant administrator. Payment status, disbursement history, and the PHP disbursement balance are read from SwiftPay; the app does not treat a locally cached value as authoritative.
 
 Deploy behind HTTPS, keep the environment variables in a secrets manager, and configure production only with `SWIFTPAY_BASE_URL=https://api.pay.live.swiftpay.ph/api/` and `SWIFTPAY_ALLOW_LIVE=true`. Do not place SwiftPay credentials or a shared backend secret in the Android build.
 
