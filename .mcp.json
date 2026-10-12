@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "android": {
+      "command": "npx",
+      "args": ["--yes", "@us-all/android-mcp@1.14.4"],
+      "env": {
+        "ANDROID_TOOLS": "device,apps,ui,logcat,emulator",
+        "ANDROID_MCP_ALLOW_WRITE": "true",
+        "ANDROID_MCP_ALLOW_SHELL": "true"
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: fastpay-approval-server
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - APP_SERVER_KEY=your_secret_key_here # CHANGE THIS
+      - DATABASE_URL=postgres://appuser:apppassword@db:5432/approvals_db
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:15-alpine
+    container_name: fastpay-db
+    restart: always
+    environment:
+      - POSTGRES_USER=appuser
+      - POSTGRES_PASSWORD=apppassword
+      - POSTGRES_DB=approvals_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d approvals_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

@@ -1,0 +1,451 @@
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import { after, before, test } from "node:test";
+import { createApp } from "../src/app.js";
+import { canonicalOrderMessage, buildOrderPayload, buildQrPayload, verifySwiftPaySignature } from "../src/swiftpay.js";
+
+const config = {
+  swiftPayBaseUrl: new URL("https://provider.example/api/"),
+  swiftPayAccessKey: "A".repeat(32),
+  swiftPaySecretKey: "S".repeat(32)
+};
+const tokenPrincipal = {
+  sub: "merchant-user-1",
+  scope: "swiftpay:payments:write swiftpay:payments:read swiftpay:disbursements:write swiftpay:disbursements:read"
+};
+let server;
+let baseUrl;
+let requests;
+let failOtpRequest = false;
+let accountResponse;
+let accountResponseStatus;
+let qrBootstrapStatus;
+let disbursementPage;
+
+before(async () => {
+  requests = [];
+  accountResponse = { number: "001002003004", balance: 12500.75 };
+  accountResponseStatus = 200;
+  qrBootstrapStatus = 200;
+  disbursementPage = { pageNo: 0, result: [], totalCount: 0, resultCount: 0 };
+  let app;
+  app = createApp({
+    config,
+    requestOtp: async () => {
+      if (failOtpRequest) throw new Error("OTP email provider rejected request (HTTP 403)");
+    },
+    verifyOtp: async () => null,
+    verifyAccessToken: async (token) => {
+      if (!new Set(["valid-test-token", "read-only-test-token"]).has(token)) throw new Error("invalid token");
+      if (token === "read-only-test-token") return { sub: "reader-1", scope: "swiftpay:payments:read" };
+      return tokenPrincipal;
+    },
+    fetchImpl: async (url, options) => {
+      requests.push({ url: url.toString(), options });
+      if (url.pathname.endsWith("/payments/qrph/image")) {
+        return new Response(Buffer.from([137, 80, 78, 71]), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        });
+      }
+      if (url.pathname.endsWith("/bootstrap/qrph") && qrBootstrapStatus !== 200) {
+        return new Response(JSON.stringify({ code: "NOT_FOUND" }), {
+          status: qrBootstrapStatus,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      const response = url.pathname.endsWith("/payments/links")
+        ? { status: 200, body: { code: "PL-1", paymentUrl: "https://pay.example/link/PL-1" } }
+        : url.pathname.endsWith("/bootstrap/qrph")
+          ? {
+            status: 200,
+            body: {
+              paymentId: "5008f066-d68a-4ef2-b794-8596bac268f6",
+              paymentStatus: "PENDING",
+              referenceNo: "QR-1",
+              amount: "500.75",
+              qrCode: "000201010212"
+            }
+          }
+        : url.pathname.endsWith("/payments/status")
+          ? { status: 200, body: "EXECUTED" }
+          : url.pathname.endsWith("/disbursements/account")
+            ? { status: accountResponseStatus, body: accountResponse }
+          : url.pathname.endsWith("/disbursements/send")
+            ? { status: 200, body: { id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01" } }
+            : url.pathname.endsWith("/disbursements")
+              ? { status: 200, body: disbursementPage }
+            : { status: 202, body: { customerRedirectUrl: "https://pay.example/checkout" } };
+      return new Response(JSON.stringify(response.body), {
+        status: response.status,
+        headers: { "content-type": "application/json" }
+      });
+    }
+  });
+  assert.equal(app.get("trust proxy"), 1);
+  server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  baseUrl = `http://127.0.0.1:${server.address().port}`;
+});
+
+after(async () => {
+  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+});
+
+test("failed OTP delivery returns a retryable error without exposing provider details", async () => {
+  failOtpRequest = true;
+  try {
+    const response = await fetch(`${baseUrl}/v1/auth/request-otp`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "merchant@example.com" })
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "Sign-in email could not be sent; try again later" });
+  } finally {
+    failOtpRequest = false;
+  }
+});
+
+test("order signature uses sorted x-fields and two-decimal amount", () => {
+  const fields = {
+    x_reference_no: "R-1",
+    details: { note: "ignored" },
+    x_amount: 100,
+    x_access_key: "access"
+  };
+  const canonical = "x_access_keyaccessx_amount100.00x_reference_noR-1";
+  assert.equal(canonicalOrderMessage(fields), canonical);
+
+  const payload = buildOrderPayload({
+    amount: 100,
+    referenceNo: "R-1",
+    currency: "PHP",
+    details: {}
+  }, config, "00000000-0000-4000-8000-000000000001");
+  const expected = createHmac("sha256", config.swiftPaySecretKey).update(
+    "x_access_key" + config.swiftPayAccessKey +
+    "x_amount100.00" +
+    "x_currencyPHP" +
+    "x_payment_id00000000-0000-4000-8000-000000000001" +
+    "x_reference_noR-1"
+  ).digest("hex");
+  assert.equal(payload.signature, expected);
+  assert.equal(payload.generate_customer_redirect_url, true);
+  assert.equal(payload.details, "{}");
+});
+
+test("QR Ph bootstrap signs amount and returns the provider PNG", async () => {
+  const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 500.75, referenceNo: "QR-1" })
+  });
+  assert.equal(response.status, 201);
+  const payment = await response.json();
+  assert.equal(payment.paymentId, "5008f066-d68a-4ef2-b794-8596bac268f6");
+  assert.equal(payment.amount, 500.75);
+  assert.equal(payment.qrCode, "000201010212");
+  assert.equal(payment.qrImageBase64, Buffer.from([137, 80, 78, 71]).toString("base64"));
+
+  const bootstrapRequest = requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M"));
+  const payload = JSON.parse(bootstrapRequest.options.body);
+  assert.equal(payload.x_amount, 500.75);
+  assert.equal(payload.x_reference_no, "QR-1");
+  assert.equal(payload.signature, buildQrPayload({
+    amount: 500.75,
+    referenceNo: "QR-1",
+    rejectDuplicatedPayments: true
+  }, config).signature);
+  const imageRequest = requests.findLast(({ url }) => url.endsWith("/payments/qrph/image?type=P2M"));
+  assert.equal(imageRequest.options.headers["X-Swiftpay-Payment-Token"], payment.paymentId);
+  assert.equal(imageRequest.options.headers.Accept, "image/png");
+});
+
+test("QR Ph signature verification rejects altered fields and malformed signatures", () => {
+  const payload = buildQrPayload({ amount: 12.3, referenceNo: "QR-2" }, config);
+  assert.equal(verifySwiftPaySignature(payload, payload.signature, config.swiftPaySecretKey), true);
+  assert.equal(verifySwiftPaySignature({ ...payload, x_amount: 99 }, payload.signature, config.swiftPaySecretKey), false);
+  assert.equal(verifySwiftPaySignature(payload, "not-a-signature", config.swiftPaySecretKey), false);
+});
+
+test("QR Ph collection falls back to documented hosted checkout when bootstrap is unavailable", async () => {
+  qrBootstrapStatus = 404;
+  try {
+    const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-test-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ amount: 25, referenceNo: "QR-FALLBACK-1" })
+    });
+    assert.equal(response.status, 202);
+    const checkout = await response.json();
+    assert.equal(checkout.checkoutUrl, "https://pay.example/checkout");
+    assert.equal(checkout.status, "PENDING");
+
+    const orderRequest = requests.findLast(({ url }) => url.endsWith("/orders"));
+    assert.ok(orderRequest);
+    const payload = JSON.parse(orderRequest.options.body);
+    assert.equal(payload.x_reference_no, "QR-FALLBACK-1");
+    assert.equal(payload.details, JSON.stringify({ description: "QR Ph collection" }));
+    assert.equal(payload.generate_customer_redirect_url, true);
+  } finally {
+    qrBootstrapStatus = 200;
+  }
+});
+
+test("payment order requires a verified scoped bearer token and signs upstream", async () => {
+  const denied = await fetch(`${baseUrl}/v1/payments/orders`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ amount: 15, referenceNo: "ORDER-1", details: {} })
+  });
+  assert.equal(denied.status, 401);
+
+  const response = await fetch(`${baseUrl}/v1/payments/orders`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 15, referenceNo: "ORDER-1", details: {} })
+  });
+  assert.equal(response.status, 202);
+  const result = await response.json();
+  assert.equal(result.status, "PENDING");
+  assert.equal(result.redirectUrl, "https://pay.example/checkout");
+  assert.equal(requests.at(-1).url, "https://provider.example/api/orders");
+  const providerBody = JSON.parse(requests.at(-1).options.body);
+  assert.equal(providerBody.x_amount, 15);
+  assert.equal(providerBody.x_reference_no, "ORDER-1");
+  assert.equal(typeof providerBody.details, "string");
+  assert.deepEqual(JSON.parse(providerBody.details), {});
+  assert.match(providerBody.signature, /^[a-f0-9]{64}$/);
+});
+
+test("read-only scope can poll payment status using the provider payment token", async () => {
+  const response = await fetch(`${baseUrl}/v1/payments/payment-token-1/status`, {
+    headers: { authorization: "Bearer read-only-test-token" }
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { paymentId: "payment-token-1", status: "EXECUTED" });
+  assert.equal(requests.at(-1).url, "https://provider.example/api/payments/status");
+  assert.equal(requests.at(-1).options.headers["X-Swiftpay-Payment-Token"], "payment-token-1");
+
+  const forbidden = await fetch(`${baseUrl}/v1/payments/orders`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer read-only-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 10, referenceNo: "DENIED-1", details: {} })
+  });
+  assert.equal(forbidden.status, 403);
+});
+
+test("wallet balance reads the documented account number and balance using Basic auth", async () => {
+  const response = await fetch(`${baseUrl}/v1/wallet/balance`, {
+    headers: { authorization: "Bearer valid-test-token" }
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { balance: 12500.75, accountNumber: "001002003004" });
+  assert.equal(requests.at(-1).url, "https://provider.example/api/disbursements/account");
+  assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
+});
+
+test("wallet balance reads only the documented account number and balance fields", async () => {
+  accountResponse = { number: "009988776655", balance: "9876.50", available_balance: 0 };
+  try {
+    const response = await fetch(`${baseUrl}/v1/wallet/balance`, {
+      headers: { authorization: "Bearer valid-test-token" }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { balance: 9876.5, accountNumber: "009988776655" });
+  } finally {
+    accountResponse = { number: "001002003004", balance: 12500.75 };
+  }
+});
+
+test("wallet balance rejects a provider response without its documented account number", async () => {
+  accountResponse = { balance: 9876.5 };
+  try {
+    const response = await fetch(`${baseUrl}/v1/wallet/balance`, {
+      headers: { authorization: "Bearer valid-test-token" }
+    });
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), { error: "Internal server error" });
+  } finally {
+    accountResponse = { number: "001002003004", balance: 12500.75 };
+  }
+});
+
+test("wallet balance rejects the undocumented available_balance field", async () => {
+  accountResponse = { number: "001002003004", available_balance: 9876.5 };
+  try {
+    const response = await fetch(`${baseUrl}/v1/wallet/balance`, {
+      headers: { authorization: "Bearer valid-test-token" }
+    });
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), { error: "Internal server error" });
+  } finally {
+    accountResponse = { number: "001002003004", balance: 12500.75 };
+  }
+});
+
+test("wallet balance reports when SwiftPay has no configured disbursement account", async () => {
+  accountResponseStatus = 404;
+  try {
+    const response = await fetch(`${baseUrl}/v1/wallet/balance`, {
+      headers: { authorization: "Bearer valid-test-token" }
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: "SwiftPay has no disbursement account configured for this merchant"
+    });
+  } finally {
+    accountResponseStatus = 200;
+  }
+});
+
+test("payment links use Basic auth and require a fixed PHP amount", async () => {
+  const response = await fetch(`${baseUrl}/v1/payment-links`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 125.5, currency: "PHP", description: "Invoice" })
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).code, "PL-1");
+  assert.equal(requests.at(-1).url, "https://provider.example/api/payments/links");
+  assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
+  assert.equal(JSON.parse(requests.at(-1).options.body).amount, 125.5);
+
+  const invalid = await fetch(`${baseUrl}/v1/payment-links`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 0, currency: "PHP" })
+  });
+  assert.equal(invalid.status, 400);
+});
+
+test("disbursement is represented as pending after provider acceptance", async () => {
+  const appResponse = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      amount: 75,
+      referenceNo: "TRANSFER-1",
+      channel: "INSTAPAY",
+      institutionCode: "TESTBANK",
+      recipientInformation: { accountNumber: "123456", fullName: "Test Recipient" }
+    })
+  });
+  assert.equal(appResponse.status, 202);
+  assert.equal((await appResponse.json()).status, "PENDING");
+  assert.equal(requests.at(-1).url, "https://provider.example/api/disbursements/send");
+  assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
+});
+
+test("disbursement history requests a provider page and returns its records as a list", async () => {
+  disbursementPage = {
+    pageNo: 0,
+    result: [{
+      id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01",
+      merchantReferenceNo: "TRANSFER-HISTORY-1",
+      status: "EXECUTED",
+      registrationTime: "2026-10-12T00:00:00Z",
+      creditInformation: { amount: 75 }
+    }],
+    totalCount: 1,
+    resultCount: 1
+  };
+  try {
+    const response = await fetch(`${baseUrl}/v1/disbursements`, {
+      headers: { authorization: "Bearer valid-test-token" }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), disbursementPage.result);
+    const request = requests.at(-1);
+    const providerUrl = new URL(request.url);
+    assert.equal(providerUrl.pathname, "/api/disbursements");
+    assert.equal(providerUrl.searchParams.get("pageNo"), "0");
+    assert.equal(providerUrl.searchParams.get("pageSize"), "100");
+    assert.match(request.options.headers.Authorization, /^Basic /);
+  } finally {
+    disbursementPage = { pageNo: 0, result: [], totalCount: 0, resultCount: 0 };
+  }
+});
+
+test("QR_P2P InstaPay disbursements pass the documented transfer type upstream", async () => {
+  const response = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      amount: 75,
+      referenceNo: "QR-TRANSFER-1",
+      channel: "INSTAPAY",
+      type: "QR_P2P",
+      institutionCode: "TESTBANK",
+      recipientInformation: { accountNumber: "123456", fullName: "Test Recipient" }
+    })
+  });
+  assert.equal(response.status, 202);
+  assert.equal(JSON.parse(requests.at(-1).options.body).type, "QR_P2P");
+});
+
+test("PESONET rejects QR disbursement types", async () => {
+  const callCount = requests.length;
+  const response = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      amount: 75,
+      referenceNo: "QR-TRANSFER-2",
+      channel: "PESONET",
+      type: "QR_P2P",
+      institutionCode: "TESTBANK",
+      recipientInformation: { accountNumber: "123456", fullName: "Test Recipient" }
+    })
+  });
+  assert.equal(response.status, 400);
+  assert.equal(requests.length, callCount);
+});
+
+test("rejects invalid transfer amount before contacting provider", async () => {
+  const callCount = requests.length;
+  const response = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      amount: 50001,
+      referenceNo: "TRANSFER-2",
+      channel: "INSTAPAY",
+      institutionCode: "TESTBANK",
+      recipientInformation: { accountNumber: "123456", fullName: "Test Recipient" }
+    })
+  });
+  assert.equal(response.status, 400);
+  assert.equal(requests.length, callCount);
+});

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fastpay_navy">#002B5B</color>
+    <color name="fastpay_blue">#0052CC</color>
+    <color name="fastpay_accent">#00BFFF</color>
+    <color name="fastpay_surface">#F4F7FA</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

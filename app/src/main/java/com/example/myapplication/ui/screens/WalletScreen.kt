@@ -1,0 +1,1029 @@
+package com.example.myapplication.ui.screens
+
+import android.app.Application
+import android.util.Log
+import android.widget.Toast
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffold
+import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
+import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.myapplication.data.api.InternalTransaction
+import com.example.myapplication.data.api.VaultPaymentResponse
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import com.example.myapplication.ui.components.FastPayLogo
+import kotlin.math.abs
+
+import com.example.myapplication.LocalNavController
+import com.example.myapplication.navigation.Route
+import com.example.myapplication.data.SettingsManager
+import com.example.myapplication.data.TransactionStore
+import com.example.myapplication.data.createSwiftPayService
+import com.example.myapplication.data.mergeTransactions
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.myapplication.ui.theme.*
+
+import com.example.myapplication.ui.components.TransactionStatusIndicator
+import com.example.myapplication.ui.components.SectionHeader
+import com.example.myapplication.ui.components.FastPayStatusBadge
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3AdaptiveApi::class, ExperimentalAnimationApi::class)
+@Composable
+fun WalletScreen(
+    modifier: Modifier = Modifier,
+    viewModel: MiniAppViewModel = viewModel()
+) {
+    val balance = viewModel.walletBalance
+    var transactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var selectedFilter by remember { mutableStateOf("All") }
+    val scope = rememberCoroutineScope()
+
+    val navigator = rememberListDetailPaneScaffoldNavigator<String>()
+
+    val bgColor = MaterialTheme.colorScheme.background
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val textColor = MaterialTheme.colorScheme.onBackground
+
+    val filteredTransactions = remember(transactions, selectedFilter) {
+        when (selectedFilter) {
+            "Income" -> transactions.filter { it.amount > 0 }
+            "Expense" -> transactions.filter { it.amount < 0 }
+            "Failed" -> transactions.filter { it.status.uppercase() == "FAILED" }
+            else -> transactions
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshBalance()
+        launch {
+            try {
+                val context = viewModel.getApplication<Application>()
+                val settings = SettingsManager(context)
+                val transactionStore = TransactionStore(context)
+                val service = settings.createSwiftPayService()
+                
+                transactionStore.transactions.collectLatest { localTransactions ->
+                    val remoteTransactions = service.getInternalTransactions().getOrNull() ?: emptyList()
+                    transactions = mergeTransactions(localTransactions, remoteTransactions)
+                }
+            } catch (e: Exception) {
+                Log.e("WalletScreen", "Error loading transactions", e)
+            }
+        }
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = bgColor,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = { 
+                    Text(
+                        text = "Wallet",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = textColor
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = bgColor,
+                    scrolledContainerColor = surfaceColor
+                ),
+                navigationIcon = {
+                    if (navigator.canNavigateBack()) {
+                        IconButton(onClick = { 
+                            scope.launch { navigator.navigateBack() }
+                        }) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = textColor)
+                        }
+                    }
+                },
+                actions = {
+                    AnimatedRefreshButton(
+                        isLoading = isLoading,
+                        onClick = {
+                            scope.launch {
+                                isLoading = true
+                                try {
+                                    viewModel.refreshBalance()
+                                    val context = viewModel.getApplication<Application>()
+                                    val settings = SettingsManager(context)
+                                    val transactionStore = TransactionStore(context)
+                                    val service = settings.createSwiftPayService()
+                                    val localTransactions = transactionStore.transactions.first()
+                                    val remoteTransactions = service.getInternalTransactions().getOrNull() ?: emptyList()
+                                    transactions = mergeTransactions(localTransactions, remoteTransactions)
+                                    delay(800L)
+                                } catch (e: Exception) {
+                                    Log.e("WalletScreen", "Refresh Error", e)
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        }
+                    )
+                }
+            )
+        }
+    ) { innerPadding ->
+        val appContext = viewModel.getApplication<Application>()
+        val settings = remember { SettingsManager(appContext) }
+        val cachedAccountNumber by settings.depositAccountNumber.collectAsState(initial = null)
+        val depositAccountNumber = viewModel.depositAccountNumber ?: cachedAccountNumber
+
+        ListDetailPaneScaffold(
+            modifier = Modifier.padding(innerPadding),
+            directive = navigator.scaffoldDirective,
+            value = navigator.scaffoldValue,
+            listPane = {
+                WalletListContent(
+                    balance = balance,
+                    accountNumber = depositAccountNumber,
+                    transactions = filteredTransactions,
+                    selectedFilter = selectedFilter,
+                    onFilterSelected = { selectedFilter = it },
+                    onTransactionClick = { tx ->
+                        scope.launch {
+                            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, tx.transactionId)
+                        }
+                    },
+                    viewModel = viewModel
+                )
+            },
+            detailPane = {
+                val selectedId = navigator.currentDestination?.contentKey
+                val selectedTx = transactions.find { it.transactionId == selectedId }
+                if (selectedTx != null) {
+                    TransactionDetailScreen(
+                        tx = selectedTx,
+                        onShowSnackbar = { msg ->
+                            scope.launch { snackbarHostState.showSnackbar(msg) }
+                        },
+                        viewModel = viewModel
+                    )
+                } else {
+                    EmptyDetailState()
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun WalletListContent(
+    balance: Double?,
+    accountNumber: String? = null,
+    transactions: List<InternalTransaction>,
+    selectedFilter: String,
+    onFilterSelected: (String) -> Unit,
+    onTransactionClick: (InternalTransaction) -> Unit,
+    viewModel: MiniAppViewModel? = null
+) {
+    val transactionStatusMap = viewModel?.transactionStatusMap ?: emptyMap()
+
+    LaunchedEffect(transactions) {
+        val pendingIds = transactions
+            .filter { it.status.uppercase() == "PENDING" }
+            .map { it.transactionId }
+        
+        if (pendingIds.isNotEmpty()) {
+            viewModel?.fetchPaymentStatuses(pendingIds)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp)
+    ) {
+        Spacer(Modifier.height(12.dp))
+        
+        PremiumBalanceCard(
+            balance = balance,
+            accountNumber = accountNumber,
+            errorMessage = viewModel?.walletBalanceError,
+            onRetry = { viewModel?.refreshBalance() }
+        )
+
+        Spacer(Modifier.height(32.dp))
+
+        QuickActionsRow()
+
+        Spacer(Modifier.height(32.dp))
+
+        SectionHeader(
+            title = "Transaction History",
+            subtitle = "Recent activity on your account",
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            val filters = listOf("All", "Income", "Expense", "Failed")
+            items(filters) { filter ->
+                PremiumFilterChip(
+                    selected = selectedFilter == filter,
+                    text = filter,
+                    onClick = { onFilterSelected(filter) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(bottom = 32.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            if (transactions.isEmpty()) {
+                item {
+                    EmptyHistoryState()
+                }
+            } else {
+                items(transactions, key = { it.transactionId }) { tx ->
+                    AnimatedTransactionItem(tx = tx, onClick = { onTransactionClick(tx) }, viewModel = viewModel)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PremiumBalanceCard(
+    balance: Double?,
+    accountNumber: String? = null,
+    errorMessage: String? = null,
+    onRetry: () -> Unit = {}
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val infiniteTransition = rememberInfiniteTransition(label = "cardPulse")
+    val shadowOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shadowOffset"
+    )
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(210.dp)
+            .graphicsLayer {
+                translationY = -shadowOffset / 2
+            },
+        shape = RoundedCornerShape(28.dp),
+        color = FastPayNavy,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    val brush = Brush.linearGradient(
+                        colors = listOf(FastPayNavy, FastPayDarkNavy),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, size.height)
+                    )
+                    drawRect(brush)
+                    
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.04f),
+                        radius = size.width * 0.7f,
+                        center = Offset(size.width * 0.95f, size.height * 0.1f)
+                    )
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.02f),
+                        radius = size.width * 0.5f,
+                        center = Offset(0f, size.height)
+                    )
+                }
+                .padding(28.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "AVAILABLE TRANSFER BALANCE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
+                        )
+                        
+                        Text(
+                            text = balance?.let { "₱ ${"%,.2f".format(it)}" } ?: "Unavailable",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            fontSize = 32.sp,
+                            letterSpacing = (-0.5).sp
+                        )
+                    }
+                    
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Text(
+                            text = "MANUAL DEPOSIT ACCOUNT",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 9.sp,
+                            letterSpacing = 0.8.sp
+                        )
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable {
+                                    if (!accountNumber.isNullOrBlank()) {
+                                        clipboardManager.setText(AnnotatedString(accountNumber))
+                                        Toast.makeText(context, "Account number copied to clipboard", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                .padding(vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = accountNumber?.takeIf { it.isNotBlank() } ?: "Loading...",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = FastPayGreen,
+                                fontSize = 14.sp
+                            )
+                            if (!accountNumber.isNullOrBlank()) {
+                                Spacer(Modifier.width(4.dp))
+                                Icon(
+                                    Icons.Rounded.ContentCopy,
+                                    contentDescription = "Copy Account Number",
+                                    tint = FastPayGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Tap to copy",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.4f),
+                            fontSize = 9.sp
+                        )
+                    }
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (errorMessage == null) Arrangement.End else Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onRetry) {
+                            Text("RETRY", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = FastPayGreen.copy(alpha = 0.2f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, FastPayGreen.copy(alpha = 0.3f))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(FastPayGreen, CircleShape)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "ACTIVE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = FastPayGreen,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickActionsRow() {
+    val navController = LocalNavController.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        QuickActionItem(Icons.Rounded.Payments, "Collect", FastPayBlue) {
+            navController.navigate(Route.MiniApp(null))
+        }
+        QuickActionItem(Icons.AutoMirrored.Rounded.Send, "Transfer", FastPayAccent) {
+            navController.navigate(Route.MiniApp("disbursement-page"))
+        }
+        QuickActionItem(Icons.Rounded.MoreHoriz, "More", Color.LightGray) {
+            navController.navigate(Route.MiniApp())
+        }
+    }
+}
+
+@Composable
+fun QuickActionItem(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
+    val isDarkTheme = isSystemInDarkTheme()
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val textColor = MaterialTheme.colorScheme.onSurface
+    
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            modifier = Modifier.size(60.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = surfaceColor,
+            shadowElevation = if (isDarkTheme) 0.dp else 2.dp,
+            onClick = onClick
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(26.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = textColor)
+    }
+}
+
+@Composable
+fun PremiumFilterChip(selected: Boolean, text: String, onClick: () -> Unit) {
+    val isDarkTheme = isSystemInDarkTheme()
+    val unselectedBg = MaterialTheme.colorScheme.surface
+    val selectedBg = if (isDarkTheme) MaterialTheme.colorScheme.primary else FastPayNavy
+    val unselectedText = MaterialTheme.colorScheme.onSurface
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
+
+    val alpha by animateFloatAsState(if (selected) 1f else 0.72f, label = "alpha")
+    
+    Surface(
+        color = if (selected) selectedBg else unselectedBg,
+        shape = RoundedCornerShape(10.dp),
+        shadowElevation = if (selected && !isDarkTheme) 1.dp else 0.dp,
+        border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+        modifier = Modifier
+            .clickable { onClick() }
+            .alpha(alpha)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (selected) Color.White else unselectedText
+        )
+    }
+}
+
+@Composable
+fun AnimatedRefreshButton(isLoading: Boolean, onClick: () -> Unit) {
+    val infiniteTransition = rememberInfiniteTransition(label = "refresh")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing)
+        ),
+        label = "refreshRotation"
+    )
+    IconButton(onClick = onClick) {
+        Icon(
+            Icons.Rounded.Refresh,
+            contentDescription = "Refresh",
+            tint = FastPayNavy,
+            modifier = if (isLoading) Modifier.rotate(rotation) else Modifier
+        )
+    }
+}
+
+@Composable
+fun AnimatedTransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: MiniAppViewModel? = null) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(350, easing = EaseOutCubic),
+        label = "txAlpha"
+    )
+    val offsetX by animateFloatAsState(
+        targetValue = if (visible) 0f else 30f,
+        animationSpec = tween(350, easing = EaseOutCubic),
+        label = "txOffset"
+    )
+    Box(
+        modifier = Modifier.graphicsLayer {
+            this.alpha = alpha
+            this.translationX = offsetX
+        }
+    ) {
+        TransactionItem(tx = tx, onClick = onClick, viewModel = viewModel)
+    }
+}
+
+@Composable
+fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: MiniAppViewModel? = null) {
+    val isExpense = tx.amount < 0
+    val normalizedStatus = tx.status.uppercase()
+    val apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
+    val apiStatus = apiPaymentStatus?.status?.uppercase()
+    val statusForDisplay = apiStatus ?: normalizedStatus
+    val isFailed = statusForDisplay.contains("FAIL") || statusForDisplay.contains("REJECT") || statusForDisplay == "ERROR"
+    val isPending = statusForDisplay.contains("PEND")
+
+    val (icon, statusColor) = when {
+        isFailed || apiStatus?.contains("FAIL") == true -> Icons.Rounded.ErrorOutline to Color(0xFFEF4444)
+        isPending || apiStatus?.contains("PEND") == true -> Icons.Rounded.Schedule to Color(0xFFF59E0B)
+        isExpense -> Icons.Rounded.NorthEast to FastPayNavy
+        else -> Icons.Rounded.SouthWest to Color(0xFF10B981)
+    }
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val itemScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "txScale"
+    )
+
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(itemScale)
+            .clickable(
+                interactionSource = interactionSource, 
+                indication = null,
+                onClick = onClick
+            ),
+        shape = RoundedCornerShape(20.dp),
+        color = surfaceColor,
+        shadowElevation = if (isPressed) 1.dp else 4.dp,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, 
+            if (isPressed) FastPayBlue.copy(alpha = 0.1f) else Color.Transparent
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(14.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .background(statusColor.copy(alpha = 0.08f), RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    icon, 
+                    contentDescription = null, 
+                    tint = statusColor, 
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+            
+            Spacer(Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = when {
+                        isFailed && isExpense -> "Transfer failed"
+                        isFailed -> "Payment failed"
+                        isPending && isExpense -> "Transfer pending"
+                        isPending -> "Payment pending"
+                        isExpense -> "Transfer completed"
+                        else -> "Payment received"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor
+                )
+                Text(
+                    text = tx.date,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = secondaryTextColor
+                )
+            }
+            
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "${if (!isExpense && !isFailed) "+" else ""}₱ ${"%,.2f".format(abs(tx.amount))}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    color = if (!isExpense && !isFailed) Color(0xFF10B981) else FastPayNavy
+                )
+                
+                Spacer(Modifier.height(4.dp))
+                
+                FastPayStatusBadge(
+                    status = apiStatus ?: normalizedStatus,
+                    modifier = Modifier.scale(0.85f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TransactionDetailScreen(
+    tx: InternalTransaction,
+    onShowSnackbar: (String) -> Unit = {},
+    viewModel: MiniAppViewModel? = null
+) {
+    var apiPaymentStatus by remember { mutableStateOf<VaultPaymentResponse?>(null) }
+    
+    LaunchedEffect(tx.transactionId) {
+        viewModel?.fetchPaymentStatus(tx.transactionId)
+        apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
+    }
+    
+    @Suppress("DEPRECATION")
+    val clipboardManager = LocalClipboardManager.current
+    val bgColor = MaterialTheme.colorScheme.background
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(bgColor)
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        val isExpense = tx.amount < 0
+        val statusToDisplay = apiPaymentStatus?.status?.uppercase() ?: tx.status.uppercase()
+        val color = when {
+            statusToDisplay.contains("FAIL") -> FastPayRed
+            isExpense -> FastPayNavy
+            statusToDisplay.contains("SUCCESS") || statusToDisplay == "EXECUTED" -> FastPayGreen
+            statusToDisplay.contains("PENDING") -> FastPayOrange
+            else -> FastPayNavy
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = surfaceColor,
+            shadowElevation = 2.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.2f))
+        ) {
+            Column(
+                modifier = Modifier.padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                FastPayLogo(scale = 0.75f)
+                
+                Spacer(Modifier.height(32.dp))
+                
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .background(color.copy(alpha = 0.1f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isExpense) Icons.Rounded.NorthEast else Icons.Rounded.SouthWest,
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+                
+                Spacer(Modifier.height(20.dp))
+                
+                Text(
+                    text = when {
+                        statusToDisplay.contains("FAIL") || statusToDisplay.contains("REJECT") || statusToDisplay == "ERROR" ->
+                            if (isExpense) "Transfer Failed" else "Payment Failed"
+                        statusToDisplay.contains("PEND") -> if (isExpense) "Transfer Pending" else "Payment Pending"
+                        isExpense -> "Transfer Completed"
+                        else -> "Payment Received"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor
+                )
+                
+                Text(
+                    text = "₱ ${"%,.2f".format(abs(tx.amount))}",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Black,
+                    color = textColor,
+                    fontSize = 36.sp
+                )
+                
+                Spacer(Modifier.height(24.dp))
+                
+                HorizontalDivider(
+                    modifier = Modifier.fillMaxWidth(),
+                    thickness = 1.dp,
+                    color = Color.LightGray.copy(alpha = 0.3f)
+                )
+                
+                Spacer(Modifier.height(24.dp))
+                
+                Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    ReceiptRow("Status", statusToDisplay, color, isBadge = true)
+                    ReceiptRow("Date", tx.date, textColor)
+                    ReceiptRow("Type", if (isExpense) "Business Expense" else "Sales Revenue", textColor)
+                    ReceiptRow("Channel", "SwiftPay Corporate", textColor)
+                    
+                    val pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f)
+                    Canvas(Modifier.fillMaxWidth().height(1.dp)) {
+                        drawLine(
+                            color = Color.LightGray.copy(alpha = 0.6f),
+                            start = Offset(0f, 0f),
+                            end = Offset(this.size.width, 0f),
+                            pathEffect = pathEffect,
+                            strokeWidth = 2f
+                        )
+                    }
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Reference No.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = secondaryTextColor,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = tx.transactionId,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = textColor,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Medium
+                            )
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(tx.transactionId))
+                                    onShowSnackbar("Reference number copied")
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.ContentCopy,
+                                    contentDescription = "Copy",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = FastPayBlue
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            OutlinedButton(
+                onClick = { onShowSnackbar("Preparing to share...") },
+                modifier = Modifier.weight(1f).height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, FastPayBlue)
+            ) {
+                Icon(Icons.Rounded.Share, contentDescription = null, tint = FastPayBlue)
+                Spacer(Modifier.width(8.dp))
+                Text("Share", color = FastPayBlue, fontWeight = FontWeight.Bold)
+            }
+            
+            Button(
+                onClick = { onShowSnackbar("Generating PDF receipt...") },
+                modifier = Modifier.weight(1f).height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = FastPayNavy)
+            ) {
+                Icon(Icons.Rounded.FileDownload, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Download", fontWeight = FontWeight.Bold)
+            }
+        }
+        
+        TextButton(
+            onClick = { onShowSnackbar("Opening Priority Support...") },
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text(
+                text = "Need help? Contact Support",
+                color = FastPayBlue,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun ReceiptRow(label: String, value: String, valueColor: Color, isBadge: Boolean = false) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+        if (isBadge) {
+            Surface(
+                color = valueColor.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(6.dp)
+            ) {
+                Text(
+                    text = value,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    color = valueColor
+                )
+            }
+        } else {
+            Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = valueColor)
+        }
+    }
+}
+
+@Composable
+fun DetailRowWithIcon(icon: ImageVector, label: String, value: String) {
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, Modifier.size(20.dp), tint = secondaryTextColor)
+            Spacer(Modifier.width(12.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = secondaryTextColor)
+        }
+        Text(
+            text = value, 
+            style = MaterialTheme.typography.bodyLarge, 
+            fontWeight = FontWeight.Bold, 
+            color = textColor,
+            textAlign = TextAlign.End,
+            modifier = Modifier.widthIn(max = 180.dp)
+        )
+    }
+}
+
+@Composable
+fun EmptyDetailState() {
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(40.dp)) {
+            Surface(
+                shape = CircleShape,
+                color = surfaceColor,
+                modifier = Modifier.size(100.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Rounded.Search, 
+                        contentDescription = null, 
+                        modifier = Modifier.size(48.dp),
+                        tint = textColor.copy(alpha = 0.1f)
+                    )
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "No Transaction Selected",
+                style = MaterialTheme.typography.titleMedium,
+                color = textColor,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Select a record from the list to view its full details and receipt.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = secondaryTextColor,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun EmptyHistoryState() {
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            Icons.Rounded.Inbox, 
+            contentDescription = null, 
+            modifier = Modifier.size(64.dp),
+            tint = Color.LightGray.copy(alpha = 0.5f)
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "No Transactions Found",
+            style = MaterialTheme.typography.bodyLarge,
+            color = secondaryTextColor,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "Your sales history will appear here.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray.copy(alpha = 0.7f)
+        )
+    }
+}

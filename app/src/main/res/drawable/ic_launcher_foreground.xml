@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Professional Outer Ring -->
+    <path
+        android:pathData="M54,20 A34,34 0 1 1 53.99,20 Z"
+        android:strokeWidth="1.5"
+        android:strokeAlpha="0.1">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="20"
+                android:startY="20"
+                android:endX="88"
+                android:endY="88">
+                <item android:offset="0" android:color="#0052CC" />
+                <item android:offset="1" android:color="#002B5B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Main Circular Body -->
+    <path
+        android:pathData="M54,24 A30,30 0 1 1 53.99,24 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="24"
+                android:startY="24"
+                android:endX="84"
+                android:endY="84">
+                <item android:offset="0" android:color="#0052CC" /> <!-- FastPayBlue -->
+                <item android:offset="1" android:color="#002B5B" /> <!-- FastPayNavy -->
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Depth Shadow Layer -->
+    <path
+        android:pathData="M54,24 A30,30 0 1 1 53.99,24 Z"
+        android:fillAlpha="0.1">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="30">
+                <item android:offset="0.7" android:color="#00000000" />
+                <item android:offset="1.0" android:color="#FF000000" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Stylized Lightning Bolt (Simplified & Sharper) -->
+    <path
+        android:pathData="M58,34 L68,34 L54,52 L62,52 L42,76 L50,56 L42,56 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Bolt Inner Glow -->
+    <path
+        android:pathData="M58,34 L68,34 L54,52 L50,52 Z"
+        android:fillAlpha="0.2"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Glossy Reflection -->
+    <path
+        android:pathData="M34,44 A20,20 0 0 1 54,24 L54,24 A20,20 0 0 0 34,44 Z"
+        android:fillAlpha="0.15"
+        android:fillColor="#FFFFFF" />
+
+</vector>

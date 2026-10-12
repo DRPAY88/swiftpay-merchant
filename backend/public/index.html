@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>SwiftPay Super Admin</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script src="/admin/admin.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">SWIFTPAY CONTROL CENTER</p>
+      <h1>Super Admin</h1>
+    </div>
+    <button id="sign-out" class="button secondary hidden" type="button">Sign out</button>
+  </header>
+  <main>
+    <section id="login-panel" class="panel narrow">
+      <h2>Administrator sign in</h2>
+      <p>Sign in with the super-admin email using a one-time email code.</p>
+      <form id="request-code-form">
+        <label for="admin-email">Email</label>
+        <input id="admin-email" type="email" autocomplete="email" required>
+        <button class="button" type="submit">Send sign-in code</button>
+      </form>
+      <form id="verify-code-form" class="hidden">
+        <label for="admin-code">Six-digit code</label>
+        <input id="admin-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+        <button class="button" type="submit">Verify and continue</button>
+      </form>
+      <p id="login-message" class="message" role="status"></p>
+    </section>
+
+    <div id="dashboard" class="hidden">
+      <section class="notice">
+        This console manages users for the single configured SwiftPay merchant account.
+        Provider balance and transfer history are shared. Internal adjustments are audit-only and do not change provider funds.
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="section-heading">
+            <div><p class="eyebrow">PROVIDER FUNDS</p><h2>Shared wallet balance</h2></div>
+            <button id="refresh-balance" class="button secondary" type="button">Refresh</button>
+          </div>
+          <p id="provider-balance" class="amount">Unavailable</p>
+          <p id="account-number" class="muted"></p>
+        </article>
+        <article class="panel">
+          <p class="eyebrow">INTERNAL ONLY</p>
+          <h2>Adjustment total</h2>
+          <p id="adjustment-total" class="amount">₱ 0.00</p>
+          <p class="muted">Does not alter the real SwiftPay balance.</p>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">ACCESS</p><h2>Merchant users</h2></div></div>
+        <form id="add-user-form" class="inline-form">
+          <label for="new-user-email">Add or reactivate merchant email</label>
+          <input id="new-user-email" type="email" autocomplete="off" required>
+          <button class="button" type="submit">Add merchant</button>
+        </form>
+        <div class="table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody id="users-table"></tbody></table></div>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <p class="eyebrow">AUDITED INTERNAL ENTRY</p>
+          <h2>Record balance adjustment</h2>
+          <p class="muted">For internal bookkeeping only. Positive or negative entries never move provider funds.</p>
+          <form id="adjustment-form">
+            <label for="adjustment-amount">Amount (PHP; positive or negative)</label>
+            <input id="adjustment-amount" type="number" step="0.01" min="-1000000" max="1000000" required>
+            <label for="adjustment-reason">Reason</label>
+            <textarea id="adjustment-reason" minlength="3" maxlength="500" required></textarea>
+            <button class="button" type="submit">Record adjustment</button>
+          </form>
+          <div class="table-wrap"><table><thead><tr><th>Amount</th><th>Reason</th><th>Actor</th><th>Date</th></tr></thead><tbody id="adjustments-table"></tbody></table></div>
+        </article>
+        <article class="panel">
+          <p class="eyebrow">LIVE PAYMENT RAIL</p>
+          <h2>Submit transfer</h2>
+          <p class="warning">Submits a real transfer from the shared SwiftPay account. Verify details before confirming.</p>
+          <form id="transfer-form">
+            <label for="transfer-amount">Amount (PHP)</label>
+            <input id="transfer-amount" type="number" min="0.01" max="50000" step="0.01" required>
+            <label for="transfer-bank">Institution code</label>
+            <input id="transfer-bank" required maxlength="16" placeholder="Provider institution code">
+            <label for="transfer-account">Recipient account number</label>
+            <input id="transfer-account" required maxlength="64" autocomplete="off">
+            <label for="transfer-name">Recipient full name</label>
+            <input id="transfer-name" required maxlength="128" autocomplete="name">
+            <label for="transfer-remarks">Remarks (optional)</label>
+            <input id="transfer-remarks" maxlength="80">
+            <button class="button danger" type="submit">Review live transfer</button>
+          </form>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="section-heading"><div><p class="eyebrow">PROVIDER DATA</p><h2>Shared disbursements</h2></div><button id="refresh-transfers" class="button secondary" type="button">Refresh</button></div>
+          <pre id="transfer-data" class="data-box">Loading…</pre>
+        </article>
+        <article class="panel">
+          <p class="eyebrow">ACCOUNTABILITY</p><h2>Admin audit trail</h2>
+          <div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Actor</th><th>Date</th></tr></thead><tbody id="audit-table"></tbody></table></div>
+        </article>
+      </section>
+      <p id="dashboard-message" class="message" role="status"></p>
+    </div>
+  </main>
+</body>
+</html>

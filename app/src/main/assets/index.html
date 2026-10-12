@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>FastPay Merchant Portal</title>
+    <style>
+        :root {
+            --fp-blue: #0052CC;
+            --fp-navy: #002B5B;
+            --fp-sky: #E0F2FE;
+            --fp-accent: #00BFFF;
+            --surface: #FFFFFF;
+            --bg-gray: #F8F9FA;
+            --text-main: #091E42;
+            --text-muted: #5E6C84;
+            --radius-xl: 32px;
+            --radius-lg: 20px;
+            --radius-md: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            outline: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-gray);
+            color: var(--text-main);
+            overflow-x: hidden;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .action-notice {
+            position: fixed;
+            left: 16px;
+            right: 16px;
+            bottom: max(20px, env(safe-area-inset-bottom));
+            z-index: 200;
+            padding: 14px 18px;
+            border-radius: 14px;
+            background: var(--fp-navy);
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateY(12px);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .action-notice.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .action-notice.is-error {
+            background: #991B1B;
+        }
+
+        .page {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-gray);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            transform: translate3d(100%, 0, 0);
+            transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+            visibility: hidden;
+        }
+
+        .page.active {
+            transform: translate3d(0, 0, 0);
+            visibility: visible;
+        }
+
+        .navbar {
+            padding: 0 16px;
+            background: white;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            height: 56px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .btn-back {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--fp-navy);
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .navbar-title {
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--fp-navy);
+            margin-left: 8px;
+        }
+
+        .page-content {
+            padding: 20px;
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .hero {
+            background: var(--fp-navy);
+            padding: 40px 24px 60px;
+            color: white;
+            text-align: center;
+            border-bottom-left-radius: var(--radius-xl);
+            border-bottom-right-radius: var(--radius-xl);
+        }
+
+        .hero-logo {
+            width: 64px;
+            height: 64px;
+            background: white;
+            border-radius: 18px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .balance-badge {
+            background: rgba(255,255,255,0.12);
+            padding: 12px 24px;
+            border-radius: 100px;
+            display: inline-block;
+            margin-bottom: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+
+        .balance-amount {
+            font-size: 38px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 24px;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-top: -30px;
+            padding: 0 24px;
+        }
+
+        .action-card {
+            background: var(--surface);
+            padding: 20px;
+            border-radius: var(--radius-lg);
+            box-shadow: 0 10px 30px rgba(9,30,66,0.08);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--text-main);
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+
+        .action-card:active {
+            transform: scale(0.96);
+        }
+
+        .action-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            background: var(--fp-sky);
+            color: var(--fp-blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .action-title {
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 800;
+            margin: 24px 0 12px;
+            color: var(--fp-navy);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modern-input {
+            width: 100%;
+            padding: 16px;
+            border: 2px solid #DFE1E6;
+            border-radius: var(--radius-md);
+            font-size: 16px;
+            margin-bottom: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .modern-input:focus {
+            border-color: var(--fp-blue);
+        }
+
+        .btn-action {
+            width: 100%;
+            background: var(--fp-blue);
+            color: white;
+            border: none;
+            padding: 18px;
+            border-radius: var(--radius-md);
+            font-weight: 700;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0,82,204,0.28);
+            transition: all 0.2s ease;
+        }
+
+        .btn-action:active {
+            opacity: 0.9;
+            transform: scale(0.98);
+        }
+
+        .btn-action:disabled {
+            background: #A5C7FF;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .api-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            border: 1px solid #EBECF0;
+        }
+
+        .api-key-val {
+            font-family: monospace;
+            background: #F4F5F7;
+            padding: 8px 12px;
+            border-radius: 6px;
+            word-break: break-all;
+            font-size: 13px;
+            color: #172B4D;
+            margin-top: 6px;
+        }
+
+        .hidden { display: none; }
+
+        .input-group {
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .input-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .tap-pay-card {
+            background: white;
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+            border: 1px solid #E2E8F0;
+        }
+
+        .amount-field {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 12px;
+        }
+
+        .amount-currency {
+            font-size: 36px;
+            font-weight: 800;
+            color: var(--fp-blue);
+            margin-right: 8px;
+        }
+
+        .amount-input {
+            border: none;
+            font-size: 42px;
+            font-weight: 800;
+            color: var(--fp-navy);
+            width: 200px;
+            text-align: center;
+            outline: none;
+        }
+
+        .preset-chip {
+            background: var(--fp-sky);
+            color: var(--fp-blue);
+            border: none;
+            padding: 10px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .preset-chip:active {
+            background: var(--fp-blue);
+            color: white;
+        }
+
+        .channel-grid {
+            display: grid;
+            grid-template-columns: repeat(1, 1fr);
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .channel-card {
+            background: white;
+            border: 2px solid #E2E8F0;
+            border-radius: 18px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .channel-card.selected {
+            border-color: var(--fp-blue);
+            background: #F0F7FF;
+            box-shadow: 0 4px 14px rgba(0,82,204,0.12);
+        }
+
+        .channel-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: #F8FAFC;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            border: 1px solid #E2E8F0;
+        }
+
+        .channel-info {
+            flex: 1;
+            text-align: left;
+        }
+
+        .channel-title {
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--fp-navy);
+        }
+
+        .channel-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .summary-card {
+            background: white;
+            border-radius: 18px;
+            padding: 18px;
+            border: 1px solid #E2E8F0;
+            margin-top: 20px;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .summary-row.total {
+            border-top: 1px dashed #E2E8F0;
+            padding-top: 12px;
+            margin-top: 8px;
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--fp-navy);
+            margin-bottom: 0;
+        }
+
+        .security-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #10B981;
+            font-weight: 700;
+            margin-top: 16px;
+            background: #ECFDF5;
+            padding: 10px 16px;
+            border-radius: 100px;
+            border: 1px solid #A7F3D0;
+        }
+
+        .nfc-status-card {
+            background: #F1F5F9;
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        .nfc-status-card.is-active {
+            background: #E0F2FE;
+            color: var(--fp-blue);
+        }
+
+        .nfc-status-card.is-success {
+            background: #DCFCE7;
+            color: #15803D;
+        }
+    </style>
+</head>
+<body>
+    <div id="action-notice" class="action-notice" role="status" aria-live="polite"></div>
+
+    <!-- Main Dashboard Hero -->
+    <div class="hero">
+        <div class="hero-logo" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 14px; background: #FFFFFF; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0052CC" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/>
+            </svg>
+            <span style="font-weight: 800; font-size: 15px; color: #0052CC; letter-spacing: -0.3px;">NetBank</span>
+        </div>
+        <div class="balance-badge">NetBank Account: 041-105-00037-6</div>
+        <div id="balance-display" class="balance-amount">₱ --.--</div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="action-grid">
+        <div class="action-card" onclick="openPage('topup-page')">
+            <div class="action-icon">💳</div>
+            <div class="action-title">Collect</div>
+        </div>
+        <div class="action-card" onclick="openPage('payment-link-page')">
+            <div class="action-icon">🔗</div>
+            <div class="action-title">Payment Link</div>
+        </div>
+        <div class="action-card" onclick="openPage('qr-page')">
+            <div class="action-icon">▦</div>
+            <div class="action-title">QR Ph</div>
+        </div>
+        <div class="action-card" onclick="startDepositWizard()">
+            <div class="action-icon">🏦</div>
+            <div class="action-title">Deposit</div>
+        </div>
+        <div class="action-card" onclick="openPage('disbursement-page')">
+            <div class="action-icon">↗</div>
+            <div class="action-title">Transfer</div>
+        </div>
+        <div class="action-card" onclick="openPage('api-docs-page')">
+            <div class="action-icon">📄</div>
+            <div class="action-title">API Docs</div>
+        </div>
+    </div>
+
+    <!-- Payment Service Panel -->
+    <div class="page-content">
+        <div class="section-title">
+            <span>Payment Service</span>
+            <span style="font-size: 13px; color: var(--fp-blue); cursor: pointer;" onclick="openPage('api-docs-page')">Details</span>
+        </div>
+
+        <div class="api-card">
+            <div style="font-size: 12px; color: var(--text-muted); font-weight: 700;">SESSION</div>
+            <div id="payment-service-status" class="api-key-val">Checking...</div>
+            <div style="font-size: 12px; color: var(--text-muted); font-weight: 700; margin-top: 12px;">PROVIDER CREDENTIALS</div>
+            <div class="api-key-val">Managed securely by the payment backend</div>
+        </div>
+    </div>
+
+    <!-- Hosted payment collection page -->
+    <div id="topup-page" class="page">
+        <div class="navbar">
+            <div class="btn-back" onclick="closePage('topup-page')" aria-label="Go back">‹</div>
+            <span class="navbar-title">Collect Payment</span>
+            <div style="margin-left:auto; font-size:11px; background:#DCFCE7; color:#15803D; font-weight:800; padding:6px 12px; border-radius:100px;">
+                🔒 SSL Encrypted
+            </div>
+        </div>
+        <div class="page-content">
+            <div class="tap-pay-card">
+                <div class="input-label" style="text-align:center;">Payment Amount</div>
+                <div class="amount-field">
+                    <div class="amount-currency">₱</div>
+                    <input type="number" id="topup-amount" class="amount-input" placeholder="0.00" oninput="updateTopUpSummary()">
+                </div>
+                <div class="amount-presets" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px">
+                    <button class="preset-chip" onclick="setTopUpPreset(500)">500</button>
+                    <button class="preset-chip" onclick="setTopUpPreset(1000)">1K</button>
+                    <button class="preset-chip" onclick="setTopUpPreset(2500)">2.5K</button>
+                    <button class="preset-chip" onclick="setTopUpPreset(5000)">5K</button>
+                </div>
+            </div>
+
+            <div class="section-title">Checkout Method</div>
+            <div class="channel-grid">
+                <div class="channel-card selected">
+                    <div class="channel-icon">⚡</div>
+                    <div class="channel-info">
+                        <div class="channel-title">SwiftPay Hosted Checkout</div>
+                        <div class="channel-desc">Continue to SwiftPay to choose an available payment method.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="summary-row">
+                    <span>Payment Amount</span>
+                    <span id="sum-amount">₱ 0.00</span>
+                </div>
+            </div>
+
+            <div class="security-badge">
+                <span>🔒 Payment details are handled on SwiftPay checkout</span>
+            </div>
+
+            <button class="btn-action" id="topup-submit-btn" onclick="executeTopUp()" style="margin-top:20px">
+                <span id="topup-btn-label">Continue to Checkout</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Hidden Sub-pages -->
+    <div id="api-docs-page" class="page">
+        <div class="navbar">
+            <div class="btn-back" onclick="closePage('api-docs-page')">‹</div>
+            <span class="navbar-title">Payment Service</span>
+        </div>
+        <div class="page-content">
+            <div class="section-title">Secure connection</div>
+
+            <div class="api-card">
+                <div class="input-label">SESSION STATUS</div>
+                <div id="payment-service-detail-status" class="api-key-val">Checking...</div>
+                <p class="channel-desc">SwiftPay merchant credentials are stored by the payment backend and are not available to this page.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="payment-link-page" class="page">
+        <div class="navbar">
+            <div class="btn-back" onclick="closePage('payment-link-page')">‹</div>
+            <span class="navbar-title">Payment Link Generator</span>
+        </div>
+        <div class="page-content">
+            <div class="input-group">
+                <label class="input-label">Description / Order Name</label>
+                <input type="text" id="link-desc" class="modern-input" placeholder="Item or Service Name">
+            </div>
+            <div class="input-group">
+                <label class="input-label">Amount (₱)</label>
+                <input type="number" id="link-amount" class="modern-input" placeholder="0.00">
+            </div>
+            <button class="btn-action" onclick="generateLink()">Create SwiftPay Link</button>
+        </div>
+    </div>
+
+    <div id="qr-page" class="page">
+        <div class="navbar">
+            <div class="btn-back" onclick="closePage('qr-page')">‹</div>
+            <span class="navbar-title">QR payments</span>
+        </div>
+        <div class="page-content" style="text-align:center">
+            <div class="api-card">
+                <div class="input-group">
+                    <label class="input-label" for="qr-amount">Amount (₱)</label>
+                    <input type="number" id="qr-amount" class="modern-input" min="0.01" max="1000000" step="0.01" placeholder="0.00">
+                </div>
+                <p class="channel-desc">Generate a one-time QR Ph payment code. The QR code will appear in a secure native dialog.</p>
+                <button id="qr-create-button" class="btn-action" onclick="generateQr()">Generate QR Ph code</button>
+            </div>
+            <div class="api-card">
+                <div class="section-title" style="margin-top:0">Send money</div>
+                <p class="channel-desc">Scan a recipient QR, review the transfer details, and confirm before submitting a QR_P2P InstaPay transfer.</p>
+                <button class="btn-action" onclick="scanQrToSend()">Scan QR to send money</button>
+            </div>
+            <div class="api-card">
+                <div class="section-title" style="margin-top:0">Capture payment</div>
+                <p class="channel-desc">SwiftPay's published API does not provide a scan-to-charge flow for scanning a customer's bank QR.</p>
+                <button class="btn-action" disabled>Scan QR to capture payment (Unavailable)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="deposit-page" class="page">
+        <div class="navbar">
+            <div class="btn-back" onclick="closePage('deposit-page')" aria-label="Go back">‹</div>
+            <span class="navbar-title">Deposit to wallet</span>
+        </div>
+        <div class="page-content">
+            <div class="api-card">
+                <div class="section-title" style="margin-top:0">Bank transfer guide</div>
+                <p class="channel-desc">View your SwiftPay wallet's inbound account number and follow the deposit steps. This guide does not initiate or confirm a transfer.</p>
+                <button class="btn-action" onclick="startDepositWizard()">View deposit instructions</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="card-payment-page" class="page">
+        <div class="navbar">
+            <div class="btn-back" onclick="closePage('card-payment-page')">‹</div>
+            <span class="navbar-title">Card payments</span>
+        </div>
+        <div class="page-content" style="text-align:center">
+            <div class="api-card">Direct card and tap-to-phone payments are not available through the configured SwiftPay service. Use hosted checkout instead.</div>
+            <button class="btn-action" onclick="closePage('card-payment-page'); openPage('topup-page')" style="margin-top:20px">Open hosted checkout</button>
+        </div>
+    </div>
+
+    <div id="disbursement-page" class="page">
+        <div class="navbar">
+            <div class="btn-back" onclick="closePage('disbursement-page')">‹</div>
+            <span class="navbar-title">Transfer</span>
+        </div>
+        <div class="page-content">
+            <div class="input-group">
+                <label class="input-label">Destination Bank / E-Wallet</label>
+                <select id="disb-bank" class="modern-input" style="background:#fff;">
+                    <option value="">Loading supported institutions...</option>
+                </select>
+                <div id="disb-institutions-error" role="alert" hidden>
+                    Unable to load supported institutions.
+                    <button type="button" onclick="loadTransferInstitutions()">Retry</button>
+                </div>
+            </div>
+            <div class="input-group">
+                <label class="input-label">Account / Mobile Number</label>
+                <input type="text" id="disb-acc" class="modern-input" placeholder="e.g. 09171234567 or Account No.">
+            </div>
+            <div class="input-group">
+                <label class="input-label">Recipient Name</label>
+                <input type="text" id="disb-name" class="modern-input" placeholder="First and Last Name">
+            </div>
+            <div class="input-group">
+                <label class="input-label">Amount (₱)</label>
+                <input type="number" id="disb-amount" class="modern-input" placeholder="0.00">
+            </div>
+            <button class="btn-action" onclick="sendDisbursement()">Confirm Transfer</button>
+        </div>
+    </div>
+
+    <script>
+        let noticeTimer;
+        let transferInstitutionsTimer;
+        function showNotice(message, isError = false) {
+            const notice = document.getElementById('action-notice');
+            notice.textContent = message;
+            notice.classList.toggle('is-error', isError);
+            notice.classList.add('is-visible');
+            clearTimeout(noticeTimer);
+            noticeTimer = setTimeout(() => notice.classList.remove('is-visible'), 5000);
+        }
+        function post(action, data = null) {
+            const sdk = window.SwiftPaySDK || window.MayaSDK;
+            if (!sdk) {
+                showNotice("Payment service is unavailable. Close and reopen this screen, then try again.", true);
+                return false;
+            }
+            sdk.postMessage(JSON.stringify({ action, data }));
+            return true;
+        }
+        function loadTransferInstitutions() {
+            const select = document.getElementById('disb-bank');
+            const error = document.getElementById('disb-institutions-error');
+            clearTimeout(transferInstitutionsTimer);
+            error.hidden = true;
+            select.replaceChildren(new Option("Loading supported institutions...", ""));
+            if (!post("get_transfer_institutions")) {
+                error.hidden = false;
+                select.replaceChildren(new Option("Unable to load supported institutions", ""));
+                return;
+            }
+            transferInstitutionsTimer = setTimeout(() => {
+                error.hidden = false;
+                select.replaceChildren(new Option("Unable to load supported institutions", ""));
+            }, 25000);
+        }
+        function openPage(id) {
+            const p = document.getElementById(id); if (p) p.classList.add('active');
+            if (id === 'api-docs-page') post("get_settings");
+            if (id === 'disbursement-page') loadTransferInstitutions();
+        }
+        function closePage(id) { const p = document.getElementById(id); if (p) p.classList.remove('active'); }
+        function getBalance() { post("get_balance"); }
+        function startDepositWizard() { post("start_deposit_wizard"); }
+        function generateLink() { const a = parseFloat(document.getElementById('link-amount').value) || 0; const d = document.getElementById('link-desc').value || "Payment Link"; post("create_payment_link", { currency: "PHP", description: d, amount: a }); }
+        function resetQrButton() {
+            const button = document.getElementById('qr-create-button');
+            button.disabled = false;
+            button.textContent = "Generate QR Ph code";
+        }
+        function generateQr() {
+            const amount = Number(document.getElementById('qr-amount').value);
+            if (!Number.isFinite(amount) || amount < 0.01 || amount > 1000000) {
+                showNotice("Enter an amount between ₱0.01 and ₱1,000,000.00.", true);
+                return;
+            }
+
+            const button = document.getElementById('qr-create-button');
+            button.disabled = true;
+            button.textContent = "Generating QR Ph code...";
+            if (!post("generate_dynamic_qr", { amount })) resetQrButton();
+        }
+        function scanQrToSend() { post("scan_qr_to_send"); }
+
+        function setTopUpPreset(a) {
+            document.getElementById('topup-amount').value = a;
+            updateTopUpSummary();
+        }
+        function updateTopUpSummary() {
+            const a = parseFloat(document.getElementById('topup-amount').value) || 0;
+            const formatted = "₱ " + a.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('sum-amount').innerText = formatted;
+            document.getElementById('topup-btn-label').innerText = a > 0 ? `Continue with ${formatted}` : "Continue to Checkout";
+        }
+        function executeTopUp() {
+            const a = parseFloat(document.getElementById('topup-amount').value) || 0;
+            if (a > 0) {
+                document.getElementById('topup-submit-btn').disabled = true;
+                document.getElementById('topup-btn-label').innerText = "Opening hosted checkout...";
+                post("request_payment", { amount: a, currency: "PHP", description: "Payment collection" });
+                setTimeout(() => {
+                    document.getElementById('topup-submit-btn').disabled = false;
+                    updateTopUpSummary();
+                }, 3000);
+            }
+        }
+
+        function sendDisbursement() {
+            const a = parseFloat(document.getElementById('disb-amount').value) || 0;
+            const b = document.getElementById('disb-bank').value;
+            const acc = document.getElementById('disb-acc').value || "";
+            const name = document.getElementById('disb-name').value || "Recipient";
+            if (!Number.isFinite(a) || a <= 0 || a > 50000 || !b || acc.length === 0 || name === "Recipient") {
+                showNotice("Enter a valid amount (up to PHP 50,000), choose an institution, and provide the recipient's account number and full name.", true);
+                return;
+            }
+            const button = document.querySelector('#disbursement-page .btn-action');
+            button.disabled = true;
+            button.textContent = "Submitting transfer...";
+            if (!post("send_disbursement", { amount: a, bankCode: b, accountNumber: acc, recipientName: name })) {
+                button.disabled = false;
+                button.textContent = "Confirm Transfer";
+            }
+        }
+        window.onSwiftPayResponse = window.onMayaResponse = function(json) {
+            const res = JSON.parse(json);
+            if (res.action === 'get_transfer_institutions') {
+                clearTimeout(transferInstitutionsTimer);
+                if (res.status === 'error') {
+                    document.getElementById('disb-institutions-error').hidden = false;
+                    document.getElementById('disb-bank').replaceChildren(
+                        new Option("Unable to load supported institutions", "")
+                    );
+                    showNotice(res.message || "Could not load supported institutions.", true);
+                    return;
+                }
+            }
+            const transferButton = document.querySelector('#disbursement-page .btn-action');
+            if (transferButton && transferButton.disabled) {
+                transferButton.disabled = false;
+                transferButton.textContent = "Confirm Transfer";
+            }
+            if (res.status === 'error') {
+                resetQrButton();
+                showNotice(res.message || "The request failed. Please try again.", true);
+                return;
+            }
+            if (Array.isArray(res.data)) {
+                const select = document.getElementById('disb-bank');
+                select.replaceChildren();
+                if (res.data.length === 0) {
+                    select.add(new Option("No supported institutions available", ""));
+                } else {
+                    res.data.forEach(institution => {
+                        select.add(new Option(institution.name, institution.code));
+                    });
+                }
+            }
+            if (res.data && typeof res.data.qrCodeBody === 'string') {
+                resetQrButton();
+                showNotice("QR Ph code generated. Scan the code in the native dialog.");
+            }
+            if (res.data && typeof res.data.checkoutUrl === 'string') {
+                resetQrButton();
+                showNotice("SwiftPay checkout opened. Choose QR Ph on the secure checkout page.");
+            }
+            if (typeof res.data === 'number') { document.getElementById('balance-display').innerText = "₱ " + res.data.toLocaleString(undefined, {minimumFractionDigits: 2}); return; }
+            if (res.data && res.data.managedByServer) {
+                const status = res.data.hasApiKey === "true" ? "Merchant session active" : "Sign in required";
+                document.getElementById('payment-service-status').innerText = status;
+                document.getElementById('payment-service-detail-status').innerText = status;
+            }
+            if (res.data && typeof res.data.message === 'string') showNotice(res.data.message);
+        };
+        const initialPage = decodeURIComponent(window.location.hash.slice(1));
+        if (initialPage && document.getElementById(initialPage)) openPage(initialPage);
+        setTimeout(() => { getBalance(); post("get_settings"); }, 800);
+    </script>
+</body>
+</html>

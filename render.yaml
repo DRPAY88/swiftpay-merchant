@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: swiftpay-merchant-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SWIFTPAY_BASE_URL
+        value: https://api.pay.live.swiftpay.ph/api/
+      - key: SWIFTPAY_ALLOW_LIVE
+        value: "true"
+      - key: SWIFTPAY_ACCESS_KEY
+        sync: false
+      - key: SWIFTPAY_SECRET_KEY
+        sync: false
+      - key: SESSION_SIGNING_KEY
+        sync: false
+      - key: AUTH_ALLOWED_EMAILS
+        sync: false
+      - key: AUTH_ADDITIONAL_ALLOWED_EMAILS
+        value: support@swiftpay.site
+      - key: SUPER_ADMIN_EMAILS
+        value: support@swiftpay.site
+      - key: DATABASE_URL
+        fromDatabase:
+          name: swiftpay-merchant-db
+          property: connectionString
+      - key: RESEND_API_KEY
+        sync: false
+      - key: OTP_FROM_EMAIL
+        value: "SwiftPay <login@swiftpay.site>"
+
+databases:
+  - name: swiftpay-merchant-db
+    databaseName: swiftpay_merchant
+    user: swiftpay_merchant
+    plan: basic-256mb
+    region: ohio
+    postgresMajorVersion: "16"
