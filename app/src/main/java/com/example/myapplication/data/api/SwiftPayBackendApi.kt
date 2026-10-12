@@ -32,7 +32,9 @@ data class BackendQrPaymentResponse(
     val currency: String,
     val qrCode: String? = null,
     val qrImageBase64: String? = null,
-    val checkoutUrl: String? = null
+    val checkoutUrl: String? = null,
+    val bankAccountNumber: String? = null,
+    val instapayBankCode: String? = null
 )
 
 @Serializable

@@ -33,7 +33,12 @@ sealed interface MiniAppUiState {
     data class PaymentConsent(val data: PaymentData) : MiniAppUiState
     data class PaymentRedirect(val url: String, val data: PaymentData) : MiniAppUiState
     data class PaymentLinkReady(val url: String) : MiniAppUiState
-    data class DynamicQrReady(val qrImageBase64: String, val amount: Double) : MiniAppUiState
+    data class DynamicQrReady(
+        val qrImageBase64: String,
+        val amount: Double,
+        val bankAccountNumber: String?,
+        val instapayBankCode: String?
+    ) : MiniAppUiState
     data class DepositWizard(
         val accountNumber: String,
         val balance: Double
@@ -298,7 +303,12 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                         amount = amount,
                         status = "PENDING"
                     )
-                    uiState = MiniAppUiState.DynamicQrReady(qrImageBase64, amount)
+                    uiState = MiniAppUiState.DynamicQrReady(
+                        qrImageBase64 = qrImageBase64,
+                        amount = amount,
+                        bankAccountNumber = response.bankAccountNumber,
+                        instapayBankCode = response.instapayBankCode
+                    )
                     bridge?.sendResponse(mapOf("qrCodeBody" to qrCode))
                 } else {
                     val errorMsg = "SwiftPay returned an incomplete QR Ph payment"

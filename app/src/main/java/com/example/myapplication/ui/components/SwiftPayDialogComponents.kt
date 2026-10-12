@@ -251,16 +251,20 @@ fun SwiftPayCvvDialog(
 }
 
 @Composable
-fun SwiftPayQrDialog(qrImageBase64: String, amount: Double, onDismiss: () -> Unit) {
+fun SwiftPayQrDialog(
+    qrImageBase64: String,
+    amount: Double,
+    bankAccountNumber: String?,
+    instapayBankCode: String?,
+    onDismiss: () -> Unit
+) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
-    val krwAmount = amount * 23.5
-    val accountNo = "041-105-00037-6"
 
     SwiftPayBaseDialog(
         onDismissRequest = onDismiss,
-        title = "SwiftPay QR Ph (Cross-Border KRW / PHP)",
-        description = "Scanable by Toss Bank, Toss Pay, Toss Money, KakaoPay, Naver Pay & PH Banks/E-Wallets",
+        title = "SwiftPay QR Ph Payment",
+        description = "Pay the PHP amount using a supported QR Ph banking app.",
         content = {
             val qrImage = remember(qrImageBase64) {
                 runCatching {
@@ -277,7 +281,7 @@ fun SwiftPayQrDialog(qrImageBase64: String, amount: Double, onDismiss: () -> Uni
                 if (qrImage != null) {
                     Image(
                         bitmap = qrImage,
-                        contentDescription = "QR Ph Code for ₱${"%.2f".format(amount)} / ₩${"%,.0f".format(krwAmount)} KRW",
+                        contentDescription = "QR Ph code for ₱${"%,.2f".format(amount)}",
                         modifier = Modifier.fillMaxSize().background(Color.White).padding(12.dp),
                         contentScale = ContentScale.Fit
                     )
@@ -299,29 +303,12 @@ fun SwiftPayQrDialog(qrImageBase64: String, amount: Double, onDismiss: () -> Uni
                 letterSpacing = 1.2.sp,
                 fontWeight = FontWeight.Bold
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "₱${"%,.2f".format(amount)}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Surface(
-                    color = FastPayBlue.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "₩${"%,.0f".format(krwAmount)} KRW",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = FastPayBlue,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
+            Text(
+                text = "₱${"%,.2f".format(amount)} PHP",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onSurface
+            )
 
             Spacer(Modifier.height(16.dp))
 
@@ -333,7 +320,7 @@ fun SwiftPayQrDialog(qrImageBase64: String, amount: Double, onDismiss: () -> Uni
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "VIRTUAL ACCOUNT COLLECTION DETAILS",
+                        text = "BANK ACCOUNT DETAILS",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
@@ -347,29 +334,37 @@ fun SwiftPayQrDialog(qrImageBase64: String, amount: Double, onDismiss: () -> Uni
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("Bank: NetBank Inc. / Alipay Connect PH", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+                            Text(
+                                text = "InstaPay bank code: ${instapayBankCode ?: "Not provided"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .clickable {
-                                        clipboardManager.setText(AnnotatedString(accountNo))
-                                        Toast.makeText(context, "Virtual Account copied!", Toast.LENGTH_SHORT).show()
+                                        bankAccountNumber?.takeIf { it.isNotBlank() }?.let { accountNumber ->
+                                            clipboardManager.setText(AnnotatedString(accountNumber))
+                                            Toast.makeText(context, "Bank account number copied", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                     .padding(vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "Account: $accountNo",
+                                    text = "Account: ${bankAccountNumber?.takeIf { it.isNotBlank() } ?: "Not provided"}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Spacer(Modifier.width(4.dp))
-                                Icon(
-                                    Icons.Rounded.ContentCopy,
-                                    contentDescription = "Copy Account Number",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(14.dp)
-                                )
+                                if (!bankAccountNumber.isNullOrBlank()) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(
+                                        Icons.Rounded.ContentCopy,
+                                        contentDescription = "Copy Bank Account Number",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -967,7 +962,7 @@ fun MayaCvvDialog(amount: Double, cardLabel: String, last4: String, onConfirm: (
 
 @Composable
 fun MayaQrDialog(qrImageBase64: String, amount: Double, onDismiss: () -> Unit) =
-    SwiftPayQrDialog(qrImageBase64, amount, onDismiss)
+    SwiftPayQrDialog(qrImageBase64, amount, null, null, onDismiss)
 
 @Composable
 fun MayaNfcTapDialog(

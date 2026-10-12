@@ -90,6 +90,8 @@ fun MiniAppScreen(
                         SwiftPayQrDialog(
                             qrImageBase64 = state.qrImageBase64,
                             amount = state.amount,
+                            bankAccountNumber = state.bankAccountNumber,
+                            instapayBankCode = state.instapayBankCode,
                             onDismiss = { viewModel.dismissConsent() }
                         )
                     }

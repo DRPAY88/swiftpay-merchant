@@ -296,71 +296,46 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
   }));
 
   app.post("/v1/payments/qrph", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
-    const input = parse(qrSchema, req.body);
-    const paymentId = randomUUID();
-    let qrCode;
+    const input = parse(qrPaymentSchema, req.body);
+    const bootstrap = await requestProvider("bootstrap/qrph?type=P2M", {
+      method: "POST",
+      body: buildQrPayload(input, config)
+    });
+    const providerPayment = z.object({
+      paymentId: z.string().min(1),
+      paymentStatus: z.string().min(1),
+      referenceNo: z.string().min(1),
+      amount: z.union([z.number(), z.string()]),
+      qrCode: z.string().min(1),
+      bankAccountNumber: z.string().nullable().optional(),
+      instapayBankCode: z.string().nullable().optional()
+    }).safeParse(bootstrap.data);
+    if (!providerPayment.success || !Number.isFinite(Number(providerPayment.data.amount))) {
+      throw new SwiftPayError(502, "SwiftPay returned an incomplete QR Ph payment");
+    }
+
+    const payment = providerPayment.data;
     let qrImageBase64;
-    let amount = input.amount;
-
     try {
-      const bootstrap = await requestProvider("bootstrap/qrph?type=P2M", {
-        method: "POST",
-        body: buildQrPayload(input, config)
+      const image = await requestProvider("payments/qrph/image?type=P2M", {
+        paymentToken: payment.paymentId,
+        responseType: "bytes"
       });
-      if (bootstrap.data?.qrCode) {
-        qrCode = bootstrap.data.qrCode;
-      }
-      if (bootstrap.data?.paymentId) {
-        const image = await requestProvider("payments/qrph/image?type=P2M", {
-          paymentToken: bootstrap.data.paymentId,
-          responseType: "bytes"
-        });
-        if (image.data) qrImageBase64 = image.data.toString("base64");
-      }
+      qrImageBase64 = image.data.toString("base64");
     } catch {
-      // Sandbox fallback
-    }
-
-    if (!qrCode) {
-      const refNo = input.referenceNo;
-      const formattedAmount = Number(amount).toFixed(2);
-      const alipayAid = "0012ph.com.alipay0115ALIPAYCONNECTPH";
-      const tag28 = `28${alipayAid.length.toString().padStart(2, "0")}${alipayAid}`;
-      const tossAid = "0011com.toss.app0112TOSS_MONEY_KR";
-      const tag29 = `29${tossAid.length.toString().padStart(2, "0")}${tossAid}`;
-      const koreanBanksAid = "0010ph.qrph.kr0115KOREAN_BANKS_KR";
-      const tag30 = `30${koreanBanksAid.length.toString().padStart(2, "0")}${koreanBanksAid}`;
-      const vaSubtag = "04041105000376";
-      const refSubtag = `05${refNo.length.toString().padStart(2, "0")}${refNo}`;
-      const tag62Body = `${refSubtag}${vaSubtag}`;
-      const tag62 = `62${tag62Body.length.toString().padStart(2, "0")}${tag62Body}`;
-
-      const raw = `000201010212${tag28}${tag29}${tag30}52045311530341054${formattedAmount.length.toString().padStart(2, "0")}${formattedAmount}5802PH5917Fast Pay Merchant6006Manila${tag62}6304`;
-      let crc = 0xFFFF;
-      for (let i = 0; i < raw.length; i++) {
-        crc ^= (raw.charCodeAt(i) << 8);
-        for (let j = 0; j < 8; j++) {
-          crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
-          crc &= 0xFFFF;
-        }
-      }
-      qrCode = raw + crc.toString(16).toUpperCase().padStart(4, "0");
-    }
-
-    if (!qrImageBase64) {
-      qrImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+      qrImageBase64 = null;
     }
 
     res.status(201).json({
-      paymentId: paymentId,
-      referenceNo: input.referenceNo,
-      status: "PENDING",
-      amount: amount,
-      currency: "KRW",
-      qrCode: qrCode,
+      paymentId: payment.paymentId,
+      referenceNo: payment.referenceNo,
+      status: payment.paymentStatus,
+      amount: Number(payment.amount),
+      currency: "PHP",
+      qrCode: payment.qrCode,
       qrImageBase64: qrImageBase64,
-      virtualAccountNo: "041-105-00037-6",
-      virtualBankName: "NetBank Inc. / Alipay Connect PH"
+      bankAccountNumber: payment.bankAccountNumber ?? null,
+      instapayBankCode: payment.instapayBankCode ?? null
     });
   }));
 

@@ -64,6 +64,8 @@ before(async () => {
               paymentStatus: "PENDING",
               referenceNo: "QR-1",
               amount: "500.75",
+              bankAccountNumber: "120000234109",
+              instapayBankCode: "CUOBPHM2XXX",
               qrCode: "000201010212"
             }
           }
@@ -148,12 +150,16 @@ test("QR Ph bootstrap signs amount and returns the provider PNG", async () => {
   const payment = await response.json();
   assert.equal(payment.paymentId, "5008f066-d68a-4ef2-b794-8596bac268f6");
   assert.equal(payment.amount, 500.75);
+  assert.equal(payment.currency, "PHP");
   assert.equal(payment.qrCode, "000201010212");
+  assert.equal(payment.bankAccountNumber, "120000234109");
+  assert.equal(payment.instapayBankCode, "CUOBPHM2XXX");
   assert.equal(payment.qrImageBase64, Buffer.from([137, 80, 78, 71]).toString("base64"));
 
   const bootstrapRequest = requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M"));
   const payload = JSON.parse(bootstrapRequest.options.body);
   assert.equal(payload.x_amount, 500.75);
+  assert.equal(payload.x_currency, "PHP");
   assert.equal(payload.x_reference_no, "QR-1");
   assert.equal(payload.signature, buildQrPayload({
     amount: 500.75,
@@ -172,7 +178,7 @@ test("QR Ph signature verification rejects altered fields and malformed signatur
   assert.equal(verifySwiftPaySignature(payload, "not-a-signature", config.swiftPaySecretKey), false);
 });
 
-test("QR Ph collection falls back to documented hosted checkout when bootstrap is unavailable", async () => {
+test("QR Ph collection does not fabricate a QR when bootstrap is unavailable", async () => {
   qrBootstrapStatus = 404;
   try {
     const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
@@ -183,17 +189,9 @@ test("QR Ph collection falls back to documented hosted checkout when bootstrap i
       },
       body: JSON.stringify({ amount: 25, referenceNo: "QR-FALLBACK-1" })
     });
-    assert.equal(response.status, 202);
-    const checkout = await response.json();
-    assert.equal(checkout.checkoutUrl, "https://pay.example/checkout");
-    assert.equal(checkout.status, "PENDING");
-
-    const orderRequest = requests.findLast(({ url }) => url.endsWith("/orders"));
-    assert.ok(orderRequest);
-    const payload = JSON.parse(orderRequest.options.body);
-    assert.equal(payload.x_reference_no, "QR-FALLBACK-1");
-    assert.equal(payload.details, JSON.stringify({ description: "QR Ph collection" }));
-    assert.equal(payload.generate_customer_redirect_url, true);
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "SwiftPay request failed (NOT_FOUND)" });
+    assert.equal(requests.some(({ url }) => url.endsWith("/orders")), false);
   } finally {
     qrBootstrapStatus = 200;
   }

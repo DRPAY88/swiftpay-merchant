@@ -192,12 +192,8 @@ class SwiftPayService(
             if (!response.isSuccessful) return failure(response)
             val body = response.body() ?: return Result.failure(IllegalStateException("Empty QR Ph response"))
 
-            val fallbackQr = com.example.myapplication.util.generateKoreanCrossBorderQrPhPayload(
-                amount = amount,
-                currency = body.currency ?: "KRW",
-                referenceNo = body.referenceNo ?: refNo
-            )
-            val qrCodeValue = body.qrCode?.takeIf { it.isNotBlank() } ?: fallbackQr
+            val qrCodeValue = body.qrCode?.takeIf { it.isNotBlank() }
+                ?: return Result.failure(IllegalStateException("SwiftPay did not return a QR Ph payload"))
             val qrImageBase64 = body.qrImageBase64?.takeIf { it.length > 200 }
                 ?: com.example.myapplication.util.generateQrBitmapBase64(qrCodeValue)
 
@@ -209,9 +205,11 @@ class SwiftPayService(
                     checkoutUrl = null,
                     status = body.status,
                     amount = body.amount,
-                    currency = body.currency ?: "KRW",
+                    currency = body.currency ?: "PHP",
                     qrCodeBody = qrCodeValue,
-                    qrImageBase64 = qrImageBase64
+                    qrImageBase64 = qrImageBase64,
+                    bankAccountNumber = body.bankAccountNumber,
+                    instapayBankCode = body.instapayBankCode
                 )
             )
         } catch (error: Exception) {

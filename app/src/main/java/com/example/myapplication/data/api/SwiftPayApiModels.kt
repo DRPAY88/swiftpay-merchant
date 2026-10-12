@@ -218,7 +218,9 @@ data class SwiftPayQrResponse(
     val amount: Double? = null,
     val currency: String? = null,
     val qrCodeBody: String? = null,
-    val qrImageBase64: String? = null
+    val qrImageBase64: String? = null,
+    val bankAccountNumber: String? = null,
+    val instapayBankCode: String? = null
 )
 
 @Serializable
