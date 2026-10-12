@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
@@ -39,24 +40,14 @@ import androidx.compose.ui.window.Popup
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen() {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-
-    val infiniteTransition = rememberInfiniteTransition(label = "settings")
-    val settingsRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(8000, easing = LinearEasing)
-        ),
-        label = "settingsRotation"
-    )
-
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
     val themeMode by settingsManager.themeMode.collectAsState(initial = "SYSTEM")
+    val signedInEmail by settingsManager.loggedInEmail.collectAsState(initial = null)
+    val merchantAlias by settingsManager.merchantAlias.collectAsState(initial = null)
     var showThemeDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val navController = LocalNavController.current
 
     val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val bgColor = if (isDarkTheme) Color(0xFF121212) else Color.White
@@ -64,19 +55,19 @@ fun ProfileScreen() {
     val textColor = if (isDarkTheme) Color.White else FastPayNavy
     val secondaryTextColor = if (isDarkTheme) Color.LightGray else Color.Gray
     val borderColor = if (isDarkTheme) Color.DarkGray else Color(0xFFE3E8EF)
+    val accountName = merchantAlias?.takeIf { it.isNotBlank() }
+        ?: signedInEmail?.substringBefore('@')?.replace('.', ' ')?.replaceFirstChar { it.uppercase() }
+        ?: "SwiftPay merchant"
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Settings", color = textColor) },
+                title = { Text("Profile", color = textColor, fontWeight = FontWeight.Bold) },
                 navigationIcon = {},
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = bgColor,
                     scrolledContainerColor = bgColor
-                ),
-                modifier = Modifier.graphicsLayer {
-                    alpha = if (visible) 1f else 0f
-                }
+                )
             )
         },
         containerColor = bgColor
@@ -85,206 +76,130 @@ fun ProfileScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            val avatarScale by animateFloatAsState(
-                targetValue = if (visible) 1f else 0.5f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                label = "avatarScale"
-            )
-            val avatarAlpha by animateFloatAsState(
-                targetValue = if (visible) 1f else 0f,
-                animationSpec = tween(500),
-                label = "avatarAlpha"
-            )
-
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .graphicsLayer {
-                        scaleX = avatarScale
-                        scaleY = avatarScale
-                        alpha = avatarAlpha
-                    }
-                    .clip(RoundedCornerShape(40.dp))
-                    .background(if (isDarkTheme) Color.LightGray.copy(alpha = 0.1f) else FastPayNavy.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Rounded.Settings, null, tint = textColor, modifier = Modifier.size(40.dp).graphicsLayer { rotationZ = settingsRotation })
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("SwiftPay Merchant", style = MaterialTheme.typography.titleLarge, color = textColor, fontWeight = FontWeight.Bold)
-            Text("Account Settings", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor)
-            Spacer(modifier = Modifier.height(32.dp))
-
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp)),
-                color = Color(0xFF1F4BA8).copy(alpha = 0.08f)
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = surfaceColor,
+                border = BorderStroke(1.dp, borderColor)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color.White.copy(alpha = 0.1f),
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(56.dp),
+                            shape = CircleShape,
+                            color = FastPayBlue.copy(alpha = 0.12f)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Rounded.StoreMallDirectory, null, tint = FastPayAccent, modifier = Modifier.size(24.dp))
+                                Text(
+                                    text = accountName.firstOrNull()?.uppercase() ?: "S",
+                                    color = FastPayBlue,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                         Spacer(Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("About Account", color = Color.White, fontWeight = FontWeight.Bold)
-                            Text("App version and system information", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
-                        }
-                        Icon(Icons.Rounded.ChevronRight, null, tint = Color.White.copy(alpha = 0.4f))
-                    }
-                    Spacer(Modifier.height(4.dp))
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            val navController = LocalNavController.current
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = surfaceColor,
-                shadowElevation = if (isDarkTheme) 0.dp else 1.dp,
-                border = BorderStroke(1.dp, borderColor)
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showThemeDialog = true }
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isDarkTheme) Color.LightGray.copy(alpha = 0.1f) else FastPayNavy.copy(alpha = 0.05f),
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    if (themeMode == "DARK") Icons.Rounded.DarkMode else if (themeMode == "LIGHT") Icons.Rounded.LightMode else Icons.Rounded.SettingsSuggest,
-                                    modifier = Modifier.size(20.dp),
-                                    contentDescription = null,
-                                    tint = textColor
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Theme Mode", fontWeight = FontWeight.Bold, color = textColor)
+                            Text(accountName, style = MaterialTheme.typography.titleMedium, color = textColor, fontWeight = FontWeight.Bold)
                             Text(
-                                text = when (themeMode) {
-                                    "LIGHT" -> "Light Mode"
-                                    "DARK" -> "Dark Mode"
-                                    else -> "System Default"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
+                                signedInEmail ?: "No signed-in account",
+                                style = MaterialTheme.typography.bodySmall,
                                 color = secondaryTextColor
                             )
                         }
-                        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = textColor)
                     }
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = borderColor)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { navController.navigate(Route.ApiKeys) }
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isDarkTheme) Color.LightGray.copy(alpha = 0.1f) else FastPayNavy.copy(alpha = 0.05f),
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Rounded.Key, modifier = Modifier.size(20.dp), contentDescription = null, tint = textColor)
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("API Credentials", fontWeight = FontWeight.Bold, color = textColor)
-                            Text("View and manage API keys", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor)
-                        }
-                        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = textColor)
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = borderColor)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { navController.navigate(Route.ApiDocs) }
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isDarkTheme) Color.LightGray.copy(alpha = 0.1f) else FastPayNavy.copy(alpha = 0.05f),
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Rounded.Description, modifier = Modifier.size(20.dp), contentDescription = null, tint = textColor)
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("API Documentation", fontWeight = FontWeight.Bold, color = textColor)
-                            Text("SwiftPay developer integration guide", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor)
-                        }
-                        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = textColor)
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 18.dp), color = borderColor)
+                    ProfileDetailRow("Account", if (signedInEmail == null) "Signed out" else "Merchant account", textColor, secondaryTextColor)
+                    Spacer(Modifier.height(14.dp))
+                    ProfileDetailRow("App version", "${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})", textColor, secondaryTextColor)
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("PREFERENCES", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = surfaceColor,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Column {
+                        ProfileActionRow(
+                            icon = if (themeMode == "DARK") Icons.Rounded.DarkMode else Icons.Rounded.LightMode,
+                            title = "Appearance",
+                            subtitle = when (themeMode) {
+                                "LIGHT" -> "Light theme"
+                                "DARK" -> "Dark theme"
+                                else -> "Follow device setting"
+                            },
+                            tint = FastPayBlue,
+                            textColor = textColor,
+                            secondaryTextColor = secondaryTextColor,
+                            onClick = { showThemeDialog = true }
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("DEVELOPER", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = surfaceColor,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Column {
+                        ProfileActionRow(
+                            icon = Icons.Rounded.Key,
+                            title = "API credentials",
+                            subtitle = "Manage integration keys",
+                            tint = FastPayAccent,
+                            textColor = textColor,
+                            secondaryTextColor = secondaryTextColor,
+                            onClick = { navController.navigate(Route.ApiKeys) }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = borderColor)
+                        ProfileActionRow(
+                            icon = Icons.Rounded.Description,
+                            title = "API documentation",
+                            subtitle = "SwiftPay integration reference",
+                            tint = FastPayGreen,
+                            textColor = textColor,
+                            secondaryTextColor = secondaryTextColor,
+                            onClick = { navController.navigate(Route.ApiDocs) }
+                        )
+                    }
+                }
+            }
 
             OutlinedButton(
                 onClick = { navController.logout() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
+                    .height(52.dp),
+                shape = RoundedCornerShape(10.dp),
                 border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.2f)),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
             ) {
                 Icon(Icons.AutoMirrored.Rounded.Logout, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(12.dp))
-                Text("Sign Out of Device", fontWeight = FontWeight.Bold)
+                Text("Sign out", fontWeight = FontWeight.SemiBold)
             }
-            
-            Spacer(modifier = Modifier.weight(1f))
 
             DebugNetworkOverlay()
 
             Text(
-                text = "SwiftPay Corporate Platform",
+                text = "SWIFTPAY MERCHANT",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray,
+                color = secondaryTextColor,
                 fontWeight = FontWeight.Bold
             )
-            Text(
-                text = "Version 2024.12.16-Release",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray.copy(alpha = 0.5f)
-            )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 
@@ -338,6 +253,46 @@ fun ProfileScreen() {
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ProfileDetailRow(
+    label: String,
+    value: String,
+    textColor: Color,
+    secondaryTextColor: Color
+) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = secondaryTextColor)
+        Text(value, style = MaterialTheme.typography.bodySmall, color = textColor, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun ProfileActionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    tint: Color,
+    textColor: Color,
+    secondaryTextColor: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = textColor, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = secondaryTextColor, style = MaterialTheme.typography.bodySmall)
+        }
+        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = secondaryTextColor)
     }
 }
 
