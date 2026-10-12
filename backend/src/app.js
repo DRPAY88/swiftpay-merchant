@@ -296,8 +296,6 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
   }));
 
   app.post("/v1/payments/qrph", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
-    const input = parse(qrPaymentSchema, req.body);
-  app.post("/v1/payments/qrph", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
     const input = parse(qrSchema, req.body);
     const paymentId = randomUUID();
     let qrCode;
