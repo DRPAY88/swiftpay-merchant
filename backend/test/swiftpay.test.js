@@ -24,6 +24,8 @@ let fxRequests;
 let failOtpRequest = false;
 let accountResponse;
 let accountResponseStatus;
+let accountResponseText;
+let accountResponseContentType = "application/json";
 let qrBootstrapStatus;
 let disbursementPage;
 let disbursementFailure;
@@ -213,10 +215,16 @@ before(async () => {
                   : url.pathname.endsWith("/disbursements")
                     ? { status: 200, body: disbursementPage }
                     : { status: 202, body: { customerRedirectUrl: "https://pay.live.swiftpay.ph/checkout" } };
-      return new Response(JSON.stringify(response.body), {
+      const accountResponseRequested = url.pathname.endsWith("/disbursements/account");
+      return new Response(
+        accountResponseRequested && accountResponseText !== undefined
+          ? accountResponseText
+          : JSON.stringify(response.body),
+        {
         status: response.status,
-        headers: { "content-type": "application/json" }
-      });
+        headers: { "content-type": accountResponseRequested ? accountResponseContentType : "application/json" }
+        }
+      );
     }
   });
   assert.equal(app.get("trust proxy"), 1);
@@ -662,6 +670,31 @@ test("wallet balance failure logs SwiftPay HTTP status and safe provider diagnos
     console.error = originalConsoleError;
     accountResponseStatus = 200;
     accountResponse = { number: "001002003004", balance: 12500.75 };
+  }
+});
+
+test("wallet balance non-JSON failure logs only the upstream status and content type", async () => {
+  accountResponseStatus = 403;
+  accountResponseText = "<html>provider gateway error</html>";
+  accountResponseContentType = "text/html; charset=utf-8";
+  const originalConsoleError = console.error;
+  const logged = [];
+  console.error = (...values) => logged.push(values.join(" "));
+  try {
+    const response = await fetch(`${baseUrl}/v1/wallet/balance`, {
+      headers: { authorization: "Bearer valid-test-token" }
+    });
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), { error: "Internal server error" });
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /"providerStatus":403/);
+    assert.match(logged[0], /"providerContentType":"text\/html"/);
+    assert.equal(logged[0].includes("provider gateway error"), false);
+  } finally {
+    console.error = originalConsoleError;
+    accountResponseStatus = 200;
+    accountResponseText = undefined;
+    accountResponseContentType = "application/json";
   }
 });
 

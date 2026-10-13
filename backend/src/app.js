@@ -1047,6 +1047,9 @@ export function createApp({
         ...(error instanceof SwiftPayError && error.providerStatus
           ? { providerStatus: error.providerStatus }
           : {}),
+        ...(error instanceof SwiftPayError && error.providerContentType
+          ? { providerContentType: error.providerContentType }
+          : {}),
         ...(error instanceof SwiftPayError && error.errorCode ? { errorCode: error.errorCode } : {}),
         ...(error instanceof SwiftPayError && error.supportReference ? { supportReference: error.supportReference } : {}),
         detail
