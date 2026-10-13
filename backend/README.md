@@ -53,7 +53,7 @@ The old app login creates a local UUID and is not accepted by this backend. The 
 - `GET /v1/wallet/krw-receipts` returns the total of verified, executed KRW payment webhooks. This is an app-side receipt total, not a provider-reported spendable KRW account balance; the provider callback must include signed `x_amount` and `x_currency` fields for a payment to contribute.
 - `POST /v1/payment-links` creates a fixed-amount hosted payment link.
 - `GET /v1/payment-links/:code` reads a link; `DELETE` invalidates it.
-- `POST /v1/disbursements` submits an InstaPay or PESONet transfer. InstaPay may specify SwiftPay's documented `P2P`, `QR_P2P`, `QR_P2M`, or `QR_P2MICRO` transfer type; PESONet supports only `P2P`.
+- `POST /v1/disbursements` submits an InstaPay or PESONet transfer. InstaPay may specify SwiftPay's documented `P2P`, `QR_P2P`, `QR_P2M`, or `QR_P2MICRO` transfer type; PESONet supports only `P2P`. The backend supplies `Bank transfer` as the required nonblank provider remark when the caller omits remarks or sends only whitespace.
 - `GET /v1/disbursements` requests the first provider page (up to 100 records) and returns its `result` array; `GET /v1/disbursements/:id` reads one transfer.
 - `GET /v1/disbursement-institutions` retrieves provider institution codes.
 - `GET /healthz` is an unauthenticated health check.

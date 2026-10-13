@@ -69,7 +69,7 @@ const disbursementSchema = z.object({
     mobileNumber: z.string().regex(/^[0-9+-]*$/).max(35).optional(),
     email: z.string().email().max(255).optional()
   }),
-  remarks: z.string().max(80).optional()
+  remarks: z.string().trim().max(80).optional()
 });
 const merchantEmailSchema = z.string().trim().email().max(255).transform((email) => email.toLowerCase());
 const merchantStatusSchema = z.object({
@@ -535,7 +535,7 @@ export function createApp({
       channel: input.channel,
       ...(input.type ? { type: input.type } : {}),
       institutionCode: input.institutionCode,
-      creditInformation: { amount: input.amount, ...(input.remarks ? { remarks: input.remarks } : {}) },
+      creditInformation: { amount: input.amount, remarks: input.remarks || "Bank transfer" },
       recipientInformation: input.recipientInformation
     };
     const auditId = userStore

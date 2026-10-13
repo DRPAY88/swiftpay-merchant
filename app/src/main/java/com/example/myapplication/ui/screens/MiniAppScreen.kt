@@ -130,7 +130,8 @@ fun MiniAppScreen(
                     is MiniAppUiState.ScanQrToSend -> {
                         CameraQrScannerDialog(
                             onQrDetected = viewModel::onQrScanned,
-                            onDismiss = { viewModel.dismissConsent() }
+                            onDismiss = { viewModel.dismissConsent() },
+                            onGenerateQr = viewModel::onOpenQrPayments
                         )
                     }
                     is MiniAppUiState.QrTransferReview -> {

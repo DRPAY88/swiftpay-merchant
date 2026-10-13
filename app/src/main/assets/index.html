@@ -1001,7 +1001,7 @@
                 <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l3-3A5 5 0 0 0 13 2.9l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3A5 5 0 0 0 11 21.1l1.7-1.7"/></svg></span>
                 <span class="action-title">Payment Link</span>
             </button>
-            <button type="button" class="action-card" onclick="openPage('qr-page')">
+            <button type="button" class="action-card" onclick="scanQrToSend()">
                 <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM19 14v7M14 19h3"/></svg></span>
                 <span class="action-title">QR Ph</span>
             </button>
@@ -1693,6 +1693,10 @@
 
         window.onSwiftPayResponse = window.onMayaResponse = function(json) {
             const res = JSON.parse(json);
+            if (res.action === 'open_qr_payments') {
+                openPage('qr-page');
+                return;
+            }
             if (res.action === 'quote_krw_php_qr' && res.status === 'success' && res.data) {
                 resetQrButton();
                 document.getElementById('qr-result').hidden = true;

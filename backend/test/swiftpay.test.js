@@ -544,6 +544,37 @@ test("disbursement is represented as pending after provider acceptance", async (
   assert.equal((await appResponse.json()).status, "PENDING");
   assert.equal(requests.at(-1).url, "https://provider.example/api/disbursements/send");
   assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
+  assert.equal(JSON.parse(requests.at(-1).options.body).creditInformation.remarks, "Bank transfer");
+});
+
+test("disbursement trims supplied remarks and replaces blank remarks with a nonblank default", async () => {
+  const headers = {
+    authorization: "Bearer valid-test-token",
+    "content-type": "application/json"
+  };
+  const body = {
+    amount: 75,
+    referenceNo: "TRANSFER-REMARKS-1",
+    channel: "INSTAPAY",
+    institutionCode: "TESTBANK",
+    recipientInformation: { accountNumber: "123456", fullName: "Test Recipient" }
+  };
+
+  const supplied = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...body, remarks: "  Rent payment  " })
+  });
+  assert.equal(supplied.status, 202);
+  assert.equal(JSON.parse(requests.at(-1).options.body).creditInformation.remarks, "Rent payment");
+
+  const blank = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...body, referenceNo: "TRANSFER-REMARKS-2", remarks: "   " })
+  });
+  assert.equal(blank.status, 202);
+  assert.equal(JSON.parse(requests.at(-1).options.body).creditInformation.remarks, "Bank transfer");
 });
 
 test("disbursement rejects a one-part recipient name before contacting SwiftPay", async () => {
