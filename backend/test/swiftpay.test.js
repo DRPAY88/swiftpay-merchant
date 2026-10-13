@@ -27,6 +27,9 @@ let accountResponseStatus;
 let accountResponseText;
 let accountResponseContentType = "application/json";
 let qrBootstrapStatus;
+let institutionFailureStatus = 0;
+let orderFailureStatus = 0;
+let testClock = Date.now();
 let disbursementPage;
 let disbursementFailure;
 let cryptoWidgetRequest;
@@ -81,6 +84,7 @@ before(async () => {
         };
       }
     },
+    clock: () => testClock,
     fetchImpl: async (url, options) => {
       requests.push({ url: url.toString(), options });
       if (url.pathname.endsWith("/payments/qrph/image")) {
@@ -92,6 +96,12 @@ before(async () => {
       if (url.pathname.endsWith("/bootstrap/qrph") && qrBootstrapStatus !== 200) {
         return new Response(JSON.stringify({ code: "NOT_FOUND" }), {
           status: qrBootstrapStatus,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      if (url.pathname === "/api/institutions" && institutionFailureStatus !== 0) {
+        return new Response(JSON.stringify({ code: "UPSTREAM_UNAVAILABLE" }), {
+          status: institutionFailureStatus,
           headers: { "content-type": "application/json" }
         });
       }
@@ -214,7 +224,9 @@ before(async () => {
                   ? disbursementFailure || { status: 200, body: { id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01" } }
                   : url.pathname.endsWith("/disbursements")
                     ? { status: 200, body: disbursementPage }
-                    : { status: 202, body: { customerRedirectUrl: "https://pay.live.swiftpay.ph/checkout" } };
+                    : url.pathname.endsWith("/orders") && orderFailureStatus !== 0
+                      ? { status: orderFailureStatus, body: { code: "NOT_FOUND" } }
+                      : { status: 202, body: { customerRedirectUrl: "https://pay.live.swiftpay.ph/checkout" } };
       const accountResponseRequested = url.pathname.endsWith("/disbursements/account");
       return new Response(
         accountResponseRequested && accountResponseText !== undefined
@@ -549,6 +561,28 @@ test("payment order requires a verified scoped bearer token and signs upstream",
   assert.match(providerBody.signature, /^[a-f0-9]{64}$/);
 });
 
+test("payment order preserves a provider 404 code for diagnosis", async () => {
+  orderFailureStatus = 404;
+  try {
+    const response = await fetch(`${baseUrl}/v1/payments/orders`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-test-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ amount: 15, referenceNo: "ORDER-404", details: {} })
+    });
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), {
+      error: "SwiftPay request failed (NOT_FOUND)",
+      errorCode: "NOT_FOUND"
+    });
+    assert.equal(requests.at(-1).url, "https://provider.example/api/orders");
+  } finally {
+    orderFailureStatus = 0;
+  }
+});
+
 test("read-only scope can poll payment status using the provider payment token", async () => {
   const response = await fetch(`${baseUrl}/v1/payments/payment-token-1/status`, {
     headers: { authorization: "Bearer read-only-test-token" }
@@ -740,6 +774,8 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   assert.match(checkoutPage, /Official payment partner logos/);
   assert.match(checkoutPage, /src="https:\/\/assets\.swiftpay\.ph\/institutions\/bpi\.png" alt="Bank of the Philippine Islands logo"/);
   assert.match(checkoutPage, /src="https:\/\/swiftpay-qa-gateway-frontend\.s3-ap-southeast-1\.amazonaws\.com\/static\/media\/bank-icons\/vbank\.png" alt="VBank logo"/);
+  assert.match(checkoutPage, /No logo institution/);
+  assert.match(checkoutPage, /institution-card institution-card--text/);
   assert.doesNotMatch(checkoutPage, /logos\.example|disabled\.png|method-logo-fallback/);
   assert.doesNotMatch(checkoutPage, /Continue with SwiftPay QR Ph|Other payment methods/);
   assert.match(checkoutPage, /action="\/checkout\/PL-1\/qrph"/);
@@ -797,7 +833,7 @@ test("self-hosted checkout QR Ph converts USD link prices to a PHP settlement QR
   assert.equal(bootstrapPayload.x_amount, 1140);
 });
 
-test("payment institution catalogue returns enabled official logos only", async () => {
+test("payment institution catalogue returns enabled institutions with trusted official logos", async () => {
   const response = await fetch(`${baseUrl}/v1/payment-institutions`, {
     headers: { authorization: "Bearer valid-test-token" }
   });
@@ -845,6 +881,26 @@ test("payment institution catalogue returns enabled official logos only", async 
     }
   ]);
   assert.equal(requests.at(-1).url, "https://provider.example/api/institutions");
+});
+
+test("self-hosted checkout retains the last supported bank list when SwiftPay catalogue is temporarily unavailable", async () => {
+  testClock += 61_000;
+  institutionFailureStatus = 502;
+  try {
+    const response = await fetch(`${baseUrl}/checkout/PL-1`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /Bank of the Philippine Islands/);
+    assert.match(html, /VBank/);
+    assert.match(html, /No logo institution/);
+    assert.match(html, /Continue to secure payment/);
+
+    const requestCount = requests.filter(({ url }) => url.endsWith("/institutions")).length;
+    await fetch(`${baseUrl}/checkout/PL-1`);
+    assert.equal(requests.filter(({ url }) => url.endsWith("/institutions")).length, requestCount);
+  } finally {
+    institutionFailureStatus = 0;
+  }
 });
 
 test("disbursement is represented as pending after provider acceptance", async () => {

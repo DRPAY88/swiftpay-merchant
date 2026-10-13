@@ -213,6 +213,12 @@ h1 {
   object-fit: contain;
 }
 
+.institution-card--text {
+  justify-content: center;
+  min-height: 58px;
+  background: #f8fafd;
+}
+
 .institution-card span {
   width: 100%;
   color: #4f6076;

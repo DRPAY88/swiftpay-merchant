@@ -170,8 +170,8 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
   }).format(amount));
   const safePaymentUrl = escapeHtml(paymentUrl);
   const institutionCards = institutions.map(({ name, logoUrl }) => `
-      <li class="institution-card">
-        <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(name)} logo" loading="lazy" decoding="async">
+      <li class="institution-card${logoUrl ? "" : " institution-card--text"}">
+        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(name)} logo" loading="lazy" decoding="async">` : ""}
         <span>${escapeHtml(name)}</span>
       </li>`).join("");
   const institutionContent = institutionCards
@@ -346,12 +346,53 @@ export function createApp({
   verifyOtp,
   cryptoWidgetService,
   pushNotificationService,
-  userStore
+  userStore,
+  clock = () => Date.now()
 }) {
   if (!verifyAccessToken) throw new Error("A JWT verifier is required");
   if (!requestOtp || !verifyOtp) throw new Error("OTP auth handlers are required");
   const app = express();
   const requestProvider = (path, options) => callSwiftPay(config, fetchImpl, path, options);
+  let paymentInstitutionCatalogue = null;
+  let paymentInstitutionCatalogueLoadedAt = 0;
+  let paymentInstitutionCatalogueRetryAt = 0;
+  let paymentInstitutionCatalogueRequest = null;
+
+  async function loadPaymentInstitutionCatalogue() {
+    const currentTime = clock();
+    if (paymentInstitutionCatalogue && currentTime - paymentInstitutionCatalogueLoadedAt < 60_000) {
+      return { institutions: paymentInstitutionCatalogue, failed: false };
+    }
+    if (currentTime < paymentInstitutionCatalogueRetryAt) {
+      return { institutions: paymentInstitutionCatalogue || [], failed: true };
+    }
+    if (paymentInstitutionCatalogueRequest) return paymentInstitutionCatalogueRequest;
+
+    paymentInstitutionCatalogueRequest = (async () => {
+      try {
+        const result = await requestProvider("institutions");
+        const parsedInstitutions = z.array(paymentInstitutionSchema).safeParse(result.data);
+        if (!parsedInstitutions.success) {
+          throw new SwiftPayError(502, "SwiftPay returned an invalid payment institution catalogue");
+        }
+        paymentInstitutionCatalogue = parsedInstitutions.data;
+        paymentInstitutionCatalogueLoadedAt = clock();
+        paymentInstitutionCatalogueRetryAt = 0;
+        return { institutions: paymentInstitutionCatalogue, failed: false };
+      } catch (error) {
+        paymentInstitutionCatalogueRetryAt = clock() + 30_000;
+        return {
+          institutions: paymentInstitutionCatalogue || [],
+          failed: true,
+          error
+        };
+      } finally {
+        paymentInstitutionCatalogueRequest = null;
+      }
+    })();
+    return paymentInstitutionCatalogueRequest;
+  }
+
   const loadPublicPaymentLink = async (code) => {
     const result = await requestProvider(`payments/links/${encodeURIComponent(code)}`, { auth: "basic" });
     let paymentUrl;
@@ -408,29 +449,28 @@ export function createApp({
       const link = await loadPublicPaymentLink(code);
       let institutions = [];
       let institutionLoadFailed = false;
-      try {
-        const result = await requestProvider("institutions");
-        const parsedInstitutions = z.array(paymentInstitutionSchema).safeParse(result.data);
-        if (!parsedInstitutions.success) {
-          throw new SwiftPayError(502, "SwiftPay returned an invalid payment institution catalogue");
-        }
-        institutions = parsedInstitutions.data
-          .filter((institution) =>
-            institution.enabled !== false &&
-            institution.live !== false &&
-            (!institution.currencies || institution.currencies.includes(link.currency)) &&
-            (institution.minAmount === undefined || link.amount >= institution.minAmount) &&
-            (institution.maxAmount === undefined || link.amount <= institution.maxAmount)
-          )
-          .map(({ name, logoUrl }) => ({ name, logoUrl: trustedInstitutionLogoUrl(logoUrl) }))
-          .filter((institution) => institution.logoUrl !== null);
-      } catch (error) {
-        institutionLoadFailed = true;
-        console.error("Checkout institution logos could not be loaded", JSON.stringify({
+      const catalogue = await loadPaymentInstitutionCatalogue();
+      institutionLoadFailed = catalogue.failed;
+      if (catalogue.error) {
+        const error = catalogue.error;
+        console.error("Checkout institution catalogue request failed", JSON.stringify({
           errorName: error instanceof Error ? error.name : "UnknownError",
-          ...(error instanceof SwiftPayError ? { status: error.status } : {})
+          ...(error instanceof SwiftPayError ? {
+            status: error.status,
+            ...(error.providerStatus ? { providerStatus: error.providerStatus } : {}),
+            ...(error.errorCode ? { errorCode: error.errorCode } : {})
+          } : {})
         }));
       }
+      institutions = catalogue.institutions
+        .filter((institution) =>
+          institution.enabled !== false &&
+          institution.live !== false &&
+          (!institution.currencies || institution.currencies.includes(link.currency)) &&
+          (institution.minAmount === undefined || link.amount >= institution.minAmount) &&
+          (institution.maxAmount === undefined || link.amount <= institution.maxAmount)
+        )
+        .map(({ name, logoUrl }) => ({ name, logoUrl: trustedInstitutionLogoUrl(logoUrl) }));
       const title = [link.title, link.description]
         .find((value) => typeof value === "string" && value.trim())
         || "Payment request";
@@ -1075,7 +1115,7 @@ export function createApp({
       !(error instanceof FxQuoteError)
       ? "Internal server error"
       : error.message;
-    if (status >= 500) {
+    if (status >= 500 || (error instanceof SwiftPayError && error.providerStatus)) {
       const secrets = [
         config.swiftPayAccessKey,
         config.swiftPaySecretKey,
