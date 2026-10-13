@@ -633,6 +633,38 @@ test("wallet balance reports when SwiftPay has no configured disbursement accoun
   }
 });
 
+test("wallet balance failure logs SwiftPay HTTP status and safe provider diagnostics", async () => {
+  accountResponseStatus = 502;
+  accountResponse = {
+    code: "UPSTREAM_FAILURE",
+    requestUuid: "provider-request-123",
+    errorMessage: "Sensitive provider response"
+  };
+  const originalConsoleError = console.error;
+  const logged = [];
+  console.error = (...values) => logged.push(values.join(" "));
+  try {
+    const response = await fetch(`${baseUrl}/v1/wallet/balance`, {
+      headers: { authorization: "Bearer valid-test-token" }
+    });
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), {
+      error: "Internal server error",
+      errorCode: "UPSTREAM_FAILURE",
+      supportReference: "provider-request-123"
+    });
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /"providerStatus":502/);
+    assert.match(logged[0], /"errorCode":"UPSTREAM_FAILURE"/);
+    assert.match(logged[0], /"supportReference":"provider-request-123"/);
+    assert.equal(logged[0].includes("Sensitive provider response"), false);
+  } finally {
+    console.error = originalConsoleError;
+    accountResponseStatus = 200;
+    accountResponse = { number: "001002003004", balance: 12500.75 };
+  }
+});
+
 test("payment links use Basic auth and require a fixed supported-currency amount", async () => {
   const response = await fetch(`${baseUrl}/v1/payment-links`, {
     method: "POST",

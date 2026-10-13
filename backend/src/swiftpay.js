@@ -56,12 +56,18 @@ export function buildQrPayload(input, config) {
 }
 
 export class SwiftPayError extends Error {
-  constructor(status, message, { errorCode, supportReference } = {}) {
+  constructor(status, message, { errorCode, supportReference, providerStatus } = {}) {
     super(message);
     this.status = status;
     this.errorCode = errorCode;
     this.supportReference = supportReference;
+    this.providerStatus = providerStatus;
   }
+}
+
+function safeProviderErrorCode(data) {
+  const code = data?.errorCode || data?.code;
+  return typeof code === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(code) ? code : undefined;
 }
 
 export async function callSwiftPay(config, fetchImpl, path, options = {}) {
@@ -98,13 +104,14 @@ export async function callSwiftPay(config, fetchImpl, path, options = {}) {
       } catch {
         throw new SwiftPayError(502, "SwiftPay returned an invalid response");
       }
-      const code = data?.errorCode || data?.code;
+      const code = safeProviderErrorCode(data);
       const message = code ? `SwiftPay request failed (${code})` : "SwiftPay request failed";
       const supportReference = [data?.errorUuid, data?.requestUuid]
         .find((value) => typeof value === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(value));
       throw new SwiftPayError(response.status >= 500 ? 502 : response.status, message, {
         errorCode: typeof code === "string" ? code : undefined,
-        supportReference
+        supportReference,
+        providerStatus: response.status
       });
     }
     const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
@@ -128,13 +135,14 @@ export async function callSwiftPay(config, fetchImpl, path, options = {}) {
     }
   }
   if (!response.ok) {
-    const code = data?.errorCode || data?.code;
+    const code = safeProviderErrorCode(data);
     const message = code ? `SwiftPay request failed (${code})` : "SwiftPay request failed";
     const supportReference = [data?.errorUuid, data?.requestUuid]
       .find((value) => typeof value === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(value));
     throw new SwiftPayError(response.status >= 500 ? 502 : response.status, message, {
       errorCode: typeof code === "string" ? code : undefined,
-      supportReference
+      supportReference,
+      providerStatus: response.status
     });
   }
   return { status: response.status, data };

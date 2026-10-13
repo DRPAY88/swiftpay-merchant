@@ -1044,6 +1044,9 @@ export function createApp({
         path: req.path,
         status,
         errorName: error instanceof Error ? error.name : "UnknownError",
+        ...(error instanceof SwiftPayError && error.providerStatus
+          ? { providerStatus: error.providerStatus }
+          : {}),
         ...(error instanceof SwiftPayError && error.errorCode ? { errorCode: error.errorCode } : {}),
         ...(error instanceof SwiftPayError && error.supportReference ? { supportReference: error.supportReference } : {}),
         detail
