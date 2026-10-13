@@ -43,6 +43,9 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+internal fun hasCompleteRecipientName(value: String): Boolean =
+    value.trim().split(Regex("\\s+")).count { it.isNotBlank() } >= 2
+
 class SwiftPayService(
     private val backendBaseUrl: String = BuildConfig.PAYMENT_BACKEND_URL,
     private val accessToken: String? = null
@@ -410,10 +413,18 @@ class SwiftPayService(
     ): Result<SwiftPayDisbursementResponse> {
         if (!hasApiKey) return missingSession()
         if (!amount.isFinite() || amount <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid transfer amount"))
+        val trimmedAccount = accountNumber.trim()
+        if (trimmedAccount.isBlank()) {
+            return Result.failure(IllegalArgumentException("Enter the recipient's account or mobile number"))
+        }
+        val trimmedName = recipientName.trim()
+        if (!hasCompleteRecipientName(trimmedName)) {
+            return Result.failure(
+                IllegalArgumentException("Enter the recipient's complete legal name, including their surname")
+            )
+        }
         return try {
             val reference = "DISB-${UUID.randomUUID().toString().take(20)}"
-            val trimmedAccount = accountNumber.trim()
-            val trimmedName = recipientName.trim().ifBlank { "Recipient" }
             val trimmedBank = bankCode.trim().take(64)
 
             val response = api.sendDisbursement(

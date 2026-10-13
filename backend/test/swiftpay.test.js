@@ -546,6 +546,27 @@ test("disbursement is represented as pending after provider acceptance", async (
   assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
 });
 
+test("disbursement rejects a one-part recipient name before contacting SwiftPay", async () => {
+  const callCount = requests.length;
+  const response = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      amount: 75,
+      referenceNo: "TRANSFER-INCOMPLETE-NAME",
+      channel: "INSTAPAY",
+      institutionCode: "TESTBANK",
+      recipientInformation: { accountNumber: "123456", fullName: "Teodoro" }
+    })
+  });
+  assert.equal(response.status, 400);
+  assert.equal(requests.length, callCount);
+  assert.match((await response.json()).error, /full legal name must include the given name and surname/i);
+});
+
 test("transfer errors preserve SwiftPay error code and safe support reference", async () => {
   disbursementFailure = {
     status: 400,

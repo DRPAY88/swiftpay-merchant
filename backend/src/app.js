@@ -62,7 +62,10 @@ const disbursementSchema = z.object({
   institutionCode: z.string().trim().min(1).max(64),
   recipientInformation: z.object({
     accountNumber: z.string().trim().min(1).max(64),
-    fullName: z.string().trim().min(1).max(128),
+    fullName: z.string().trim().min(1).max(128).refine(
+      (fullName) => fullName.split(/\s+/u).filter(Boolean).length >= 2,
+      "Recipient full legal name must include the given name and surname"
+    ),
     mobileNumber: z.string().regex(/^[0-9+-]*$/).max(35).optional(),
     email: z.string().email().max(255).optional()
   }),

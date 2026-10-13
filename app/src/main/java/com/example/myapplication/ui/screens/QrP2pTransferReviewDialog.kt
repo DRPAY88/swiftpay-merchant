@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import com.example.myapplication.data.hasCompleteRecipientName
 import com.example.myapplication.data.api.BackendTransferInstitution
 import java.math.BigDecimal
 
@@ -48,8 +49,9 @@ fun QrP2pTransferReviewDialog(
     var accountNumber by remember { mutableStateOf("") }
     var recipientName by remember { mutableStateOf("") }
     val parsedAmount = amount.toBigDecimalOrNull()?.toDouble()
+    val completeRecipientName = hasCompleteRecipientName(recipientName)
     val valid = parsedAmount != null && parsedAmount in 0.01..50_000.0 &&
-        selectedInstitution != null && accountNumber.isNotBlank() && recipientName.isNotBlank()
+        selectedInstitution != null && accountNumber.isNotBlank() && completeRecipientName
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -120,6 +122,11 @@ fun QrP2pTransferReviewDialog(
                     value = recipientName,
                     onValueChange = { recipientName = it.take(128) },
                     label = { Text("Recipient full legal name") },
+                    supportingText = {
+                        if (recipientName.isNotBlank() && !completeRecipientName) {
+                            Text("Enter the complete name as registered, including the recipient's surname.")
+                        }
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

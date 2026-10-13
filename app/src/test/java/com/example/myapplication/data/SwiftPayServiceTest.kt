@@ -10,6 +10,14 @@ import org.junit.Assert.*
 class SwiftPayServiceTest {
 
     @Test
+    fun testRecipientNameRequiresGivenNameAndSurname() {
+        assertTrue(hasCompleteRecipientName("Teodoro Santos"))
+        assertTrue(hasCompleteRecipientName("  Maria   dela Cruz "))
+        assertFalse(hasCompleteRecipientName("Teodoro"))
+        assertFalse(hasCompleteRecipientName("   "))
+    }
+
+    @Test
     fun testAmountBoundaryValidation() {
         assertTrue("0.01 should be valid", 0.01 > 0 && 0.01 <= 1000000.0)
         assertTrue("1000000.0 should be valid", 1000000.0 > 0 && 1000000.0 <= 1000000.0)

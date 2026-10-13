@@ -1249,8 +1249,9 @@
                         <input type="text" id="disb-acc" class="modern-input" placeholder="e.g. 09171234567 or Account No." autocomplete="off">
                     </div>
                     <div class="input-group">
-                        <label class="input-label" for="disb-name">Recipient name</label>
-                        <input type="text" id="disb-name" class="modern-input" placeholder="First and Last Name" autocomplete="name">
+                        <label class="input-label" for="disb-name">Recipient full legal name</label>
+                        <input type="text" id="disb-name" class="modern-input" placeholder="Name as registered on the account" autocomplete="name" aria-describedby="disb-name-hint">
+                        <p id="disb-name-hint" class="helper-copy">Enter the recipient’s complete name exactly as registered with the bank or e-wallet, including their surname.</p>
                     </div>
                     <div class="input-group">
                         <label class="input-label" for="disb-amount">Amount (&#8369;)</label>
@@ -1304,6 +1305,10 @@
 
         function normalizeTransferName(value) {
             return (value || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function hasCompleteRecipientName(value) {
+            return normalizeTransferName(value).split(' ').filter(Boolean).length >= 2;
         }
 
         function showNotice(message, isError = false) {
@@ -1670,6 +1675,11 @@
                 showNotice("Enter the recipient's full name using letters and standard separators only.", true);
                 return;
             }
+            if (!hasCompleteRecipientName(name)) {
+                showNotice("Enter the recipient's complete legal name, including their surname, exactly as registered with the selected institution.", true);
+                document.getElementById('disb-name').focus();
+                return;
+            }
 
             const button = document.querySelector('#disbursement-page .btn-action');
             document.getElementById('transfer-result').hidden = true;
@@ -1736,7 +1746,7 @@
                         'transfer-result-reference',
                         'Transfer not accepted',
                         isInvalidInput
-                            ? 'The payment partner rejected these details. Confirm that the selected institution matches the recipient’s account, and that the account number and legal name are exact. Your details are still here so you can review them.'
+                            ? 'SwiftPay returned INVALID_INPUT, so this transfer was not accepted. Confirm the selected InstaPay institution, account number, and recipient’s complete legal name exactly as registered. Use the support reference below if the details are correct.'
                             : message,
                         message
                     );
