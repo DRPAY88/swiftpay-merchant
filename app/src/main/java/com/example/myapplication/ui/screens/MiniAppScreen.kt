@@ -26,10 +26,12 @@ import com.example.myapplication.bridge.PaymentData
 import com.example.myapplication.bridge.SwiftPaySDKBridge
 import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.ui.components.*
+import com.example.myapplication.ui.theme.FintechMotion
 
 @Composable
 fun MiniAppScreen(
     initialPath: String? = null,
+    openQrScanner: Boolean = false,
     modifier: Modifier = Modifier,
     viewModel: MiniAppViewModel = viewModel()
 ) {
@@ -43,8 +45,11 @@ fun MiniAppScreen(
 
     val uiState = viewModel.uiState
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(initialPath, openQrScanner) {
         viewModel.refreshBalance()
+        if (openQrScanner) {
+            viewModel.onScanQrToSend()
+        }
     }
 
     Scaffold(
@@ -65,6 +70,10 @@ fun MiniAppScreen(
                 onScanNFCCard = { viewModel.onScanNFCCard(it) },
                 onGenerateDynamicQr = { viewModel.onGenerateDynamicQr(it) },
                 onGenerateDynamicQrWithCurrency = { amount, currency -> viewModel.onGenerateDynamicQr(amount, currency) },
+                onQuoteKrwPhpQr = viewModel::onQuoteKrwPhpQr,
+                onGenerateQuotedKrwPhpQr = viewModel::onGenerateQuotedKrwPhpQr,
+                onQuoteFxPhpQr = viewModel::onQuoteFxPhpQr,
+                onGenerateQuotedFxPhpQr = viewModel::onGenerateQuotedFxPhpQr,
                 onStartDepositWizard = viewModel::onStartDepositWizard,
                 onScanQrToSend = { viewModel.onScanQrToSend() },
                 onGetTransferInstitutions = viewModel::onGetTransferInstitutions,
@@ -75,8 +84,25 @@ fun MiniAppScreen(
             AnimatedContent(
                 targetState = uiState,
                 transitionSpec = {
-                    (fadeIn(animationSpec = tween(300)) + scaleIn(initialScale = 0.95f))
-                        .togetherWith(fadeOut(animationSpec = tween(200)))
+                    (fadeIn(
+                        animationSpec = tween(
+                            FintechMotion.contentMillis,
+                            easing = FintechMotion.standardEasing
+                        )
+                    ) + scaleIn(
+                        initialScale = 0.97f,
+                        animationSpec = tween(
+                            FintechMotion.contentMillis,
+                            easing = FintechMotion.standardEasing
+                        )
+                    )).togetherWith(
+                        fadeOut(
+                            animationSpec = tween(
+                                FintechMotion.exitMillis,
+                                easing = FintechMotion.standardEasing
+                            )
+                        )
+                    )
                 },
                 label = "OverlayState"
             ) { state ->
@@ -94,14 +120,42 @@ fun MiniAppScreen(
                             bankAccountNumber = state.bankAccountNumber,
                             instapayBankCode = state.instapayBankCode,
                             onDismiss = { viewModel.dismissConsent() },
-                            currency = state.currency
+                            currency = state.currency,
+                            customerAmountKrw = state.customerAmountKrw,
+                            ratePhpPerKrw = state.ratePhpPerKrw,
+                            customerAmountFx = state.customerAmountFx,
+                            customerCurrency = state.customerCurrency,
+                            ratePhpPerUnit = state.ratePhpPerUnit,
+                            rateUpdatedAt = state.rateUpdatedAt
                         )
                     }
                     is MiniAppUiState.DepositWizard -> {
                         DepositWizardDialog(
                             accountNumber = state.accountNumber,
                             balance = state.balance,
+                            onCheckout = viewModel::startDepositCheckout,
                             onDismiss = { viewModel.dismissConsent() }
+                        )
+                    }
+                    is MiniAppUiState.DepositCheckoutReady -> {
+                        DepositCheckoutDialog(
+                            url = state.url,
+                            paymentId = state.paymentId,
+                            referenceNo = state.referenceNo,
+                            amount = state.amount,
+                            onDismiss = { viewModel.closeDepositCheckout() }
+                        )
+                    }
+                    is MiniAppUiState.DepositCheckoutComplete -> {
+                        DepositCheckoutResultDialog(
+                            paymentId = state.paymentId,
+                            amount = state.amount,
+                            success = state.success,
+                            status = state.status,
+                            onDismiss = {
+                                if (state.success) viewModel.refreshBalance()
+                                viewModel.dismissConsent()
+                            }
                         )
                     }
                     is MiniAppUiState.ScanQrToSend -> {
@@ -181,6 +235,11 @@ fun MiniAppScreen(
                     is MiniAppUiState.PaymentLinkReady -> {
                         EnhancedPaymentLinkDialog(
                             url = state.url,
+                            linkId = state.linkId,
+                            amount = state.amount,
+                            currency = state.currency,
+                            hasFixedAmount = true,
+                            description = state.description,
                             onOpen = { uriHandler.openUri(state.url) },
                             onDismiss = { viewModel.dismissConsent() }
                         )

@@ -16,6 +16,10 @@ data class InternalTransaction(
     val amount: Double,
     val status: String,
     val date: String,
+    val transactionType: String? = null,
+    val referenceNo: String? = null,
+    val description: String? = null,
+    val bankName: String? = null,
 )
 
 @Serializable
@@ -189,6 +193,7 @@ data class SwiftPayPaymentLinkResponse(
     val status: String? = null,
     val description: String? = null,
     val amount: Double? = null,
+    val currency: String? = null,
     @SerialName("created_at")
     val createdAt: String? = null,
     @SerialName("expires_at")
@@ -220,7 +225,14 @@ data class SwiftPayQrResponse(
     val qrCodeBody: String? = null,
     val qrImageBase64: String? = null,
     val bankAccountNumber: String? = null,
-    val instapayBankCode: String? = null
+    val instapayBankCode: String? = null,
+    val customerAmountKrw: Int? = null,
+    val ratePhpPerKrw: Double? = null,
+    val customerAmount: Double? = null,
+    val customerCurrency: String? = null,
+    val ratePhpPerUnit: Double? = null,
+    val rateUpdatedAt: String? = null,
+    val settlementCurrency: String? = null
 )
 
 @Serializable

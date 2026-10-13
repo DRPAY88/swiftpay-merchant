@@ -6,7 +6,8 @@ import { createAdminStore } from "../src/admin-store.js";
 test("admin store persists merchant status, internal adjustments, and atomic audit events", async () => {
   const database = newDb();
   const { Pool } = database.adapters.createPg();
-  const store = createAdminStore("postgresql://test", new Pool());
+  const pool = new Pool();
+  const store = createAdminStore("postgresql://test", pool);
   try {
     await store.initialize(["merchant@example.com", "support@swiftpay.site"], ["support@swiftpay.site"]);
 
@@ -53,17 +54,97 @@ test("admin store persists merchant status, internal adjustments, and atomic aud
       { status: "EXECUTED" }
     );
 
+    await store.recordWebhookEvent({
+      eventKey: "payment:00000000-0000-4000-8000-000000000003",
+      eventType: "payment",
+      paymentId: "00000000-0000-4000-8000-000000000003",
+      referenceNo: "ORDER-PHP-1",
+      status: "EXECUTED",
+      amount: 125.5,
+      currency: "PHP"
+    });
+    const paymentTransactions = await store.listPaymentWebhookTransactions(10);
+    assert.equal(paymentTransactions.length, 1);
+    assert.equal(paymentTransactions[0].reference_no, "ORDER-PHP-1");
+    assert.equal(Number(paymentTransactions[0].amount), 125.5);
+    assert.equal(paymentTransactions[0].currency, "PHP");
+
     const krwPayment = {
       eventKey: "payment:00000000-0000-4000-8000-000000000002",
       eventType: "payment",
       paymentId: "00000000-0000-4000-8000-000000000002",
       referenceNo: "QR-KRW-1",
       status: "PENDING",
-      details: { amount: 12000, currency: "KRW" }
+      details: {
+        amount: 510,
+        currency: "PHP",
+        customerAmountKrw: 12000,
+        ratePhpPerKrw: 0.0425
+      }
     };
     await store.recordWebhookEvent(krwPayment);
-    await store.recordWebhookEvent({ ...krwPayment, status: "EXECUTED", details: {} });
-    assert.deepEqual(await store.getKrwQrPaymentBalance(), { balance: "12000", paymentCount: 1 });
+    await store.recordWebhookEvent({
+      ...krwPayment,
+      status: "EXECUTED",
+      details: { amount: 510, currency: "PHP", institutionReferenceNo: "INST-2" }
+    });
+    assert.deepEqual(await store.getKrwQrPaymentBalance(), { balance: "0", paymentCount: 0 });
+    const persistedPayment = await pool.query(
+      "SELECT details FROM swiftpay_webhook_events WHERE event_key = $1",
+      [krwPayment.eventKey]
+    );
+    assert.deepEqual(persistedPayment.rows[0].details, {
+      amount: 510,
+      currency: "PHP",
+      customerAmountKrw: 12000,
+      ratePhpPerKrw: 0.0425,
+      institutionReferenceNo: "INST-2"
+    });
+
+    await store.upsertPushToken("merchant@example.com", "device-push-token-1234567890");
+    assert.deepEqual(await store.listActivePushTokens(), ["device-push-token-1234567890"]);
+    await store.recordWebhookEvent({
+      eventKey: "payment:00000000-0000-4000-8000-000000000004",
+      eventType: "payment",
+      paymentId: "00000000-0000-4000-8000-000000000004",
+      referenceNo: "INCOMING-1",
+      status: "EXECUTED",
+      amount: 88.25,
+      currency: "PHP",
+      notifyIncoming: true
+    });
+    await store.recordWebhookEvent({
+      eventKey: "payment:00000000-0000-4000-8000-000000000004",
+      eventType: "payment",
+      paymentId: "00000000-0000-4000-8000-000000000004",
+      referenceNo: "INCOMING-1",
+      status: "EXECUTED",
+      amount: 88.25,
+      currency: "PHP",
+      notifyIncoming: true
+    });
+    const queued = await store.claimIncomingPaymentPushes(10);
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0].reference_no, "INCOMING-1");
+    assert.equal(Number(queued[0].amount), 88.25);
+    assert.equal(queued[0].currency, "PHP");
+    await store.completeIncomingPaymentPush(queued[0].event_key);
+    assert.deepEqual(await store.claimIncomingPaymentPushes(10), []);
+    await store.recordWebhookEvent({
+      eventKey: "payment:00000000-0000-4000-8000-000000000005",
+      eventType: "payment",
+      paymentId: "00000000-0000-4000-8000-000000000005",
+      referenceNo: "INCOMING-2",
+      status: "EXECUTED",
+      notifyIncoming: true
+    });
+    const paymentWithoutAmount = await store.claimIncomingPaymentPushes(10);
+    assert.equal(paymentWithoutAmount.length, 1);
+    assert.equal(paymentWithoutAmount[0].reference_no, "INCOMING-2");
+    assert.equal(paymentWithoutAmount[0].amount, null);
+    assert.equal(paymentWithoutAmount[0].currency, null);
+    await store.deletePushToken("merchant@example.com", "device-push-token-1234567890");
+    assert.deepEqual(await store.listActivePushTokens(), []);
   } finally {
     await store.close();
   }

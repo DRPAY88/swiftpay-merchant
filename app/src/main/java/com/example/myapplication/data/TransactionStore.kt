@@ -76,9 +76,19 @@ fun mergeTransactions(
         .filter { it.transactionId.isNotBlank() }
         .groupBy { it.transactionId }
         .map { (_, versions) ->
-            versions.find { it.status.uppercase() == "SUCCESS" }
+            val preferred = versions.find { it.status.uppercase() == "SUCCESS" }
                 ?: versions.find { it.status.uppercase() != "PENDING" }
                 ?: versions.first()
+            preferred.copy(
+                transactionType = preferred.transactionType
+                    ?: versions.firstNotNullOfOrNull { it.transactionType },
+                referenceNo = preferred.referenceNo
+                    ?: versions.firstNotNullOfOrNull { it.referenceNo },
+                description = preferred.description
+                    ?: versions.firstNotNullOfOrNull { it.description },
+                bankName = preferred.bankName
+                    ?: versions.firstNotNullOfOrNull { it.bankName }
+            )
         }
         .sortedByDescending { it.date }
 }

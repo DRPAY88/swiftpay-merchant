@@ -1,7 +1,13 @@
 package com.example.myapplication
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,10 +20,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PersonOutline
-import androidx.compose.material.icons.rounded.QrCode2
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,6 +50,7 @@ import androidx.navigation3.ui.NavDisplay
 import com.example.myapplication.data.SessionManager
 import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.data.DevicePinManager
+import com.example.myapplication.data.IncomingMoneyPush
 import com.example.myapplication.navigation.Route
 import com.example.myapplication.ui.screens.ApiDocsScreen
 import com.example.myapplication.ui.screens.ApiKeysScreen
@@ -56,6 +62,7 @@ import com.example.myapplication.ui.screens.MiniAppViewModel
 import com.example.myapplication.ui.screens.ProfileScreen
 import com.example.myapplication.ui.screens.WalletScreen
 import com.example.myapplication.ui.theme.FastPayBlue
+import com.example.myapplication.ui.theme.FintechMotion
 import com.example.myapplication.ui.theme.FastPayTheme
 import com.example.myapplication.util.DebugLogger
 import com.example.myapplication.util.DeepLinkBus
@@ -129,6 +136,9 @@ fun SwiftPayApp() {
     val backendAccessToken by settings.backendAccessToken.collectAsState(initial = null)
     val isLoggedIn = isLoggedInFlag && !backendAccessToken.isNullOrBlank()
     val loggedInEmail by settings.loggedInEmail.collectAsState(initial = null)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
     var hasDevicePin by remember { mutableStateOf(false) }
     var isDeviceUnlocked by remember { mutableStateOf(false) }
 
@@ -141,6 +151,19 @@ fun SwiftPayApp() {
     androidx.compose.runtime.LaunchedEffect(isLoggedIn) {
         hasDevicePin = isLoggedIn && withContext(Dispatchers.IO) { devicePinManager.hasPin() }
         if (!isLoggedIn) isDeviceUnlocked = false
+    }
+
+    androidx.compose.runtime.LaunchedEffect(isLoggedIn, backendAccessToken) {
+        val accessToken = backendAccessToken
+        if (isLoggedIn && !accessToken.isNullOrBlank() && IncomingMoneyPush.isConfigured()) {
+            if (
+                Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            IncomingMoneyPush.registerCurrentDevice(context, accessToken)
+        }
     }
 
     androidx.compose.runtime.LaunchedEffect(isLoggedIn, hasDevicePin, isDeviceUnlocked) {
@@ -193,6 +216,7 @@ fun SwiftPayApp() {
                 isDeviceUnlocked = false
                 hasDevicePin = false
                 (context as? ComponentActivity)?.lifecycleScope?.launch {
+                    settings.getAccessToken()?.let { IncomingMoneyPush.unregisterCurrentDevice(context, it) }
                     settings.clearSession()
                     sessionManager.clearSession()
                     backStack.clear()
@@ -214,7 +238,7 @@ fun SwiftPayApp() {
                     val (linkId, _) = DeepLinkExtractor.extractPaymentInfo(payload)
                     if (linkId.isNotBlank()) {
                         miniAppViewModel.handleDeepLink(linkId)
-                        Toast.makeText(currentContext, "Checking payment status with SwiftPay", Toast.LENGTH_LONG).show()
+                        Toast.makeText(currentContext, "Checking your payment status", Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -224,7 +248,8 @@ fun SwiftPayApp() {
                 modifier = Modifier.fillMaxSize(),
                 backStack = backStack,
                 transitionSpec = {
-                    fadeIn(tween(300)) togetherWith fadeOut(tween(300))
+                    fadeIn(tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing)) togetherWith
+                        fadeOut(tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing))
                 }
             ) { key ->
                 when (key) {
@@ -254,7 +279,6 @@ fun SwiftPayApp() {
                 navigationSuiteItems = {
                     val activeColor = FastPayBlue
                     val inactiveColor = Color.Gray.copy(alpha = 0.6f)
-                    val collectRouteSelected = currentRoute is Route.MiniApp && currentRoute.initialPath == "qr-page"
 
                     item(
                         selected = currentRoute == Route.Home,
@@ -276,40 +300,21 @@ fun SwiftPayApp() {
                         },
                     )
                     item(
-                        selected = collectRouteSelected,
-                        onClick = { navController.navigate(Route.MiniApp("qr-page")) },
+                        selected = currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page",
+                        onClick = { navController.navigate(Route.MiniApp("scan-qr-page")) },
                         icon = {
                             Icon(
-                                Icons.Rounded.QrCode2,
-                                contentDescription = "Collect",
-                                tint = if (collectRouteSelected) activeColor else inactiveColor
+                                Icons.Rounded.QrCodeScanner,
+                                contentDescription = "QR Scanner",
+                                tint = if (currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page") activeColor else inactiveColor
                             )
                         },
                         label = {
                             Text(
-                                "Collect",
+                                "QR Scanner",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (collectRouteSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (collectRouteSelected) activeColor else inactiveColor
-                            )
-                        },
-                    )
-                    item(
-                        selected = currentRoute == Route.Wallet,
-                        onClick = { navController.navigate(Route.Wallet) },
-                        icon = {
-                            Icon(
-                                Icons.Rounded.AccountBalanceWallet,
-                                contentDescription = "Wallet",
-                                tint = if (currentRoute == Route.Wallet) activeColor else inactiveColor
-                            )
-                        },
-                        label = {
-                            Text(
-                                "Wallet",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (currentRoute == Route.Wallet) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (currentRoute == Route.Wallet) activeColor else inactiveColor
+                                fontWeight = if (currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page") FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page") activeColor else inactiveColor
                             )
                         },
                     )
@@ -338,12 +343,32 @@ fun SwiftPayApp() {
                     modifier = Modifier.fillMaxSize(),
                     backStack = backStack,
                     transitionSpec = {
-                        (fadeIn(animationSpec = tween(300)) + slideInHorizontally(animationSpec = tween(400), initialOffsetX = { it }))
-                            .togetherWith(fadeOut(animationSpec = tween(300)) + slideOutHorizontally(animationSpec = tween(400), targetOffsetX = { -it }))
+                        (fadeIn(animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing)) +
+                            slideInHorizontally(
+                                animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing),
+                                initialOffsetX = { it }
+                            ))
+                            .togetherWith(
+                                fadeOut(animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing)) +
+                                    slideOutHorizontally(
+                                        animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing),
+                                        targetOffsetX = { -it }
+                                    )
+                            )
                     },
                     popTransitionSpec = {
-                        (fadeIn(animationSpec = tween(300)) + slideInHorizontally(animationSpec = tween(400), initialOffsetX = { -it }))
-                            .togetherWith(fadeOut(animationSpec = tween(300)) + slideOutHorizontally(animationSpec = tween(400), targetOffsetX = { it }))
+                        (fadeIn(animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing)) +
+                            slideInHorizontally(
+                                animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing),
+                                initialOffsetX = { -it }
+                            ))
+                            .togetherWith(
+                                fadeOut(animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing)) +
+                                    slideOutHorizontally(
+                                        animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing),
+                                        targetOffsetX = { it }
+                                    )
+                            )
                     },
                     onBack = {
                         navController.pop()
@@ -358,7 +383,11 @@ fun SwiftPayApp() {
                             )
                         }
                         is Route.MiniApp -> NavEntry(key) {
-                            MiniAppScreen(initialPath = key.initialPath)
+                            val launchScanner = key.initialPath == "scan-qr-page"
+                            MiniAppScreen(
+                                initialPath = if (launchScanner) "disbursement-page" else key.initialPath,
+                                openQrScanner = launchScanner
+                            )
                         }
                         Route.Profile -> NavEntry(key) {
                             ProfileScreen()

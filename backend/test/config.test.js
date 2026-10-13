@@ -63,3 +63,31 @@ test("Transak production environment retains private paired credentials", () => 
     environment: "production"
   });
 });
+
+test("public checkout origin must use HTTPS and cannot include a path", () => {
+  const config = loadConfig({ ...baseEnv, PUBLIC_BASE_URL: "https://merchant.example" });
+  assert.equal(config.publicBaseUrl.href, "https://merchant.example/");
+  assert.throws(
+    () => loadConfig({ ...baseEnv, PUBLIC_BASE_URL: "http://merchant.example" }),
+    /PUBLIC_BASE_URL must be an HTTPS origin/
+  );
+  assert.throws(
+    () => loadConfig({ ...baseEnv, PUBLIC_BASE_URL: "https://merchant.example/checkout" }),
+    /PUBLIC_BASE_URL must be an HTTPS origin/
+  );
+});
+
+test("FCM service-account configuration is optional but must be complete JSON", () => {
+  assert.equal(loadConfig(baseEnv).fcmServiceAccountJson, null);
+  assert.throws(
+    () => loadConfig({ ...baseEnv, FCM_SERVICE_ACCOUNT_JSON: "not-json" }),
+    /FCM_SERVICE_ACCOUNT_JSON must contain valid JSON/
+  );
+  assert.throws(
+    () => loadConfig({
+      ...baseEnv,
+      FCM_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: "swiftpay-push" })
+    }),
+    /must contain project_id, client_email, and private_key/
+  );
+});

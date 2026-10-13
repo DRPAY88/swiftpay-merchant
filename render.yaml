@@ -8,6 +8,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PUBLIC_BASE_URL
+        value: https://swiftpay-merchant.onrender.com
       - key: SWIFTPAY_BASE_URL
         value: https://api.pay.live.swiftpay.ph/api/
       - key: SWIFTPAY_ALLOW_LIVE
@@ -32,6 +34,8 @@ services:
         sync: false
       - key: OTP_FROM_EMAIL
         value: "SwiftPay <login@swiftpay.site>"
+      - key: CURRENCYAPI_KEY
+        sync: false
       - key: TRANSAK_ENVIRONMENT
         value: production
       - key: TRANSAK_API_KEY

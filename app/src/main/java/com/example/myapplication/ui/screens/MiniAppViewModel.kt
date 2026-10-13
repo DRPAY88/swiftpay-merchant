@@ -12,8 +12,11 @@ import com.example.myapplication.bridge.SwiftPaySDKBridge
 import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.data.SwiftPayService
 import com.example.myapplication.data.TransactionStore
+import com.example.myapplication.data.institutionBrandKey
+import com.example.myapplication.data.isTrustedInstitutionLogoUrl
 import com.example.myapplication.data.api.InternalTransaction
 import com.example.myapplication.data.api.BackendTransferInstitution
+import com.example.myapplication.data.api.BackendPaymentInstitutionLogo
 import com.example.myapplication.data.api.SwiftPayStatusResponse
 import com.example.myapplication.data.createSwiftPayService
 import com.example.myapplication.data.mergeTransactions
@@ -32,17 +35,41 @@ sealed interface MiniAppUiState {
     data class Error(val message: String) : MiniAppUiState
     data class PaymentConsent(val data: PaymentData) : MiniAppUiState
     data class PaymentRedirect(val url: String, val data: PaymentData) : MiniAppUiState
-    data class PaymentLinkReady(val url: String) : MiniAppUiState
+    data class PaymentLinkReady(
+        val url: String,
+        val linkId: String,
+        val amount: Double,
+        val description: String,
+        val currency: String = "PHP"
+    ) : MiniAppUiState
     data class DynamicQrReady(
         val qrImageBase64: String,
         val amount: Double,
         val currency: String,
         val bankAccountNumber: String?,
-        val instapayBankCode: String?
+        val instapayBankCode: String?,
+        val customerAmountKrw: Int? = null,
+        val ratePhpPerKrw: Double? = null,
+        val customerAmountFx: Double? = null,
+        val customerCurrency: String? = null,
+        val ratePhpPerUnit: Double? = null,
+        val rateUpdatedAt: String? = null
     ) : MiniAppUiState
     data class DepositWizard(
         val accountNumber: String,
         val balance: Double
+    ) : MiniAppUiState
+    data class DepositCheckoutReady(
+        val url: String,
+        val paymentId: String,
+        val referenceNo: String,
+        val amount: Double
+    ) : MiniAppUiState
+    data class DepositCheckoutComplete(
+        val paymentId: String,
+        val amount: Double,
+        val success: Boolean,
+        val status: String
     ) : MiniAppUiState
     object ScanQrToSend : MiniAppUiState
     data class QrTransferReview(
@@ -118,6 +145,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     var bridge: SwiftPaySDKBridge? = null
     private var nfcTimerJob: Job? = null
     private var threeDSecureTimeoutJob: Job? = null
+    private var pendingDepositCheckoutId: String? = null
+    private var pendingDepositCheckoutAmount: Double? = null
     private var pendingCheckoutId: String? = null
         set(value) {
             field = value
@@ -132,7 +161,11 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         return settingsManager.createSwiftPayService()
     }
 
-    private fun launchProcessingAction(message: String, action: suspend () -> Unit) {
+    private fun launchProcessingAction(
+        message: String,
+        bridgeAction: String? = null,
+        action: suspend () -> Unit
+    ) {
         viewModelScope.launch {
             uiState = MiniAppUiState.Processing(message)
             try {
@@ -142,8 +175,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             } catch (error: Exception) {
                 val errorMessage = error.message ?: "The request failed. Please try again."
                 Log.e("MiniAppViewModel", message, error)
-                bridge?.sendError(errorMessage)
-                uiState = MiniAppUiState.Error(errorMessage)
+                bridge?.sendError(errorMessage, action = bridgeAction)
+                uiState = if (bridgeAction == null) MiniAppUiState.Error(errorMessage) else MiniAppUiState.Idle
             }
         }
     }
@@ -230,16 +263,16 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     fun onTransactionsRequest() {
         viewModelScope.launch {
             try {
-                val result = getService().getInternalTransactions()
+                val history = getService().getWalletTransactionHistory()
                 val localTransactions = repository.getAllTransactions().first()
-                result.onSuccess { transactions ->
-                    bridge?.sendResponse(mergeTransactions(localTransactions, transactions))
-                }.onFailure { error ->
-                    if (localTransactions.isNotEmpty()) {
-                        bridge?.sendResponse(localTransactions)
-                    } else {
-                        bridge?.sendError(error.message ?: "Failed to fetch transactions")
-                    }
+                history.errors.forEach { error ->
+                    Log.e("MiniAppViewModel", "Failed to load a transaction history source: $error")
+                }
+                val transactions = mergeTransactions(localTransactions, history.transactions)
+                if (transactions.isEmpty() && history.errors.isNotEmpty()) {
+                    bridge?.sendError(history.errors.joinToString("; "))
+                } else {
+                    bridge?.sendResponse(transactions)
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -265,20 +298,31 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         launchProcessingAction("Generating payment link...") {
             val result = getService().createPaymentLink(
                 amount = if (data.amount > 0) data.amount else 0.0,
-                description = data.description
+                description = data.description,
+                currency = data.currency.uppercase()
             )
 
             result.onSuccess { response ->
                 val url = response.paymentLinkUrl
                 if (url != null) {
-                    uiState = MiniAppUiState.PaymentLinkReady(url)
+                    val linkId = response.id.orEmpty()
+                    val description = response.description ?: data.description
+                    val amount = response.amount ?: data.amount
+                    uiState = MiniAppUiState.PaymentLinkReady(
+                        url = url,
+                        linkId = linkId,
+                        amount = amount,
+                        description = description,
+                        currency = response.currency ?: data.currency
+                    )
 
                     bridge?.sendResponse(mapOf(
                         "paymentLinkUrl" to url,
-                        "linkId" to (response.id ?: ""),
-                        "description" to (response.description ?: data.description),
-                        "hasFixedAmount" to (data.amount > 0),
-                        "amount" to data.amount
+                        "linkId" to linkId,
+                        "description" to description,
+                        "hasFixedAmount" to true,
+                        "amount" to amount,
+                        "currency" to (response.currency ?: data.currency)
                     ))
 
                     Log.i("MiniAppViewModel", "Payment link generated successfully: $url")
@@ -313,50 +357,153 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onGenerateDynamicQr(amount: Double, currency: String = "PHP") {
-        launchProcessingAction("Generating dynamic QR Ph code...") {
-            val result = getService().createDynamicQr(amount, currency)
+        if (currency != "PHP") {
+            bridge?.sendError(
+                "SwiftPay QR Ph settles in PHP. Request a KRW, USD, or EUR-to-PHP quote first.",
+                action = "generate_dynamic_qr"
+            )
+            return
+        }
+        launchProcessingAction("Generating dynamic QR Ph code...", bridgeAction = "generate_dynamic_qr") {
+            handleQrGenerationResult(
+                result = getService().createDynamicQr(amount, currency),
+                amount = amount,
+                currency = currency,
+                bridgeAction = "generate_dynamic_qr"
+            )
+        }
+    }
 
-            result.onSuccess { response ->
-                val qrCode = response.qrCodeBody ?: response.qrCode
-                val qrImageBase64 = response.qrImageBase64
-                val paymentId = response.paymentId ?: response.id
-                val checkoutUrl = response.checkoutUrl
-                if (!checkoutUrl.isNullOrBlank() && !paymentId.isNullOrBlank()) {
-                    pendingCheckoutId = paymentId
-                    recordLocalTransaction(
-                        id = paymentId,
-                        amount = amount,
-                        status = "PENDING"
+    fun onQuoteKrwPhpQr(amountKrw: Int) {
+        launchProcessingAction("Getting current KRW-to-PHP quote...", bridgeAction = "quote_krw_php_qr") {
+            getService().getKrwPhpQrQuote(amountKrw)
+                .onSuccess { quote ->
+                    bridge?.sendResponse(
+                        mapOf(
+                            "quoteToken" to quote.quoteToken,
+                            "customerAmountKrw" to quote.customerAmountKrw,
+                            "settlementAmountPhp" to quote.settlementAmountPhp,
+                            "ratePhpPerKrw" to quote.ratePhpPerKrw,
+                            "rateUpdatedAt" to quote.rateUpdatedAt,
+                            "expiresAt" to quote.expiresAt,
+                            "settlementCurrency" to quote.settlementCurrency
+                        ),
+                        action = "quote_krw_php_qr"
                     )
-                    uiState = MiniAppUiState.PaymentRedirect(
-                        checkoutUrl,
-                        PaymentData(amount = amount, currency = "PHP", description = "QR Ph collection")
-                    )
-                    bridge?.sendResponse(mapOf("checkoutUrl" to checkoutUrl, "paymentId" to paymentId))
-                } else if (!qrCode.isNullOrBlank() && !qrImageBase64.isNullOrBlank() && !paymentId.isNullOrBlank()) {
-                    recordLocalTransaction(
-                        id = paymentId,
-                        amount = amount,
-                        status = "PENDING"
-                    )
-                    uiState = MiniAppUiState.DynamicQrReady(
-                        qrImageBase64 = qrImageBase64,
-                        amount = amount,
-                        currency = response.currency ?: currency,
-                        bankAccountNumber = response.bankAccountNumber,
-                        instapayBankCode = response.instapayBankCode
-                    )
-                    bridge?.sendResponse(mapOf("qrCodeBody" to qrCode))
-                } else {
-                    val errorMsg = "SwiftPay returned an incomplete QR Ph payment"
-                    bridge?.sendError(errorMsg)
-                    uiState = MiniAppUiState.Error(errorMsg)
+                    uiState = MiniAppUiState.Idle
                 }
-            }.onFailure { error ->
-                val errorMsg = error.message ?: "QR generation failed"
-                bridge?.sendError(errorMsg)
-                uiState = MiniAppUiState.Error(errorMsg)
+                .onFailure { error ->
+                    bridge?.sendError(
+                        error.message ?: "Could not get the KRW-to-PHP quote",
+                        action = "quote_krw_php_qr"
+                    )
+                    uiState = MiniAppUiState.Idle
             }
+        }
+    }
+
+    fun onQuoteFxPhpQr(amount: Double, currency: String) {
+        launchProcessingAction("Getting current $currency-to-PHP quote...", bridgeAction = "quote_fx_php_qr") {
+            getService().getFxPhpQrQuote(amount, currency)
+                .onSuccess { quote ->
+                    bridge?.sendResponse(
+                        mapOf(
+                            "quoteToken" to quote.quoteToken,
+                            "customerAmount" to quote.customerAmount,
+                            "customerCurrency" to quote.customerCurrency,
+                            "settlementAmountPhp" to quote.settlementAmountPhp,
+                            "ratePhpPerUnit" to quote.ratePhpPerUnit,
+                            "rateUpdatedAt" to quote.rateUpdatedAt,
+                            "expiresAt" to quote.expiresAt,
+                            "settlementCurrency" to quote.settlementCurrency
+                        ),
+                        action = "quote_fx_php_qr"
+                    )
+                    uiState = MiniAppUiState.Idle
+                }
+                .onFailure { error ->
+                    bridge?.sendError(
+                        error.message ?: "Could not get the $currency-to-PHP quote",
+                        action = "quote_fx_php_qr"
+                    )
+                    uiState = MiniAppUiState.Idle
+                }
+        }
+    }
+
+    fun onGenerateQuotedKrwPhpQr(quoteToken: String) {
+        launchProcessingAction("Creating PHP QR from the KRW price quote...", bridgeAction = "generate_quoted_krw_php_qr") {
+            handleQrGenerationResult(
+                result = getService().createKrwPhpQuotedQr(quoteToken),
+                amount = 0.0,
+                currency = "PHP",
+                bridgeAction = "generate_quoted_krw_php_qr"
+            )
+        }
+    }
+
+    fun onGenerateQuotedFxPhpQr(quoteToken: String) {
+        launchProcessingAction("Creating PHP QR from the currency price quote...", bridgeAction = "generate_quoted_fx_php_qr") {
+            handleQrGenerationResult(
+                result = getService().createFxPhpQuotedQr(quoteToken),
+                amount = 0.0,
+                currency = "PHP",
+                bridgeAction = "generate_quoted_fx_php_qr"
+            )
+        }
+    }
+
+    private suspend fun handleQrGenerationResult(
+        result: Result<com.example.myapplication.data.api.SwiftPayQrResponse>,
+        amount: Double,
+        currency: String,
+        bridgeAction: String
+    ) {
+        result.onSuccess { response ->
+            val qrCode = response.qrCodeBody ?: response.qrCode
+            val qrImageBase64 = response.qrImageBase64
+            val paymentId = response.paymentId ?: response.id
+            val paymentAmount = response.amount ?: amount
+            val paymentCurrency = response.currency ?: currency
+            val checkoutUrl = response.checkoutUrl
+            if (!checkoutUrl.isNullOrBlank() && !paymentId.isNullOrBlank()) {
+                pendingCheckoutId = paymentId
+                recordLocalTransaction(id = paymentId, amount = paymentAmount, status = "PENDING")
+                uiState = MiniAppUiState.PaymentRedirect(
+                    checkoutUrl,
+                    PaymentData(
+                        amount = paymentAmount,
+                        currency = paymentCurrency,
+                        description = "$paymentCurrency QR Ph collection"
+                    )
+                )
+                bridge?.sendResponse(
+                    mapOf("checkoutUrl" to checkoutUrl, "paymentId" to paymentId),
+                    action = bridgeAction
+                )
+            } else if (!qrCode.isNullOrBlank() && !qrImageBase64.isNullOrBlank() && !paymentId.isNullOrBlank()) {
+                recordLocalTransaction(id = paymentId, amount = paymentAmount, status = "PENDING")
+                uiState = MiniAppUiState.DynamicQrReady(
+                    qrImageBase64 = qrImageBase64,
+                    amount = paymentAmount,
+                    currency = paymentCurrency,
+                    bankAccountNumber = response.bankAccountNumber,
+                    instapayBankCode = response.instapayBankCode,
+                    customerAmountKrw = response.customerAmountKrw,
+                    ratePhpPerKrw = response.ratePhpPerKrw,
+                    customerAmountFx = response.customerAmount,
+                    customerCurrency = response.customerCurrency,
+                    ratePhpPerUnit = response.ratePhpPerUnit,
+                    rateUpdatedAt = response.rateUpdatedAt
+                )
+                bridge?.sendResponse(mapOf("qrCodeBody" to qrCode), action = bridgeAction)
+            } else {
+                bridge?.sendError("SwiftPay returned an incomplete QR Ph payment", action = bridgeAction)
+                uiState = MiniAppUiState.Idle
+            }
+        }.onFailure { error ->
+            bridge?.sendError(error.message ?: "QR generation failed", action = bridgeAction)
+            uiState = MiniAppUiState.Idle
         }
     }
 
@@ -371,6 +518,55 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun startDepositCheckout(amount: Double) {
+        if (!amount.isFinite() || amount <= 0.0) {
+            uiState = MiniAppUiState.Error("Enter a valid PHP deposit amount.")
+            return
+        }
+        if (amount > 1_000_000.0) {
+            uiState = MiniAppUiState.Error("Deposit amount exceeds the PHP 1,000,000 checkout limit.")
+            return
+        }
+
+        launchProcessingAction("Preparing secure checkout...") {
+            val payment = PaymentData(
+                amount = amount,
+                currency = "PHP",
+                description = "Denshitx Bank wallet deposit"
+            )
+            getService().createCheckout(payment)
+                .onSuccess { response ->
+                    val checkoutUrl = response.checkoutUrl ?: response.paymentUrl
+                    val paymentId = response.id ?: response.orderId
+                    if (checkoutUrl.isNullOrBlank() || paymentId.isNullOrBlank()) {
+                        throw IllegalStateException("SwiftPay did not return a complete checkout session.")
+                    }
+                    val referenceNo = response.referenceNo
+                        ?.takeIf(String::isNotBlank)
+                        ?: paymentId
+
+                    pendingDepositCheckoutId = paymentId
+                    pendingDepositCheckoutAmount = amount
+                    recordLocalTransaction(
+                        id = paymentId,
+                        amount = amount,
+                        status = "PENDING",
+                        transactionType = "PAYMENT",
+                        referenceNo = referenceNo,
+                        description = "Denshitx Bank wallet deposit"
+                    )
+                    pendingCheckoutId = paymentId
+                    uiState = MiniAppUiState.DepositCheckoutReady(
+                        url = checkoutUrl,
+                        paymentId = paymentId,
+                        referenceNo = referenceNo,
+                        amount = amount
+                    )
+                }
+                .onFailure { throw it }
+        }
+    }
+
     fun onScanQrToSend() {
         uiState = MiniAppUiState.ScanQrToSend
     }
@@ -378,10 +574,14 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     fun onGetTransferInstitutions() {
         viewModelScope.launch {
                 try {
-                    getService().getTransferInstitutions()
+                    val service = getService()
+                    service.getTransferInstitutions()
                         .onSuccess { institutions ->
+                            val brandedInstitutions = institutions.withPaymentInstitutionLogos(
+                                service.getPaymentInstitutionLogos()
+                            )
                             bridge?.sendResponse(
-                                institutions.filter { it.instapayEnabled },
+                                brandedInstitutions.filter { it.instapayEnabled },
                                 action = "get_transfer_institutions"
                             )
                         }
@@ -419,9 +619,13 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         }
         viewModelScope.launch {
             uiState = MiniAppUiState.Processing("Loading InstaPay institutions...")
-            getService().getTransferInstitutions()
+            val service = getService()
+            service.getTransferInstitutions()
                 .onSuccess { institutions ->
-                    val instapayInstitutions = institutions.filter { it.instapayEnabled }
+                    val brandedInstitutions = institutions.withPaymentInstitutionLogos(
+                        service.getPaymentInstitutionLogos()
+                    )
+                    val instapayInstitutions = brandedInstitutions.filter { it.instapayEnabled }
                     if (instapayInstitutions.isEmpty()) {
                         val message = "SwiftPay returned no InstaPay institutions."
                         bridge?.sendError(message)
@@ -480,7 +684,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             uiState = MiniAppUiState.Error("Please enter a valid transfer amount.")
             return
         }
-        launchProcessingAction("Processing SwiftPay transfer...") {
+        launchProcessingAction("Processing SwiftPay transfer...", bridgeAction = "send_disbursement") {
             val result = getService().disburse(amount, bankCode, accountNumber, recipientName)
             result.onSuccess { response ->
                 val status = normalizePaymentStatus(response.status)
@@ -502,7 +706,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             }.onFailure { error ->
                 val errorMsg = error.message ?: "Transfer failed"
                 bridge?.sendError(errorMsg, action = "send_disbursement")
-                uiState = MiniAppUiState.Error(errorMsg)
+                uiState = MiniAppUiState.Idle
             }
         }
     }
@@ -636,7 +840,10 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     private suspend fun recordLocalTransaction(
         id: String,
         amount: Double,
-        status: String
+        status: String,
+        transactionType: String? = null,
+        referenceNo: String? = null,
+        description: String? = null
     ) {
         val normalizedStatus = normalizePaymentStatus(status)
         var actualAmount = amount
@@ -658,7 +865,10 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                 transactionId = id,
                 amount = actualAmount,
                 status = normalizedStatus,
-                date = TransactionStore.nowLabel()
+                date = TransactionStore.nowLabel(),
+                transactionType = transactionType,
+                referenceNo = referenceNo,
+                description = description
             )
         )
 
@@ -751,10 +961,17 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                 if (status != null && status in listOf("SUCCESS", "EXECUTED", "PAID", "CAPTURED", "COMPLETED", "APPROVED", "AUTHORIZED")) {
                     threeDSecureTimeoutJob?.cancel()
                     pendingCheckoutId = null
+                    val depositCheckoutId = pendingDepositCheckoutId
+                    val depositCheckoutState = (uiState as? MiniAppUiState.DepositCheckoutReady)
+                        ?.takeIf { it.paymentId == checkoutId }
+                    val paymentAmount = response?.amount?.takeIf { it > 0.0 }
+                        ?: pendingDepositCheckoutAmount
+                        ?: depositCheckoutState?.amount
+                        ?: 0.0
 
                     recordLocalTransaction(
                         id = checkoutId,
-                        amount = response?.amount ?: 0.0,
+                        amount = paymentAmount,
                         status = "SUCCESS"
                     )
                     refreshBalance()
@@ -762,25 +979,54 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                     bridge?.sendResponse(mapOf(
                         "status" to "success",
                         "paymentId" to checkoutId,
-                        "amount" to (response?.amount ?: 0.0)
+                        "amount" to paymentAmount
                     ))
 
-                    uiState = MiniAppUiState.Idle
+                    if (depositCheckoutId == checkoutId) {
+                        pendingDepositCheckoutId = null
+                        pendingDepositCheckoutAmount = null
+                        uiState = MiniAppUiState.DepositCheckoutComplete(
+                            paymentId = checkoutId,
+                            amount = paymentAmount,
+                            success = true,
+                            status = status
+                        )
+                    } else {
+                        uiState = MiniAppUiState.Idle
+                    }
                     Log.i("MiniAppViewModel", "✅ Checkout $checkoutId completed successfully via status polling!")
                     break
                 } else if (status != null && status in listOf("FAILED", "DECLINED", "REJECTED", "ERROR", "EXPIRED", "CANCELLED", "CANCELED")) {
                     threeDSecureTimeoutJob?.cancel()
                     pendingCheckoutId = null
+                    val depositCheckoutId = pendingDepositCheckoutId
+                    val depositCheckoutState = (uiState as? MiniAppUiState.DepositCheckoutReady)
+                        ?.takeIf { it.paymentId == checkoutId }
+                    val paymentAmount = response?.amount?.takeIf { it > 0.0 }
+                        ?: pendingDepositCheckoutAmount
+                        ?: depositCheckoutState?.amount
+                        ?: 0.0
 
                     recordLocalTransaction(
                         id = checkoutId,
-                        amount = response?.amount ?: 0.0,
+                        amount = paymentAmount,
                         status = "FAILED"
                     )
 
                     val errorMsg = "Payment $checkoutId failed: $status"
                     bridge?.sendError(errorMsg)
-                    uiState = MiniAppUiState.Error(errorMsg)
+                    if (depositCheckoutId == checkoutId) {
+                        pendingDepositCheckoutId = null
+                        pendingDepositCheckoutAmount = null
+                        uiState = MiniAppUiState.DepositCheckoutComplete(
+                            paymentId = checkoutId,
+                            amount = paymentAmount,
+                            success = false,
+                            status = status
+                        )
+                    } else {
+                        uiState = MiniAppUiState.Error(errorMsg)
+                    }
                     Log.w("MiniAppViewModel", "❌ Checkout $checkoutId failed with status: $status")
                     break
                 }
@@ -796,8 +1042,16 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     fun dismissConsent() {
         nfcTimerJob?.cancel()
         threeDSecureTimeoutJob?.cancel()
+        pendingDepositCheckoutId = null
+        pendingDepositCheckoutAmount = null
         pendingCheckoutId = null
         uiState = MiniAppUiState.Idle
+    }
+
+    fun closeDepositCheckout() {
+        if (uiState is MiniAppUiState.DepositCheckoutReady) {
+            uiState = MiniAppUiState.Idle
+        }
     }
 
     fun dismissError() {
@@ -806,6 +1060,24 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
 
     companion object {
         const val NFC_SESSION_SECONDS = 90
+    }
+}
+
+private suspend fun List<BackendTransferInstitution>.withPaymentInstitutionLogos(
+    logosResult: Result<List<BackendPaymentInstitutionLogo>>
+): List<BackendTransferInstitution> {
+    val logos = logosResult.getOrElse { error ->
+        Log.w("MiniAppViewModel", "Institution logos could not be loaded; showing institution names instead.", error)
+        return this
+    }
+    val logosByName = logos.mapNotNull { institution ->
+        institution.logoUrl
+            ?.takeIf(::isTrustedInstitutionLogoUrl)
+            ?.let { institutionBrandKey(institution.name) to it }
+    }.toMap()
+
+    return map { institution ->
+        institution.copy(logoUrl = logosByName[institutionBrandKey(institution.name)])
     }
 }
 

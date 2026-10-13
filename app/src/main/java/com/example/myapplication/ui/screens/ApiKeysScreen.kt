@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.components.DrPayMarkBadge
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,16 +44,24 @@ fun ApiKeysScreen() {
 
     val clipboardManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
 
-    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val bgColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F8FF)
-    val surfaceColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color.White
-    val textColor = if (isDarkTheme) Color.White else FastPayNavy
-    val secondaryTextColor = if (isDarkTheme) Color.LightGray else Color.Gray
+    val bgColor = MaterialTheme.colorScheme.background
+    val isDarkTheme = bgColor == FastPayBlack
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Payment Service", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DrPayMarkBadge(size = 28.dp)
+                        Text("Payment Service", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = FastPayNavy
                 )

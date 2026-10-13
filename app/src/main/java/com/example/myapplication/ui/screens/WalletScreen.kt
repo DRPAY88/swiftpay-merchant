@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -59,7 +58,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import com.example.myapplication.ui.components.FastPayLogo
+import com.example.myapplication.ui.components.DrPayLogo
+import com.example.myapplication.ui.components.DrPayMarkBadge
 import kotlin.math.abs
 
 import com.example.myapplication.LocalNavController
@@ -84,6 +84,7 @@ fun WalletScreen(
     val balance = viewModel.walletBalance
     val adjustedBalance = viewModel.walletAdjustedBalance
     var transactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
+    var transactionHistoryError by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("All") }
     var selectedWallet by remember { mutableStateOf("PHP") }
@@ -112,10 +113,14 @@ fun WalletScreen(
                 val settings = SettingsManager(context)
                 val transactionStore = TransactionStore(context)
                 val service = settings.createSwiftPayService()
-                
+
                 transactionStore.transactions.collectLatest { localTransactions ->
-                    val remoteTransactions = service.getInternalTransactions().getOrNull() ?: emptyList()
-                    transactions = mergeTransactions(localTransactions, remoteTransactions)
+                    val history = service.getWalletTransactionHistory()
+                    transactions = mergeTransactions(
+                        localTransactions,
+                        history.transactions
+                    )
+                    transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
                 }
             } catch (e: Exception) {
                 Log.e("WalletScreen", "Error loading transactions", e)
@@ -131,13 +136,19 @@ fun WalletScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { 
-                    Text(
-                        text = "Wallet",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = textColor
-                    )
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        DrPayMarkBadge(size = 30.dp)
+                        Text(
+                            text = "Wallet",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = textColor
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = bgColor,
@@ -165,8 +176,12 @@ fun WalletScreen(
                                     val transactionStore = TransactionStore(context)
                                     val service = settings.createSwiftPayService()
                                     val localTransactions = transactionStore.transactions.first()
-                                    val remoteTransactions = service.getInternalTransactions().getOrNull() ?: emptyList()
-                                    transactions = mergeTransactions(localTransactions, remoteTransactions)
+                                    val history = service.getWalletTransactionHistory()
+                                    transactions = mergeTransactions(
+                                        localTransactions,
+                                        history.transactions
+                                    )
+                                    transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
                                     delay(800L)
                                 } catch (e: Exception) {
                                     Log.e("WalletScreen", "Refresh Error", e)
@@ -196,6 +211,7 @@ fun WalletScreen(
                     accountNumber = depositAccountNumber,
                     transactions = filteredTransactions,
                     selectedFilter = selectedFilter,
+                    transactionHistoryError = transactionHistoryError,
                     selectedWallet = selectedWallet,
                     onWalletSelected = { selectedWallet = it },
                     onFilterSelected = { selectedFilter = it },
@@ -234,6 +250,7 @@ fun WalletListContent(
     transactions: List<InternalTransaction>,
     selectedFilter: String,
     selectedWallet: String = "PHP",
+    transactionHistoryError: String? = null,
     onWalletSelected: (String) -> Unit = {},
     onFilterSelected: (String) -> Unit,
     onTransactionClick: (InternalTransaction) -> Unit,
@@ -251,10 +268,6 @@ fun WalletListContent(
         }
     }
 
-    LaunchedEffect(selectedWallet) {
-        if (selectedWallet == "KRW") viewModel?.refreshKrwReceiptBalance()
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -265,15 +278,7 @@ fun WalletListContent(
         Spacer(Modifier.height(18.dp))
 
         when (selectedWallet) {
-            "CRYPTO" -> CryptoWalletContent(modifier = Modifier.weight(1f))
-            "KRW" -> KrwWalletContent(
-                balance = viewModel?.krwReceiptBalance,
-                paymentCount = viewModel?.krwReceiptPaymentCount ?: 0,
-                isLoading = viewModel?.isLoadingKrwReceiptBalance == true,
-                errorMessage = viewModel?.krwReceiptBalanceError,
-                onRetry = { viewModel?.refreshKrwReceiptBalance() },
-                modifier = Modifier.weight(1f)
-            )
+            "USDT" -> CryptoWalletContent(modifier = Modifier.weight(1f))
             else -> {
                 PremiumBalanceCard(
                     balance = balance,
@@ -311,6 +316,15 @@ fun WalletListContent(
                     contentPadding = PaddingValues(bottom = 28.dp),
                     modifier = Modifier.weight(1f)
                 ) {
+                    transactionHistoryError?.let { error ->
+                        item {
+                            Text(
+                                text = "Some transaction history could not be loaded: $error",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                     if (transactions.isEmpty()) {
                         item { EmptyHistoryState() }
                     } else {
@@ -327,7 +341,7 @@ fun WalletListContent(
 @Composable
 private fun WalletTypeSelector(selected: String, onSelect: (String) -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("PHP" to "Peso", "CRYPTO" to "Crypto", "KRW" to "KRW").forEach { (value, label) ->
+        listOf("PHP" to "PHP", "USDT" to "USDT").forEach { (value, label) ->
             FilterChip(
                 selected = selected == value,
                 onClick = { onSelect(value) },
@@ -347,7 +361,7 @@ private fun CryptoWalletContent(modifier: Modifier = Modifier) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
-            color = Color(0xFF102B59)
+            color = FastPayNavy
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -380,66 +394,6 @@ private fun CryptoWalletContent(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
         )
-    }
-}
-
-@Composable
-private fun KrwWalletContent(
-    balance: Double?,
-    paymentCount: Int,
-    isLoading: Boolean,
-    errorMessage: String?,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(modifier = Modifier.padding(22.dp)) {
-                Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFE5F0FF), modifier = Modifier.size(46.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("₩", style = MaterialTheme.typography.headlineSmall, color = FastPayBlue, fontWeight = FontWeight.Bold)
-                    }
-                }
-                Spacer(Modifier.height(18.dp))
-                Text("KRW wallet", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                Text("Korean won account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(18.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(Modifier.height(18.dp))
-                Text("KRW QR Ph receipts", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    text = when {
-                        isLoading -> "Loading..."
-                        balance != null -> "₩${"%,.0f".format(balance)}"
-                        else -> "Unavailable"
-                    },
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold
-                )
-                if (balance != null) {
-                    Text("$paymentCount executed QR Ph payment${if (paymentCount == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(
-                    "This total includes verified executed QR Ph payments marked KRW. It is not a provider-reported account balance and does not include withdrawals or manual adjustments.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                if (errorMessage != null) {
-                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
-                    TextButton(onClick = onRetry) { Text("Retry") }
-                }
-            }
-        }
     }
 }
 
@@ -624,7 +578,7 @@ fun PremiumBalanceCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "AVAILABLE BALANCE",
+                        text = "PHP BALANCE",
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White.copy(alpha = 0.72f),
                         fontWeight = FontWeight.Bold,
@@ -659,20 +613,23 @@ fun PremiumBalanceCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1.15f)) {
-                        Text(
-                            text = "ADJUSTED BALANCE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.62f),
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.6.sp
-                        )
-                        Text(
-                            text = adjustedBalance?.let { "₱ ${"%,.2f".format(it)}" } ?: "--",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                    if (adjustedBalance != null || errorMessage != null) {
+                        Column(modifier = Modifier.weight(1.15f)) {
+                            adjustedBalance?.let {
+                                Text(
+                                    text = "ADJUSTED BALANCE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.62f),
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp
+                                )
+                                Text(
+                                    text = "₱ ${"%,.2f".format(it)}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         if (errorMessage != null) {
                             Text(
                                 text = errorMessage,
@@ -680,6 +637,7 @@ fun PremiumBalanceCard(
                                 color = Color.White.copy(alpha = 0.8f),
                                 maxLines = 1
                             )
+                        }
                         }
                     }
                     if (errorMessage != null) {
@@ -769,7 +727,7 @@ fun QuickActionsRow() {
 
 @Composable
 fun QuickActionItem(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val surfaceColor = MaterialTheme.colorScheme.surface
     val textColor = MaterialTheme.colorScheme.onSurface
     
@@ -792,7 +750,7 @@ fun QuickActionItem(icon: ImageVector, label: String, color: Color, onClick: () 
 
 @Composable
 fun PremiumFilterChip(selected: Boolean, text: String, onClick: () -> Unit) {
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val unselectedBg = MaterialTheme.colorScheme.surface
     val selectedBg = if (isDarkTheme) MaterialTheme.colorScheme.primary else FastPayNavy
     val unselectedText = MaterialTheme.colorScheme.onSurface
@@ -867,6 +825,7 @@ fun AnimatedTransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewMo
 @Composable
 fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: MiniAppViewModel? = null) {
     val isExpense = tx.amount < 0
+    val isManualBankDeposit = tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)
     val normalizedStatus = tx.status.uppercase()
     val apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
     val apiStatus = apiPaymentStatus?.status?.uppercase()
@@ -936,6 +895,7 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = when {
+                        isManualBankDeposit -> "Manual bank deposit"
                         isFailed && isExpense -> "Transfer failed"
                         isFailed -> "Payment failed"
                         isPending && isExpense -> "Transfer pending"
@@ -982,8 +942,10 @@ fun TransactionDetailScreen(
     var apiPaymentStatus by remember { mutableStateOf<VaultPaymentResponse?>(null) }
     
     LaunchedEffect(tx.transactionId) {
-        viewModel?.fetchPaymentStatus(tx.transactionId)
-        apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
+        if (!tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)) {
+            viewModel?.fetchPaymentStatus(tx.transactionId)
+            apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
+        }
     }
     
     @Suppress("DEPRECATION")
@@ -1002,6 +964,7 @@ fun TransactionDetailScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         val isExpense = tx.amount < 0
+        val isManualBankDeposit = tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)
         val statusToDisplay = apiPaymentStatus?.status?.uppercase() ?: tx.status.uppercase()
         val color = when {
             statusToDisplay.contains("FAIL") -> FastPayRed
@@ -1022,7 +985,7 @@ fun TransactionDetailScreen(
                 modifier = Modifier.padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                FastPayLogo(scale = 0.75f)
+                DrPayLogo(size = 90.dp)
                 
                 Spacer(Modifier.height(32.dp))
                 
@@ -1044,6 +1007,7 @@ fun TransactionDetailScreen(
                 
                 Text(
                     text = when {
+                        isManualBankDeposit -> "Manual Bank Deposit Received"
                         statusToDisplay.contains("FAIL") || statusToDisplay.contains("REJECT") || statusToDisplay == "ERROR" ->
                             if (isExpense) "Transfer Failed" else "Payment Failed"
                         statusToDisplay.contains("PEND") -> if (isExpense) "Transfer Pending" else "Payment Pending"
@@ -1076,8 +1040,19 @@ fun TransactionDetailScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     ReceiptRow("Status", statusToDisplay, color, isBadge = true)
                     ReceiptRow("Date", tx.date, textColor)
-                    ReceiptRow("Type", if (isExpense) "Business Expense" else "Sales Revenue", textColor)
-                    ReceiptRow("Channel", "SwiftPay Corporate", textColor)
+                    ReceiptRow(
+                        "Type",
+                        when {
+                            isManualBankDeposit -> "Manual bank deposit"
+                            tx.transactionType.equals("PAYMENT", ignoreCase = true) -> "Payment received"
+                            tx.transactionType.equals("DISBURSEMENT", ignoreCase = true) -> "Bank transfer"
+                            isExpense -> "Business Expense"
+                            else -> "Sales Revenue"
+                        },
+                        textColor
+                    )
+                    ReceiptRow("Channel", tx.bankName ?: "SwiftPay Corporate", textColor)
+                    tx.description?.takeIf { it.isNotBlank() }?.let { ReceiptRow("Notes", it, textColor) }
                     
                     val pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f)
                     Canvas(Modifier.fillMaxWidth().height(1.dp)) {
@@ -1104,7 +1079,7 @@ fun TransactionDetailScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = tx.transactionId,
+                                text = tx.referenceNo ?: tx.transactionId,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = textColor,
                                 fontFamily = FontFamily.Monospace,
@@ -1112,7 +1087,7 @@ fun TransactionDetailScreen(
                             )
                             IconButton(
                                 onClick = {
-                                    clipboardManager.setText(AnnotatedString(tx.transactionId))
+                                    clipboardManager.setText(AnnotatedString(tx.referenceNo ?: tx.transactionId))
                                     onShowSnackbar("Reference number copied")
                                 },
                                 modifier = Modifier.size(32.dp)

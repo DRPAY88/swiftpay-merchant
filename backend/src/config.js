@@ -24,6 +24,19 @@ export function loadConfig(env = process.env) {
   if (baseUrl.protocol !== "https:") {
     throw new Error("SwiftPay API must use HTTPS");
   }
+  const publicBaseUrl = env.PUBLIC_BASE_URL?.trim()
+    ? new URL(env.PUBLIC_BASE_URL.trim())
+    : null;
+  if (publicBaseUrl && (
+    publicBaseUrl.protocol !== "https:" ||
+    publicBaseUrl.username ||
+    publicBaseUrl.password ||
+    publicBaseUrl.pathname !== "/" ||
+    publicBaseUrl.search ||
+    publicBaseUrl.hash
+  )) {
+    throw new Error("PUBLIC_BASE_URL must be an HTTPS origin without a path or embedded credentials");
+  }
   if (baseUrl.hostname === "api.pay.live.swiftpay.ph" && env.SWIFTPAY_ALLOW_LIVE !== "true") {
     throw new Error("Live SwiftPay access requires SWIFTPAY_ALLOW_LIVE=true");
   }
@@ -50,10 +63,27 @@ export function loadConfig(env = process.env) {
   if (!["staging", "production"].includes(transakEnvironment)) {
     throw new Error("TRANSAK_ENVIRONMENT must be staging or production");
   }
+  const fcmServiceAccountJson = env.FCM_SERVICE_ACCOUNT_JSON?.trim() || null;
+  if (fcmServiceAccountJson) {
+    let serviceAccount;
+    try {
+      serviceAccount = JSON.parse(fcmServiceAccountJson);
+    } catch {
+      throw new Error("FCM_SERVICE_ACCOUNT_JSON must contain valid JSON");
+    }
+    if (
+      typeof serviceAccount.project_id !== "string" ||
+      typeof serviceAccount.client_email !== "string" ||
+      typeof serviceAccount.private_key !== "string"
+    ) {
+      throw new Error("FCM_SERVICE_ACCOUNT_JSON must contain project_id, client_email, and private_key");
+    }
+  }
 
   return {
     port: Number(env.PORT || 3000),
     swiftPayBaseUrl: baseUrl,
+    publicBaseUrl,
     swiftPayAccessKey: accessKey,
     swiftPaySecretKey: secretKey,
     sessionSigningKey,
@@ -62,6 +92,8 @@ export function loadConfig(env = process.env) {
     databaseUrl: env.DATABASE_URL?.trim() || null,
     resendApiKey: env.RESEND_API_KEY,
     otpFromEmail: env.OTP_FROM_EMAIL,
+    currencyApiKey: env.CURRENCYAPI_KEY?.trim() || null,
+    fcmServiceAccountJson,
     transak: {
       apiKey: transakApiKey,
       apiSecret: transakApiSecret,

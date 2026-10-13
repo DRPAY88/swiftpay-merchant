@@ -1,4 +1,5 @@
 import express from "express";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -12,12 +13,13 @@ import {
   SwiftPayError,
   verifySwiftPaySignature
 } from "./swiftpay.js";
+import { createFxPhpQuote, FxQuoteError, getLatestPhpRate, verifyFxPhpQuote } from "./fx-quotes.js";
 import { TransakError } from "./transak.js";
 
 const amountSchema = z.number().finite().min(0.01).max(1_000_000);
 const referenceSchema = z.string().trim().min(1).max(50);
-const currencySchema = z.literal("PHP");
-const qrCurrencySchema = z.enum(["PHP", "KRW"]);
+const currencySchema = z.enum(["PHP", "USD", "EUR"]);
+const qrCurrencySchema = z.enum(["PHP", "KRW", "USD", "EUR"]);
 
 const orderSchema = z.object({
   amount: amountSchema,
@@ -28,12 +30,27 @@ const orderSchema = z.object({
   merchantTag: z.string().trim().max(64).optional()
 }).strict();
 
-const qrPaymentSchema = z.object({
+const directQrPaymentSchema = z.object({
   amount: amountSchema,
   referenceNo: referenceSchema,
-  currency: qrCurrencySchema.default("PHP"),
+  currency: z.literal("PHP").default("PHP"),
   rejectDuplicatedPayments: z.boolean().default(true)
 }).strict();
+const quotedQrPaymentSchema = z.object({
+  quoteToken: z.string().min(1).max(2048),
+  rejectDuplicatedPayments: z.boolean().default(true)
+}).strict();
+const qrPaymentSchema = z.union([directQrPaymentSchema, quotedQrPaymentSchema]);
+const krwPhpQuoteRequestSchema = z.object({
+  amountKrw: z.number().int().min(1).max(1_000_000)
+}).strict();
+const fxPhpQuoteRequestSchema = z.union([
+  z.object({
+    amount: z.number().finite().min(0.01).max(1_000_000),
+    currency: z.enum(["KRW", "USD", "EUR"])
+  }).strict(),
+  krwPhpQuoteRequestSchema
+]);
 
 const paymentLinkSchema = z.object({
   amount: amountSchema,
@@ -44,6 +61,17 @@ const paymentLinkSchema = z.object({
   validUntil: z.string().datetime({ offset: true }).optional(),
   customerName: z.string().max(150).optional()
 }).strict();
+const paymentLinkCodeSchema = z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/);
+const paymentInstitutionSchema = z.object({
+  code: z.string().trim().min(1).max(128),
+  name: z.string().trim().min(1).max(200),
+  logoUrl: z.string().url().nullish(),
+  enabled: z.boolean().optional(),
+  live: z.boolean().optional(),
+  minAmount: z.number().nonnegative().optional(),
+  maxAmount: z.number().nonnegative().optional(),
+  currencies: z.array(z.string()).optional()
+}).passthrough();
 
 const disbursementSchema = z.object({
   amount: amountSchema,
@@ -53,11 +81,14 @@ const disbursementSchema = z.object({
   institutionCode: z.string().trim().min(1).max(64),
   recipientInformation: z.object({
     accountNumber: z.string().trim().min(1).max(64),
-    fullName: z.string().trim().min(1).max(128),
+    fullName: z.string().trim().min(1).max(128).refine(
+      (fullName) => fullName.split(/\s+/u).filter(Boolean).length >= 2,
+      "Recipient full legal name must include the given name and surname"
+    ),
     mobileNumber: z.string().regex(/^[0-9+-]*$/).max(35).optional(),
     email: z.string().email().max(255).optional()
   }),
-  remarks: z.string().max(80).optional()
+  remarks: z.string().trim().max(80).optional()
 });
 const merchantEmailSchema = z.string().trim().email().max(255).transform((email) => email.toLowerCase());
 const merchantStatusSchema = z.object({
@@ -66,6 +97,12 @@ const merchantStatusSchema = z.object({
 const adjustmentSchema = z.object({
   amount: z.number().finite().min(-1_000_000).max(1_000_000).refine((amount) => amount !== 0),
   reason: z.string().trim().min(3).max(500)
+}).strict();
+const manualBankDepositSchema = z.object({
+  amount: z.number().finite().min(0.01).max(1_000_000),
+  bankName: z.string().trim().min(1).max(100),
+  referenceNo: referenceSchema,
+  notes: z.string().trim().max(500).default("")
 }).strict();
 
 function asyncRoute(handler) {
@@ -87,6 +124,162 @@ function parse(schema, value) {
     throw new SwiftPayError(400, result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "));
   }
   return result.data;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[character]);
+}
+
+const requestedCheckoutMethods = [
+  { id: "alipay", name: "Alipay" },
+  { id: "naver-pay", name: "Naver Pay" },
+  { id: "kakao-pay", name: "Kakao Pay" },
+  { id: "toss-bank", name: "Toss Bank" }
+];
+
+function trustedInstitutionLogoUrl(logoUrl) {
+  if (!logoUrl) return null;
+  try {
+    const logo = new URL(logoUrl);
+    if (
+      logo.protocol === "https:" &&
+      (
+        logo.hostname === "swiftpay.ph" ||
+        logo.hostname.endsWith(".swiftpay.ph") ||
+        [
+          "swiftpay-qa-gateway-frontend.s3-ap-southeast-1.amazonaws.com",
+          "swiftpay-qa-gateway-frontend.s3.ap-southeast-1.amazonaws.com",
+          "swiftpay-prod-gateway-frontend.s3.ap-southeast-1.amazonaws.com"
+        ].includes(logo.hostname)
+      ) &&
+      !logo.username &&
+      !logo.password
+    ) {
+      return logo.href;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function checkoutMethodOptions() {
+  return requestedCheckoutMethods.map((method) => ({
+    id: method.id,
+    name: method.name
+  }));
+}
+
+function checkoutPage({ code, title, amount, currency, paymentUrl, methods }) {
+  const displayTitle = escapeHtml(title);
+  const displayAmount = escapeHtml(new Intl.NumberFormat("en", {
+    style: "currency",
+    currency
+  }).format(amount));
+  const safePaymentUrl = escapeHtml(paymentUrl);
+  const methodOptions = methods.map((method) => {
+    const logo = `<span class="method-logo method-logo-fallback" aria-hidden="true">QR</span>`;
+    return `<form class="method-form" action="/checkout/${encodeURIComponent(code)}/qrph" method="post">
+      <input type="hidden" name="paymentApp" value="${escapeHtml(method.id)}">
+      <button class="method-option" type="submit">
+        ${logo}<span>${escapeHtml(method.name)}</span>
+        <small>Continue with SwiftPay QR Ph</small>
+      </button>
+    </form>`;
+  }).join("");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Secure payment · Denshitx Bank</title>
+  <link rel="stylesheet" href="/checkout-assets/checkout.css">
+</head>
+<body>
+  <main class="checkout-card">
+    <div class="brand-mark" aria-hidden="true">D</div>
+    <p class="eyebrow">Denshitx Bank · Secure checkout</p>
+    <h1>Complete your payment</h1>
+    <p class="description">${displayTitle}</p>
+    <p class="amount">${displayAmount}</p>
+    <p class="notice">Choose a payment method. SwiftPay securely processes your payment.</p>
+    <section class="payment-methods" aria-label="Payment methods">
+      <h2>Pay with</h2>
+      ${methodOptions}
+      <form class="method-form" action="/checkout/${encodeURIComponent(code)}/qrph" method="post">
+        <input type="hidden" name="paymentApp" value="qrph">
+        <button class="method-option qr-method" type="submit">
+          <span class="method-logo method-logo-fallback" aria-hidden="true">QR</span>
+          <span>QR Ph</span>
+          <small>Pay from a supported QR Ph app; settlement is in PHP</small>
+        </button>
+      </form>
+    </section>
+    <p class="notice">The named apps use the same QR Ph checkout. Complete payment only in an app that supports QR Ph. Other banks and e-wallets are available on SwiftPay's payment page.</p>
+    <a class="pay-button" href="${safePaymentUrl}" rel="noopener noreferrer">Other payment methods</a>
+    <p class="powered-by">Payment details are handled by SwiftPay.</p>
+  </main>
+</body>
+</html>`;
+}
+
+function checkoutQrPage({ code, title, amount, currency, paymentApp, phpAmount, phpPerUnit, imageBase64 }) {
+  const displayTitle = escapeHtml(title);
+  const customerAmount = escapeHtml(new Intl.NumberFormat("en", { style: "currency", currency }).format(amount));
+  const settlementAmount = escapeHtml(new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(phpAmount));
+  const rateDescription = currency === "PHP"
+    ? "No currency conversion was needed."
+    : `Rate used: 1 ${escapeHtml(currency)} = ${phpPerUnit.toFixed(6)} PHP.`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>QR Ph payment · Denshitx Bank</title>
+  <link rel="stylesheet" href="/checkout-assets/checkout.css">
+</head>
+<body>
+  <main class="checkout-card">
+    <div class="brand-mark" aria-hidden="true">D</div>
+    <p class="eyebrow">Denshitx Bank · Secure checkout</p>
+    <h1>${paymentApp ? `Scan with ${escapeHtml(paymentApp)}` : "Scan to pay"}</h1>
+    <p class="description">${displayTitle}</p>
+    <p class="amount">${customerAmount}</p>
+    <p class="notice">This is a SwiftPay QR Ph payment. Use ${paymentApp ? escapeHtml(paymentApp) : "a supported banking or wallet app"} only if it supports QR Ph. Settlement is in PHP at ${settlementAmount}. Your bank or wallet may apply its own conversion.</p>
+    <img class="checkout-qr" src="data:image/png;base64,${imageBase64}" alt="QR Ph payment code">
+    <p class="powered-by">${rateDescription}</p>
+    <a class="pay-button" href="/checkout/${encodeURIComponent(code)}">Back to payment methods</a>
+  </main>
+</body>
+</html>`;
+}
+
+function checkoutErrorPage(message) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checkout unavailable · Denshitx Bank</title>
+  <link rel="stylesheet" href="/checkout-assets/checkout.css">
+</head>
+<body>
+  <main class="checkout-card">
+    <div class="brand-mark" aria-hidden="true">D</div>
+    <p class="eyebrow">Denshitx Bank</p>
+    <h1>Checkout unavailable</h1>
+    <p class="description">${escapeHtml(message)}</p>
+  </main>
+</body>
+</html>`;
 }
 
 function createAuthMiddleware(verifyAccessToken, userStore) {
@@ -116,12 +309,49 @@ function requireSuperAdmin(req, res, next) {
   next();
 }
 
-export function createApp({ config, fetchImpl = fetch, verifyAccessToken, requestOtp, verifyOtp, cryptoWidgetService, userStore }) {
+export function createApp({
+  config,
+  fetchImpl = fetch,
+  fxFetchImpl = fetch,
+  verifyAccessToken,
+  requestOtp,
+  verifyOtp,
+  cryptoWidgetService,
+  pushNotificationService,
+  userStore
+}) {
   if (!verifyAccessToken) throw new Error("A JWT verifier is required");
   if (!requestOtp || !verifyOtp) throw new Error("OTP auth handlers are required");
   const app = express();
   const requestProvider = (path, options) => callSwiftPay(config, fetchImpl, path, options);
-
+  const loadPublicPaymentLink = async (code) => {
+    const result = await requestProvider(`payments/links/${encodeURIComponent(code)}`, { auth: "basic" });
+    let paymentUrl;
+    try {
+      paymentUrl = new URL(result.data?.paymentUrl);
+    } catch {
+      throw new SwiftPayError(502, "SwiftPay returned invalid payment-link details");
+    }
+    const amount = Number(result.data?.amount);
+    const currency = currencySchema.parse(result.data?.currency || "PHP");
+    const status = String(result.data?.linkStatus || result.data?.status || "").toUpperCase();
+    if (
+      paymentUrl.protocol !== "https:" ||
+      paymentUrl.username ||
+      paymentUrl.password ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      ["EXPIRED", "INVALIDATED", "INACTIVE", "CANCELLED"].includes(status)
+    ) {
+      throw new SwiftPayError(502, "SwiftPay returned invalid payment-link details");
+    }
+    return {
+      ...result.data,
+      amount,
+      currency,
+      paymentUrl
+    };
+  };
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
   app.use(helmet());
@@ -129,7 +359,12 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     index: "index.html",
     maxAge: "1h"
   }));
+  app.use("/checkout-assets", express.static(fileURLToPath(new URL("../public/checkout-assets/", import.meta.url)), {
+    maxAge: "1h",
+    fallthrough: false
+  }));
   app.use(express.json({ limit: "32kb", strict: true }));
+  app.use(express.urlencoded({ extended: false, limit: "4kb" }));
   app.use(rateLimit({
     windowMs: 60_000,
     limit: 120,
@@ -139,6 +374,94 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
   }));
   const webhookLimiter = rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: "draft-8", legacyHeaders: false });
   app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
+  app.get("/checkout/:code", asyncRoute(async (req, res) => {
+    const code = paymentLinkCodeSchema.parse(req.params.code);
+    try {
+      const link = await loadPublicPaymentLink(code);
+      const methods = checkoutMethodOptions();
+      const title = [link.title, link.description]
+        .find((value) => typeof value === "string" && value.trim())
+        || "Payment request";
+      res.set({
+        "Cache-Control": "no-store",
+        "Content-Security-Policy": "default-src 'self'; img-src 'self' data: https://swiftpay.ph https://*.swiftpay.ph https://swiftpay-qa-gateway-frontend.s3-ap-southeast-1.amazonaws.com https://swiftpay-qa-gateway-frontend.s3.ap-southeast-1.amazonaws.com https://swiftpay-prod-gateway-frontend.s3.ap-southeast-1.amazonaws.com; style-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+      });
+      res.type("html").send(checkoutPage({
+        code,
+        title,
+        amount: link.amount,
+        currency: link.currency,
+        paymentUrl: link.paymentUrl.href,
+        methods
+      }));
+    } catch (error) {
+      if (error instanceof SwiftPayError && [404, 410].includes(error.status)) {
+        res.status(error.status).set("Cache-Control", "no-store").type("html")
+          .send(checkoutErrorPage("This payment link has expired or is no longer available."));
+        return;
+      }
+      throw error;
+    }
+  }));
+  const checkoutPaymentLimiter = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false });
+  app.post("/checkout/:code/qrph", checkoutPaymentLimiter, asyncRoute(async (req, res) => {
+    const code = paymentLinkCodeSchema.parse(req.params.code);
+    const link = await loadPublicPaymentLink(code);
+    const paymentApp = z.enum(["alipay", "naver-pay", "kakao-pay", "toss-bank", "qrph"]).default("qrph")
+      .parse(req.body?.paymentApp || "qrph");
+    const rate = link.currency === "PHP"
+      ? { phpPerUnit: 1, updatedAt: new Date().toISOString() }
+      : await getLatestPhpRate(link.currency, config.currencyApiKey, fxFetchImpl);
+    const phpAmount = Math.round(link.amount * rate.phpPerUnit * 100) / 100;
+    if (!Number.isFinite(phpAmount) || phpAmount < 0.01 || phpAmount > 1_000_000) {
+      throw new FxQuoteError(400, "The converted PHP QR amount is outside the supported range");
+    }
+    const qrInput = {
+      amount: phpAmount,
+      referenceNo: `CKQR-${newReference()}`,
+      currency: "PHP",
+      rejectDuplicatedPayments: true
+    };
+    const bootstrap = await requestProvider("bootstrap/qrph?type=P2M", {
+      method: "POST",
+      body: buildQrPayload(qrInput, config)
+    });
+    const payment = z.object({
+      paymentId: z.string().min(1),
+      paymentStatus: z.string().min(1),
+      referenceNo: z.string().min(1),
+      amount: z.union([z.number(), z.string()]),
+      currency: z.literal("PHP").optional(),
+      qrCode: z.string().min(1)
+    }).safeParse(bootstrap.data);
+    if (!payment.success || !Number.isFinite(Number(payment.data.amount))) {
+      throw new SwiftPayError(502, "SwiftPay returned an incomplete QR Ph payment");
+    }
+    if (Math.round(Number(payment.data.amount) * 100) !== Math.round(phpAmount * 100)) {
+      throw new SwiftPayError(502, "SwiftPay returned a QR Ph amount that does not match the quoted PHP amount");
+    }
+    const image = await requestProvider("payments/qrph/image?type=P2M", {
+      paymentToken: payment.data.paymentId,
+      responseType: "bytes"
+    });
+    const title = [link.title, link.description]
+      .find((value) => typeof value === "string" && value.trim())
+      || "Payment request";
+    res.set({
+      "Cache-Control": "no-store",
+      "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; style-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    });
+    res.type("html").send(checkoutQrPage({
+      code,
+      title,
+      amount: link.amount,
+      currency: link.currency,
+      paymentApp: requestedCheckoutMethods.find((method) => method.id === paymentApp)?.name || null,
+      phpAmount,
+      phpPerUnit: rate.phpPerUnit,
+      imageBase64: image.data.toString("base64")
+    }));
+  }));
   const authLimiter = rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: "draft-8", legacyHeaders: false });
   app.post("/v1/auth/request-otp", authLimiter, asyncRoute(async (req, res) => {
     const input = parse(z.object({ email: z.string().trim().email().max(255) }).strict(), req.body);
@@ -158,6 +481,25 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     const session = await verifyOtp(input.email, input.code);
     if (!session) return res.status(401).json({ error: "invalid_or_expired_code" });
     res.json(session);
+  }));
+  const pushTokenSchema = z.object({
+    token: z.string().trim().min(20).max(4096)
+  }).strict();
+  app.post("/v1/notifications/push-token", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
+    if (!pushNotificationService || !userStore?.upsertPushToken) {
+      throw new SwiftPayError(503, "Incoming payment push notifications are not configured");
+    }
+    const input = parse(pushTokenSchema, req.body);
+    await userStore.upsertPushToken(req.principal.sub, input.token);
+    res.status(204).end();
+  }));
+  app.delete("/v1/notifications/push-token", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
+    if (!userStore?.deletePushToken) {
+      throw new SwiftPayError(503, "Push notification token storage is unavailable");
+    }
+    const input = parse(pushTokenSchema, req.body);
+    await userStore.deletePushToken(req.principal.sub, input.token);
+    res.status(204).end();
   }));
 
   app.post("/v1/webhooks/swiftpay", webhookLimiter, asyncRoute(async (req, res) => {
@@ -204,6 +546,7 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
         paymentId: paymentEvent.data.x_payment_id,
         referenceNo: paymentEvent.data.x_reference_no,
         status: paymentEvent.data.x_payment_status,
+        notifyIncoming: Boolean(pushNotificationService),
         details
       });
       return res.status(200).json({ status: "accepted" });
@@ -256,6 +599,35 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     res.json({ email: req.principal.sub, role: req.principal.role });
   });
 
+  app.get("/v1/wallet/manual-deposits", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
+    const limit = z.coerce.number().int().min(1).max(200).catch(100).parse(req.query.limit);
+    const deposits = await userStore.listManualBankDeposits(limit);
+    res.json(deposits.map((deposit) => ({
+      id: deposit.id,
+      amount: Number(deposit.amount),
+      bankName: deposit.bank_name,
+      referenceNo: deposit.reference_no,
+      notes: deposit.notes,
+      createdAt: deposit.created_at
+    })));
+  }));
+
+  app.get("/v1/wallet/payment-transactions", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
+    if (!userStore?.listPaymentWebhookTransactions) {
+      throw new SwiftPayError(503, "Payment transaction history is unavailable");
+    }
+    const limit = z.coerce.number().int().min(1).max(200).catch(100).parse(req.query.limit);
+    const transactions = await userStore.listPaymentWebhookTransactions(limit);
+    res.json(transactions.map((transaction) => ({
+      id: transaction.id,
+      referenceNo: transaction.reference_no,
+      amount: Number(transaction.amount),
+      currency: transaction.currency,
+      status: transaction.status,
+      createdAt: transaction.received_at
+    })));
+  }));
+
   app.get("/v1/admin/users", requireSuperAdmin, asyncRoute(async (_req, res) => {
     res.json(await userStore.listUsers());
   }));
@@ -296,6 +668,23 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     res.status(201).json({ ...adjustment, affectsProviderFunds: false });
   }));
 
+  app.post("/v1/admin/manual-bank-deposits", requireSuperAdmin, asyncRoute(async (req, res) => {
+    const input = parse(manualBankDepositSchema, req.body);
+    const deposit = await userStore.createManualBankDeposit({
+      id: randomUUID(),
+      ...input
+    }, req.principal.sub);
+    res.status(201).json({
+      id: deposit.id,
+      amount: Number(deposit.amount),
+      bankName: deposit.bank_name,
+      referenceNo: deposit.reference_no,
+      notes: deposit.notes,
+      createdAt: deposit.created_at,
+      affectsProviderFunds: false
+    });
+  }));
+
   app.post("/v1/payments/orders", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
     const input = parse(orderSchema, req.body);
     const payload = buildOrderPayload(input, config);
@@ -322,11 +711,51 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     res.status(result.status).json({ paymentId: token, status: result.data });
   }));
 
+  app.post("/v1/payments/qrph/quote", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
+    const request = parse(fxPhpQuoteRequestSchema, req.body);
+    const currency = "amountKrw" in request ? "KRW" : request.currency;
+    const amount = "amountKrw" in request ? request.amountKrw : request.amount;
+    const rate = await getLatestPhpRate(currency, config.currencyApiKey, fxFetchImpl);
+    const quote = createFxPhpQuote({
+      amount,
+      currency,
+      phpPerUnit: rate.phpPerUnit,
+      rateUpdatedAt: rate.updatedAt,
+      subject: req.principal.sub,
+      signingKey: config.sessionSigningKey
+    });
+    res.json({
+      quoteToken: quote.quoteToken,
+      customerAmount: quote.customerAmount,
+      customerCurrency: quote.customerCurrency,
+      settlementAmountPhp: quote.amountPhp,
+      ratePhpPerUnit: quote.phpPerUnit,
+      rateUpdatedAt: quote.rateUpdatedAt,
+      expiresAt: new Date(quote.expiresAt).toISOString(),
+      settlementCurrency: "PHP",
+      ...(currency === "KRW" ? {
+        customerAmountKrw: quote.customerAmount,
+        ratePhpPerKrw: quote.phpPerUnit
+      } : {})
+    });
+  }));
+
   app.post("/v1/payments/qrph", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
-    const input = parse(qrPaymentSchema, req.body);
-    if (input.currency === "KRW" && !userStore?.recordWebhookEvent) {
-      throw new SwiftPayError(503, "KRW QR payment receipt storage is unavailable");
+    if (["KRW", "USD", "EUR"].includes(req.body?.currency) && !req.body?.quoteToken) {
+      throw new FxQuoteError(400, "Foreign-currency QR payments require a locked PHP quote; request a new quote first");
     }
+    const request = parse(qrPaymentSchema, req.body);
+    const quote = "quoteToken" in request
+      ? verifyFxPhpQuote(request.quoteToken, req.principal.sub, config.sessionSigningKey)
+      : null;
+    const input = quote
+      ? {
+          amount: quote.amountPhp,
+          referenceNo: `${quote.customerCurrency}-${quote.quoteId}`,
+          currency: "PHP",
+          rejectDuplicatedPayments: request.rejectDuplicatedPayments
+        }
+      : request;
     const bootstrap = await requestProvider("bootstrap/qrph?type=P2M", {
       method: "POST",
       body: buildQrPayload(input, config)
@@ -336,7 +765,7 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       paymentStatus: z.string().min(1),
       referenceNo: z.string().min(1),
       amount: z.union([z.number(), z.string()]),
-      currency: qrCurrencySchema.optional(),
+      currency: z.literal("PHP").optional(),
       qrCode: z.string().min(1),
       bankAccountNumber: z.string().nullable().optional(),
       instapayBankCode: z.string().nullable().optional()
@@ -349,6 +778,9 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     if (payment.currency && payment.currency !== input.currency) {
       throw new SwiftPayError(502, "SwiftPay returned a QR Ph payment in a different currency");
     }
+    if (quote && Math.round(Number(payment.amount) * 100) !== Math.round(quote.amountPhp * 100)) {
+      throw new SwiftPayError(502, "SwiftPay returned a PHP QR amount that does not match the locked quote");
+    }
     if (userStore?.recordWebhookEvent) {
       await userStore.recordWebhookEvent({
         eventKey: `payment:${payment.paymentId}`,
@@ -358,7 +790,13 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
         status: payment.paymentStatus,
         details: {
           amount: Number(payment.amount),
-          currency: payment.currency || input.currency
+          currency: payment.currency || input.currency,
+          ...(quote ? {
+            customerAmount: quote.customerAmount,
+            customerCurrency: quote.customerCurrency,
+            ratePhpPerUnit: quote.phpPerUnit,
+            rateUpdatedAt: quote.rateUpdatedAt
+          } : {})
         }
       });
     }
@@ -382,7 +820,18 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       qrCode: payment.qrCode,
       qrImageBase64: qrImageBase64,
       bankAccountNumber: payment.bankAccountNumber ?? null,
-      instapayBankCode: payment.instapayBankCode ?? null
+      instapayBankCode: payment.instapayBankCode ?? null,
+      ...(quote ? {
+        customerAmount: quote.customerAmount,
+        customerCurrency: quote.customerCurrency,
+        ratePhpPerUnit: quote.phpPerUnit,
+        rateUpdatedAt: quote.rateUpdatedAt,
+        settlementCurrency: "PHP",
+        ...(quote.customerCurrency === "KRW" ? {
+          customerAmountKrw: quote.customerAmount,
+          ratePhpPerKrw: quote.phpPerUnit
+        } : {})
+      } : {})
     });
   }));
 
@@ -428,6 +877,9 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
   }));
 
   app.post("/v1/payment-links", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
+    if (!config.publicBaseUrl) {
+      throw new SwiftPayError(503, "Public checkout links are not configured. Set PUBLIC_BASE_URL to this backend's HTTPS address.");
+    }
     const input = parse(paymentLinkSchema, req.body);
     const payload = { ...input, referenceNo: input.referenceNo || newReference() };
     const result = await requestProvider("payments/links", { method: "POST", auth: "basic", body: payload });
@@ -437,20 +889,25 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     } catch {
       throw new SwiftPayError(502, "SwiftPay did not return a valid payment-link URL");
     }
-    if (!result.data?.code || paymentUrl.protocol !== "https:") {
+    const code = paymentLinkCodeSchema.safeParse(result.data?.code);
+    if (!code.success || paymentUrl.protocol !== "https:" || paymentUrl.username || paymentUrl.password) {
       throw new SwiftPayError(502, "SwiftPay did not return a valid payment link");
     }
-    res.status(result.status).json(result.data);
+    const publicPaymentUrl = new URL(`checkout/${encodeURIComponent(code.data)}`, config.publicBaseUrl);
+    res.status(result.status).json({
+      ...result.data,
+      paymentUrl: publicPaymentUrl.href
+    });
   }));
 
   app.get("/v1/payment-links/:code", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
-    const code = z.string().trim().min(1).max(128).parse(req.params.code);
+    const code = paymentLinkCodeSchema.parse(req.params.code);
     const result = await requestProvider(`payments/links/${encodeURIComponent(code)}`, { auth: "basic" });
     res.status(result.status).json(result.data);
   }));
 
   app.delete("/v1/payment-links/:code", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
-    const code = z.string().trim().min(1).max(128).parse(req.params.code);
+    const code = paymentLinkCodeSchema.parse(req.params.code);
     const result = await requestProvider(`payments/links/${encodeURIComponent(code)}/invalidate`, { method: "DELETE", auth: "basic" });
     res.status(result.status).json(result.data);
   }));
@@ -468,7 +925,7 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       channel: input.channel,
       ...(input.type ? { type: input.type } : {}),
       institutionCode: input.institutionCode,
-      creditInformation: { amount: input.amount, ...(input.remarks ? { remarks: input.remarks } : {}) },
+      creditInformation: { amount: input.amount, remarks: input.remarks || "Bank transfer" },
       recipientInformation: input.recipientInformation
     };
     const auditId = userStore
@@ -540,6 +997,19 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     res.status(result.status).json(result.data);
   }));
 
+  app.get("/v1/payment-institutions", requireScope("swiftpay:payments:read"), asyncRoute(async (_req, res) => {
+    const result = await requestProvider("institutions");
+    const institutions = z.array(paymentInstitutionSchema).safeParse(result.data);
+    if (!institutions.success) {
+      throw new SwiftPayError(502, "SwiftPay returned an invalid payment institution catalogue");
+    }
+    res.status(result.status).json(
+      institutions.data
+        .filter((institution) => institution.enabled !== false)
+        .map(({ code, name, logoUrl }) => ({ code, name, logoUrl: trustedInstitutionLogoUrl(logoUrl) }))
+    );
+  }));
+
   app.use((_req, res) => res.status(404).json({ error: "not_found" }));
   app.use((error, _req, res, _next) => {
     const status = error instanceof SwiftPayError || error instanceof TransakError
@@ -547,7 +1017,11 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       : Number.isInteger(error.status) && error.status >= 400 && error.status < 500
         ? error.status
         : 500;
-    const message = status >= 500 && !(error instanceof TransakError) ? "Internal server error" : error.message;
+    const message = status >= 500 &&
+      !(error instanceof TransakError) &&
+      !(error instanceof FxQuoteError)
+      ? "Internal server error"
+      : error.message;
     if (status >= 500) console.error("SwiftPay backend request failed");
     res.status(status).json({
       error: message,

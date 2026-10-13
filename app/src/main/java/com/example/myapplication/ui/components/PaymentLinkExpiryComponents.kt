@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.myapplication.ui.theme.FastPayBlack
 import kotlinx.coroutines.delay
 import java.util.*
 
@@ -82,7 +83,7 @@ fun PaymentLinkExpiryWidget(
     modifier: Modifier = Modifier
 ) {
     val expiry = rememberPaymentLinkExpiry(expiryTimestamp)
-    val isDarkTheme = MaterialTheme.colorScheme.background == Color(0xFF000000)
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val bgColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color(0xFFF5F5F5)
     val textColor = if (isDarkTheme) Color.White else Color(0xFF333333)
 
@@ -131,7 +132,7 @@ fun PaymentLinkExpiryAlert(
     expiry: PaymentLinkExpiry,
     modifier: Modifier = Modifier
 ) {
-    val isDarkTheme = MaterialTheme.colorScheme.background == Color(0xFF000000)
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
 
     if (expiry.isExpired) {
         val bgColor = if (isDarkTheme) Color(0xFFEF4444).copy(alpha = 0.15f) else Color(0xFFEF4444).copy(alpha = 0.1f)
@@ -195,5 +196,3 @@ fun PaymentLinkExpiryAlert(
         }
     }
 }
-
-

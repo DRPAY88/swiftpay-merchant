@@ -7,8 +7,11 @@ import { TransakError } from "../src/transak.js";
 
 const config = {
   swiftPayBaseUrl: new URL("https://provider.example/api/"),
+  publicBaseUrl: new URL("https://merchant.example/"),
   swiftPayAccessKey: "A".repeat(32),
-  swiftPaySecretKey: "S".repeat(32)
+  swiftPaySecretKey: "S".repeat(32),
+  sessionSigningKey: "session-signing-key-for-merchant-tests-123",
+  currencyApiKey: "currencyapi-test-key"
 };
 const tokenPrincipal = {
   sub: "merchant-user-1",
@@ -17,6 +20,7 @@ const tokenPrincipal = {
 let server;
 let baseUrl;
 let requests;
+let fxRequests;
 let failOtpRequest = false;
 let accountResponse;
 let accountResponseStatus;
@@ -29,6 +33,7 @@ const storedPaymentEvents = new Map();
 
 before(async () => {
   requests = [];
+  fxRequests = [];
   accountResponse = { number: "001002003004", balance: 12500.75 };
   accountResponseStatus = 200;
   qrBootstrapStatus = 200;
@@ -37,6 +42,17 @@ before(async () => {
   let app;
   app = createApp({
     config,
+    fxFetchImpl: async (url, options) => {
+      fxRequests.push({ url: url.toString(), options });
+      const baseCurrency = new URL(url).searchParams.get("base_currency");
+      return new Response(JSON.stringify({
+        meta: { base_currency: baseCurrency, last_updated_at: new Date().toISOString() },
+        data: { PHP: { code: "PHP", value: ({ KRW: 0.0425, USD: 57, EUR: 62 })[baseCurrency] } }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    },
     requestOtp: async () => {
       if (failOtpRequest) throw new Error("OTP email provider rejected request (HTTP 403)");
     },
@@ -77,10 +93,105 @@ before(async () => {
           headers: { "content-type": "application/json" }
         });
       }
+      const paymentLinkData = {
+        code: "PL-1",
+        merchantId: 42,
+        paymentUrl: "https://pay.example/link/PL-1",
+        amount: 125.5,
+        currency: "PHP",
+        title: "Invoice <script>alert(1)</script>",
+        description: "Invoice & order"
+      };
+      const paymentInstitutions = [
+        {
+          code: "BPI",
+          name: "Bank of the Philippine Islands",
+          logoUrl: "https://assets.swiftpay.ph/institutions/bpi.png",
+          enabled: true,
+          currencies: ["PHP"]
+        },
+        {
+          code: "DISABLED",
+          name: "Disabled institution",
+          logoUrl: "https://assets.swiftpay.ph/institutions/disabled.png",
+          enabled: false,
+          currencies: ["PHP"]
+        },
+        {
+          code: "UNTRUSTED",
+          name: "Untrusted logo host",
+          logoUrl: "https://logos.example/bank.png",
+          enabled: true,
+          currencies: ["PHP"]
+        },
+        {
+          code: "VBANK",
+          name: "VBank",
+          logoUrl: "https://swiftpay-qa-gateway-frontend.s3-ap-southeast-1.amazonaws.com/static/media/bank-icons/vbank.png",
+          enabled: true,
+          currencies: ["PHP"]
+        },
+        {
+          code: "NO_LOGO",
+          name: "No logo institution",
+          logoUrl: null,
+          enabled: true,
+          currencies: ["PHP"]
+        },
+        {
+          code: "ALIPAY",
+          name: "Alipay",
+          logoUrl: "https://assets.swiftpay.ph/institutions/alipay.png",
+          enabled: true,
+          live: true,
+          currencies: ["PHP", "USD", "EUR"],
+          minAmount: 1,
+          maxAmount: 100000
+        },
+        {
+          code: "NAVERPAY",
+          name: "Naver Pay",
+          logoUrl: "https://assets.swiftpay.ph/institutions/naver-pay.png",
+          enabled: true,
+          live: true,
+          currencies: ["PHP", "USD", "EUR"]
+        },
+        {
+          code: "KAKAOPAY",
+          name: "Kakao Pay",
+          logoUrl: "https://assets.swiftpay.ph/institutions/kakao-pay.png",
+          enabled: true,
+          live: true,
+          currencies: ["PHP", "USD", "EUR"]
+        },
+        {
+          code: "TOSSBANK",
+          name: "Toss Bank",
+          logoUrl: "https://assets.swiftpay.ph/institutions/toss-bank.png",
+          enabled: true,
+          live: true,
+          currencies: ["PHP", "USD", "EUR"]
+        }
+      ];
       const response = url.pathname.endsWith("/payments/links")
-        ? { status: 200, body: { code: "PL-1", paymentUrl: "https://pay.example/link/PL-1" } }
-        : url.pathname.endsWith("/bootstrap/qrph")
+        ? { status: 200, body: paymentLinkData }
+        : url.pathname.endsWith("/payments/links/PL-USD")
           ? {
+              status: 200,
+              body: {
+                ...paymentLinkData,
+                code: "PL-USD",
+                amount: 20,
+                currency: "USD",
+                paymentUrl: "https://pay.example/link/PL-USD"
+              }
+            }
+        : url.pathname.endsWith("/payments/links/PL-1")
+          ? { status: 200, body: paymentLinkData }
+          : url.pathname === "/api/institutions"
+            ? { status: 200, body: paymentInstitutions }
+          : url.pathname.endsWith("/bootstrap/qrph")
+            ? {
                 status: 200,
                 body: {
                   paymentId: "5008f066-d68a-4ef2-b794-8596bac268f6",
@@ -93,15 +204,15 @@ before(async () => {
                   qrCode: "000201010212"
                 }
               }
-        : url.pathname.endsWith("/payments/status")
-          ? { status: 200, body: "EXECUTED" }
-          : url.pathname.endsWith("/disbursements/account")
-            ? { status: accountResponseStatus, body: accountResponse }
-          : url.pathname.endsWith("/disbursements/send")
-            ? disbursementFailure || { status: 200, body: { id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01" } }
-            : url.pathname.endsWith("/disbursements")
-              ? { status: 200, body: disbursementPage }
-            : { status: 202, body: { customerRedirectUrl: "https://pay.example/checkout" } };
+            : url.pathname.endsWith("/payments/status")
+              ? { status: 200, body: "EXECUTED" }
+              : url.pathname.endsWith("/disbursements/account")
+                ? { status: accountResponseStatus, body: accountResponse }
+                : url.pathname.endsWith("/disbursements/send")
+                  ? disbursementFailure || { status: 200, body: { id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01" } }
+                  : url.pathname.endsWith("/disbursements")
+                    ? { status: 200, body: disbursementPage }
+                    : { status: 202, body: { customerRedirectUrl: "https://pay.live.swiftpay.ph/checkout" } };
       return new Response(JSON.stringify(response.body), {
         status: response.status,
         headers: { "content-type": "application/json" }
@@ -264,26 +375,112 @@ test("QR Ph bootstrap signs amount and returns the provider PNG", async () => {
   assert.equal(imageRequest.options.headers.Accept, "image/png");
 });
 
-test("KRW QR Ph bootstrap signs and returns KRW without changing the amount", async () => {
+test("KRW customer price is quoted and QR bootstrap charges the locked PHP amount", async () => {
+  fxRequests = [];
+  const quoteResponse = await fetch(`${baseUrl}/v1/payments/qrph/quote`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amountKrw: 12000 })
+  });
+  assert.equal(quoteResponse.status, 200);
+  const quote = await quoteResponse.json();
+  assert.equal(quote.customerAmountKrw, 12000);
+  assert.equal(quote.settlementAmountPhp, 510);
+  assert.equal(quote.ratePhpPerKrw, 0.0425);
+  assert.equal(quote.settlementCurrency, "PHP");
+  assert.ok(quote.quoteToken);
+  assert.ok(new Date(quote.expiresAt).getTime() - Date.now() <= 5 * 60_000);
+  assert.equal(fxRequests.length, 1);
+  const fxRequest = new URL(fxRequests[0].url);
+  assert.equal(fxRequest.href, "https://api.currencyapi.com/v3/latest?base_currency=KRW&currencies=PHP");
+  assert.equal(fxRequests[0].options.headers.apikey, "currencyapi-test-key");
+  assert.equal(fxRequest.searchParams.has("apikey"), false);
+
   const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
     method: "POST",
     headers: {
       authorization: "Bearer valid-test-token",
       "content-type": "application/json"
     },
-    body: JSON.stringify({ amount: 12000, referenceNo: "QR-KRW-1", currency: "KRW" })
+    body: JSON.stringify({ quoteToken: quote.quoteToken })
   });
   assert.equal(response.status, 201);
   const payment = await response.json();
-  assert.equal(payment.amount, 12000);
-  assert.equal(payment.currency, "KRW");
+  assert.equal(payment.amount, 510);
+  assert.equal(payment.currency, "PHP");
+  assert.equal(payment.customerAmountKrw, 12000);
+  assert.equal(payment.settlementCurrency, "PHP");
 
   const bootstrapRequest = requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M"));
   const payload = JSON.parse(bootstrapRequest.options.body);
-  assert.equal(payload.x_amount, 12000);
-  assert.equal(payload.x_currency, "KRW");
+  assert.equal(payload.x_amount, 510);
+  assert.equal(payload.x_currency, "PHP");
   assert.equal(verifySwiftPaySignature(payload, payload.signature, config.swiftPaySecretKey), true);
-  assert.deepEqual(storedPaymentEvents.get(`payment:${payment.paymentId}`).details, { amount: 12000, currency: "KRW" });
+  assert.deepEqual(storedPaymentEvents.get(`payment:${payment.paymentId}`).details, {
+    amount: 510,
+    currency: "PHP",
+    customerAmount: 12000,
+    customerCurrency: "KRW",
+    ratePhpPerUnit: 0.0425,
+    rateUpdatedAt: quote.rateUpdatedAt
+  });
+});
+
+test("USD and EUR QR quotes use the customer currency and lock PHP settlement", async () => {
+  for (const [currency, amount, rate, expectedPhp] of [["USD", 20, 57, 1140], ["EUR", 10.5, 62, 651]]) {
+    const response = await fetch(`${baseUrl}/v1/payments/qrph/quote`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-test-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ amount, currency })
+    });
+    assert.equal(response.status, 200);
+    const quote = await response.json();
+    assert.equal(quote.customerAmount, amount);
+    assert.equal(quote.customerCurrency, currency);
+    assert.equal(quote.ratePhpPerUnit, rate);
+    assert.equal(quote.settlementAmountPhp, expectedPhp);
+    assert.equal(quote.settlementCurrency, "PHP");
+
+    const paymentResponse = await fetch(`${baseUrl}/v1/payments/qrph`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-test-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ quoteToken: quote.quoteToken })
+    });
+    assert.equal(paymentResponse.status, 201);
+    const payment = await paymentResponse.json();
+    assert.equal(payment.amount, expectedPhp);
+    assert.equal(payment.currency, "PHP");
+    assert.equal(payment.customerAmount, amount);
+    assert.equal(payment.customerCurrency, currency);
+    assert.equal(JSON.parse(requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).options.body).x_amount, expectedPhp);
+  }
+});
+
+test("QR Ph rejects direct KRW amounts instead of sending an unsupported currency", async () => {
+  const previousBootstrapCount = requests.filter(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).length;
+  const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 12000, referenceNo: "QR-KRW-OLD", currency: "KRW" })
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /locked PHP quote/);
+  assert.equal(
+    requests.filter(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).length,
+    previousBootstrapCount
+  );
 });
 
 test("QR Ph signature verification rejects altered fields and malformed signatures", () => {
@@ -334,7 +531,7 @@ test("payment order requires a verified scoped bearer token and signs upstream",
   assert.equal(response.status, 202);
   const result = await response.json();
   assert.equal(result.status, "PENDING");
-  assert.equal(result.redirectUrl, "https://pay.example/checkout");
+  assert.equal(result.redirectUrl, "https://pay.live.swiftpay.ph/checkout");
   assert.equal(requests.at(-1).url, "https://provider.example/api/orders");
   const providerBody = JSON.parse(requests.at(-1).options.body);
   assert.equal(providerBody.x_amount, 15);
@@ -436,7 +633,7 @@ test("wallet balance reports when SwiftPay has no configured disbursement accoun
   }
 });
 
-test("payment links use Basic auth and require a fixed PHP amount", async () => {
+test("payment links use Basic auth and require a fixed supported-currency amount", async () => {
   const response = await fetch(`${baseUrl}/v1/payment-links`, {
     method: "POST",
     headers: {
@@ -446,10 +643,41 @@ test("payment links use Basic auth and require a fixed PHP amount", async () => 
     body: JSON.stringify({ amount: 125.5, currency: "PHP", description: "Invoice" })
   });
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).code, "PL-1");
+  const paymentLink = await response.json();
+  assert.equal(paymentLink.code, "PL-1");
+  assert.equal(paymentLink.paymentUrl, "https://merchant.example/checkout/PL-1");
   assert.equal(requests.at(-1).url, "https://provider.example/api/payments/links");
   assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
   assert.equal(JSON.parse(requests.at(-1).options.body).amount, 125.5);
+  assert.equal(JSON.parse(requests.at(-1).options.body).currency, "PHP");
+
+  const euroLink = await fetch(`${baseUrl}/v1/payment-links`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 20, currency: "EUR", description: "Euro invoice" })
+  });
+  assert.equal(euroLink.status, 200);
+  assert.equal(JSON.parse(requests.at(-1).options.body).currency, "EUR");
+
+  const checkoutPageResponse = await fetch(`${baseUrl}${new URL(paymentLink.paymentUrl).pathname}`);
+  assert.equal(checkoutPageResponse.status, 200);
+  assert.match(checkoutPageResponse.headers.get("content-type"), /text\/html/);
+  assert.match(checkoutPageResponse.headers.get("cache-control"), /no-store/);
+  const checkoutPage = await checkoutPageResponse.text();
+  assert.match(checkoutPage, /Denshitx Bank/);
+  assert.match(checkoutPage, /125\.50/);
+  assert.match(checkoutPage, /Invoice &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(checkoutPage, /<script>/);
+  assert.match(checkoutPage, /https:\/\/pay\.example\/link\/PL-1/);
+  for (const method of ["Alipay", "Naver Pay", "Kakao Pay", "Toss Bank"]) {
+    assert.match(checkoutPage, new RegExp(method.replace(" ", "\\s")));
+  }
+  assert.match(checkoutPage, /action="\/checkout\/PL-1\/qrph"/);
+  assert.match(checkoutPage, /same QR Ph checkout/);
+  assert.match(checkoutPage, /Other payment methods/);
 
   const invalid = await fetch(`${baseUrl}/v1/payment-links`, {
     method: "POST",
@@ -460,6 +688,91 @@ test("payment links use Basic auth and require a fixed PHP amount", async () => 
     body: JSON.stringify({ amount: 0, currency: "PHP" })
   });
   assert.equal(invalid.status, 400);
+});
+
+test("self-hosted Alipay choice uses SwiftPay QR Ph without claiming direct app support", async () => {
+  const response = await fetch(`${baseUrl}/checkout/PL-1/qrph`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "paymentApp=alipay"
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Scan with Alipay/);
+  assert.match(html, /only if it supports QR Ph/);
+  const qrRequest = JSON.parse(requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).options.body);
+  assert.equal(qrRequest.x_currency, "PHP");
+  assert.equal(qrRequest.x_amount, 125.5);
+});
+
+test("self-hosted checkout QR Ph converts USD link prices to a PHP settlement QR", async () => {
+  fxRequests = [];
+  const response = await fetch(`${baseUrl}/checkout/PL-USD/qrph`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: ""
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  const html = await response.text();
+  assert.match(html, /\$20\.00/);
+  assert.match(html, /₱1,140\.00/);
+  assert.match(html, /data:image\/png;base64,/);
+  assert.match(html, /Rate used: 1 USD = 57\.000000 PHP/);
+  assert.equal(new URL(fxRequests[0].url).searchParams.get("base_currency"), "USD");
+  const bootstrapPayload = JSON.parse(requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).options.body);
+  assert.equal(bootstrapPayload.x_currency, "PHP");
+  assert.equal(bootstrapPayload.x_amount, 1140);
+});
+
+test("payment institution catalogue returns enabled official logos only", async () => {
+  const response = await fetch(`${baseUrl}/v1/payment-institutions`, {
+    headers: { authorization: "Bearer valid-test-token" }
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), [
+    {
+      code: "BPI",
+      name: "Bank of the Philippine Islands",
+      logoUrl: "https://assets.swiftpay.ph/institutions/bpi.png"
+    },
+    {
+      code: "UNTRUSTED",
+      name: "Untrusted logo host",
+      logoUrl: null
+    },
+    {
+      code: "VBANK",
+      name: "VBank",
+      logoUrl: "https://swiftpay-qa-gateway-frontend.s3-ap-southeast-1.amazonaws.com/static/media/bank-icons/vbank.png"
+    },
+    {
+      code: "NO_LOGO",
+      name: "No logo institution",
+      logoUrl: null
+    },
+    {
+      code: "ALIPAY",
+      name: "Alipay",
+      logoUrl: "https://assets.swiftpay.ph/institutions/alipay.png"
+    },
+    {
+      code: "NAVERPAY",
+      name: "Naver Pay",
+      logoUrl: "https://assets.swiftpay.ph/institutions/naver-pay.png"
+    },
+    {
+      code: "KAKAOPAY",
+      name: "Kakao Pay",
+      logoUrl: "https://assets.swiftpay.ph/institutions/kakao-pay.png"
+    },
+    {
+      code: "TOSSBANK",
+      name: "Toss Bank",
+      logoUrl: "https://assets.swiftpay.ph/institutions/toss-bank.png"
+    }
+  ]);
+  assert.equal(requests.at(-1).url, "https://provider.example/api/institutions");
 });
 
 test("disbursement is represented as pending after provider acceptance", async () => {
@@ -481,6 +794,58 @@ test("disbursement is represented as pending after provider acceptance", async (
   assert.equal((await appResponse.json()).status, "PENDING");
   assert.equal(requests.at(-1).url, "https://provider.example/api/disbursements/send");
   assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
+  assert.equal(JSON.parse(requests.at(-1).options.body).creditInformation.remarks, "Bank transfer");
+});
+
+test("disbursement trims supplied remarks and replaces blank remarks with a nonblank default", async () => {
+  const headers = {
+    authorization: "Bearer valid-test-token",
+    "content-type": "application/json"
+  };
+  const body = {
+    amount: 75,
+    referenceNo: "TRANSFER-REMARKS-1",
+    channel: "INSTAPAY",
+    institutionCode: "TESTBANK",
+    recipientInformation: { accountNumber: "123456", fullName: "Test Recipient" }
+  };
+
+  const supplied = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...body, remarks: "  Rent payment  " })
+  });
+  assert.equal(supplied.status, 202);
+  assert.equal(JSON.parse(requests.at(-1).options.body).creditInformation.remarks, "Rent payment");
+
+  const blank = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...body, referenceNo: "TRANSFER-REMARKS-2", remarks: "   " })
+  });
+  assert.equal(blank.status, 202);
+  assert.equal(JSON.parse(requests.at(-1).options.body).creditInformation.remarks, "Bank transfer");
+});
+
+test("disbursement rejects a one-part recipient name before contacting SwiftPay", async () => {
+  const callCount = requests.length;
+  const response = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      amount: 75,
+      referenceNo: "TRANSFER-INCOMPLETE-NAME",
+      channel: "INSTAPAY",
+      institutionCode: "TESTBANK",
+      recipientInformation: { accountNumber: "123456", fullName: "Teodoro" }
+    })
+  });
+  assert.equal(response.status, 400);
+  assert.equal(requests.length, callCount);
+  assert.match((await response.json()).error, /full legal name must include the given name and surname/i);
 });
 
 test("transfer errors preserve SwiftPay error code and safe support reference", async () => {

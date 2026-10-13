@@ -36,6 +36,15 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
         actor_email TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS manual_bank_deposits (
+        id TEXT PRIMARY KEY,
+        amount NUMERIC(14, 2) NOT NULL CHECK (amount > 0),
+        bank_name TEXT NOT NULL,
+        reference_no TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        actor_email TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
       CREATE TABLE IF NOT EXISTS swiftpay_webhook_events (
         event_key TEXT PRIMARY KEY,
         event_type TEXT NOT NULL CHECK (event_type IN ('payment', 'disbursement')),
@@ -47,8 +56,33 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
         currency TEXT,
         received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS merchant_push_tokens (
+        token TEXT PRIMARY KEY,
+        email TEXT NOT NULL REFERENCES merchant_users(email) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS merchant_push_tokens_email ON merchant_push_tokens (email);
+      CREATE TABLE IF NOT EXISTS incoming_payment_push_outbox (
+        event_key TEXT PRIMARY KEY,
+        payment_id TEXT NOT NULL,
+        reference_no TEXT NOT NULL,
+        amount NUMERIC(14, 2),
+        currency TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        locked_until TIMESTAMPTZ,
+        sent_at TIMESTAMPTZ,
+        last_error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS incoming_payment_push_outbox_due
+        ON incoming_payment_push_outbox (available_at, created_at)
+        WHERE sent_at IS NULL;
       ALTER TABLE swiftpay_webhook_events ADD COLUMN IF NOT EXISTS amount NUMERIC(14, 2);
       ALTER TABLE swiftpay_webhook_events ADD COLUMN IF NOT EXISTS currency TEXT;
+      ALTER TABLE incoming_payment_push_outbox ALTER COLUMN amount DROP NOT NULL;
+      ALTER TABLE incoming_payment_push_outbox ALTER COLUMN currency DROP NOT NULL;
       CREATE INDEX IF NOT EXISTS swiftpay_webhook_events_payment_id
         ON swiftpay_webhook_events (payment_id)
         WHERE payment_id IS NOT NULL;
@@ -160,6 +194,33 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
     });
   }
 
+  async function createManualBankDeposit({ id, amount, bankName, referenceNo, notes }, actor) {
+    return withAudit(
+      actor,
+      "manual_bank_deposit.recorded",
+      referenceNo,
+      { amount, currency: "PHP", bankName, referenceNo },
+      async (client) => {
+        const result = await client.query(
+          `INSERT INTO manual_bank_deposits (id, amount, bank_name, reference_no, notes, actor_email)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, amount, bank_name, reference_no, notes, actor_email AS actor, created_at`,
+          [id, amount, bankName, referenceNo, notes, actor]
+        );
+        return result.rows[0];
+      }
+    );
+  }
+
+  async function listManualBankDeposits(limit) {
+    const result = await pool.query(
+      `SELECT id, amount, bank_name, reference_no, notes, created_at
+       FROM manual_bank_deposits ORDER BY created_at DESC, id DESC LIMIT $1`,
+      [limit]
+    );
+    return result.rows;
+  }
+
   async function createTransferIntent(actor, referenceNo, details) {
     try {
       const result = await pool.query(
@@ -189,26 +250,163 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
   }
 
   async function recordWebhookEvent(event) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const inserted = await client.query(
+        `INSERT INTO swiftpay_webhook_events
+           (event_key, event_type, payment_id, reference_no, status, details, amount, currency)
+         VALUES ($1, $2, $3, $4, $5, '{}', $6, $7)
+         ON CONFLICT (event_key) DO NOTHING
+         RETURNING event_key`,
+        [
+          event.eventKey,
+          event.eventType,
+          event.paymentId || null,
+          event.referenceNo,
+          event.status,
+          event.amount ?? event.details?.amount ?? null,
+          event.currency ?? event.details?.currency ?? null
+        ]
+      );
+      const existing = await client.query(
+        "SELECT details, status FROM swiftpay_webhook_events WHERE event_key = $1 FOR UPDATE",
+        [event.eventKey]
+      );
+      const previousStatus = inserted.rows.length > 0 ? null : existing.rows[0].status;
+      const details = { ...existing.rows[0].details, ...event.details };
+      await client.query(
+        `UPDATE swiftpay_webhook_events
+         SET payment_id = COALESCE($2, payment_id),
+           status = $3,
+           details = $4,
+           amount = COALESCE($5, amount),
+           currency = COALESCE($6, currency),
+           received_at = NOW()
+         WHERE event_key = $1`,
+        [
+          event.eventKey,
+          event.paymentId || null,
+          event.status,
+          JSON.stringify(details),
+          event.amount ?? event.details?.amount ?? null,
+          event.currency ?? event.details?.currency ?? null
+        ]
+      );
+      const amount = event.amount ?? event.details?.amount ?? details.amount;
+      const currency = event.currency ?? event.details?.currency ?? details.currency;
+      if (
+        event.notifyIncoming &&
+        event.eventType === "payment" &&
+        event.status === "EXECUTED" &&
+        previousStatus !== "EXECUTED" &&
+        event.paymentId
+      ) {
+        await client.query(
+          `INSERT INTO incoming_payment_push_outbox
+             (event_key, payment_id, reference_no, amount, currency)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (event_key) DO NOTHING`,
+          [`incoming:${event.paymentId}`, event.paymentId, event.referenceNo, amount, currency]
+        );
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function upsertPushToken(email, token) {
+    const user = await getUser(email);
+    if (!user || user.status !== "active") throw new AdminStoreError(401, "unauthorized");
     await pool.query(
-      `INSERT INTO swiftpay_webhook_events
-         (event_key, event_type, payment_id, reference_no, status, details, amount, currency)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (event_key) DO UPDATE
-         SET status = EXCLUDED.status,
-           details = EXCLUDED.details,
-           amount = COALESCE(EXCLUDED.amount, swiftpay_webhook_events.amount),
-           currency = COALESCE(EXCLUDED.currency, swiftpay_webhook_events.currency),
-           received_at = NOW()`,
-      [
-        event.eventKey,
-        event.eventType,
-        event.paymentId || null,
-        event.referenceNo,
-        event.status,
-        JSON.stringify(event.details),
-        event.amount ?? event.details?.amount ?? null,
-        event.currency ?? event.details?.currency ?? null
-      ]
+      `INSERT INTO merchant_push_tokens (token, email)
+       VALUES ($1, $2)
+       ON CONFLICT (token) DO UPDATE
+       SET email = EXCLUDED.email, updated_at = NOW()`,
+      [token, email.toLowerCase()]
+    );
+  }
+
+  async function deletePushToken(email, token) {
+    await pool.query(
+      "DELETE FROM merchant_push_tokens WHERE email = $1 AND token = $2",
+      [email.toLowerCase(), token]
+    );
+  }
+
+  async function listActivePushTokens() {
+    const result = await pool.query(
+      `SELECT token FROM merchant_push_tokens t
+       JOIN merchant_users u ON u.email = t.email
+       WHERE u.status = 'active'
+       ORDER BY t.created_at`
+    );
+    return result.rows.map((row) => row.token);
+  }
+
+  async function removePushToken(token) {
+    await pool.query("DELETE FROM merchant_push_tokens WHERE token = $1", [token]);
+  }
+
+  async function claimIncomingPaymentPushes(limit = 10) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const due = await client.query(
+        `SELECT event_key
+         FROM incoming_payment_push_outbox
+         WHERE sent_at IS NULL
+           AND available_at <= NOW()
+           AND (locked_until IS NULL OR locked_until < NOW())
+         ORDER BY created_at
+         LIMIT $1
+         FOR UPDATE`,
+        [limit]
+      );
+      const claimed = [];
+      for (const row of due.rows) {
+        const result = await client.query(
+          `UPDATE incoming_payment_push_outbox
+           SET locked_until = NOW() + INTERVAL '90 seconds',
+               attempts = attempts + 1
+           WHERE event_key = $1
+           RETURNING event_key, payment_id, reference_no, amount, currency, attempts`,
+          [row.event_key]
+        );
+        if (result.rows[0]) claimed.push(result.rows[0]);
+      }
+      await client.query("COMMIT");
+      return claimed;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function completeIncomingPaymentPush(eventKey) {
+    await pool.query(
+      `UPDATE incoming_payment_push_outbox
+       SET sent_at = NOW(), locked_until = NULL, last_error = NULL
+       WHERE event_key = $1`,
+      [eventKey]
+    );
+  }
+
+  async function retryIncomingPaymentPush(eventKey, attempts) {
+    const delaySeconds = Math.min(3600, 15 * (2 ** Math.min(Math.max(attempts - 1, 0), 8)));
+    await pool.query(
+      `UPDATE incoming_payment_push_outbox
+       SET available_at = NOW() + ($2 * INTERVAL '1 second'),
+           locked_until = NULL,
+           last_error = 'delivery_failed'
+       WHERE event_key = $1`,
+      [eventKey, delaySeconds]
     );
   }
 
@@ -220,6 +418,21 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
       [paymentId]
     );
     return result.rows[0] || null;
+  }
+
+  async function listPaymentWebhookTransactions(limit) {
+    const result = await pool.query(
+      `SELECT payment_id AS id, reference_no, amount, currency, status, received_at
+       FROM swiftpay_webhook_events
+       WHERE event_type = 'payment'
+         AND payment_id IS NOT NULL
+         AND amount IS NOT NULL
+         AND currency = 'PHP'
+       ORDER BY received_at DESC, payment_id DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return result.rows;
   }
 
   async function getKrwQrPaymentBalance() {
@@ -266,10 +479,20 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
     setMerchantStatus,
     listAudit,
     createAdjustment,
+    createManualBankDeposit,
+    listManualBankDeposits,
     createTransferIntent,
     finishTransferIntent,
     recordWebhookEvent,
+    upsertPushToken,
+    deletePushToken,
+    listActivePushTokens,
+    removePushToken,
+    claimIncomingPaymentPushes,
+    completeIncomingPaymentPush,
+    retryIncomingPaymentPush,
     getPaymentWebhookStatus,
+    listPaymentWebhookTransactions,
     getKrwQrPaymentBalance,
     listAdjustments,
     adjustmentTotal,

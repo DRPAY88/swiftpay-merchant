@@ -36,7 +36,11 @@ class SwiftPaySDKBridge(
     private val onScanQrToSend: () -> Unit,
     private val onGetTransferInstitutions: () -> Unit,
     private val onSendDisbursement: ((Double, String, String, String) -> Unit)? = null,
-    private val onGenerateDynamicQrWithCurrency: ((Double, String) -> Unit)? = null
+    private val onGenerateDynamicQrWithCurrency: ((Double, String) -> Unit)? = null,
+    private val onQuoteKrwPhpQr: ((Int) -> Unit)? = null,
+    private val onGenerateQuotedKrwPhpQr: ((String) -> Unit)? = null,
+    private val onQuoteFxPhpQr: ((Double, String) -> Unit)? = null,
+    private val onGenerateQuotedFxPhpQr: ((String) -> Unit)? = null
 ) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -110,6 +114,40 @@ class SwiftPaySDKBridge(
                 val amount = request.data?.jsonObject?.get("amount")?.jsonPrimitive?.doubleOrNull ?: 0.0
                 val currency = request.data?.jsonObject?.get("currency")?.jsonPrimitive?.content ?: "PHP"
                 onGenerateDynamicQrWithCurrency?.invoke(amount, currency) ?: onGenerateDynamicQr(amount)
+            }
+            "quote_krw_php_qr" -> {
+                val amountKrw = request.data?.jsonObject?.get("amountKrw")?.jsonPrimitive?.content?.toIntOrNull()
+                if (amountKrw != null && onQuoteKrwPhpQr != null) {
+                    onQuoteKrwPhpQr.invoke(amountKrw)
+                } else {
+                    sendError("Unable to request a KRW-to-PHP quote", action = "quote_krw_php_qr")
+                }
+            }
+            "quote_fx_php_qr" -> {
+                val data = request.data?.jsonObject
+                val amount = data?.get("amount")?.jsonPrimitive?.doubleOrNull
+                val currency = data?.get("currency")?.jsonPrimitive?.content
+                if (amount != null && !currency.isNullOrBlank() && onQuoteFxPhpQr != null) {
+                    onQuoteFxPhpQr.invoke(amount, currency)
+                } else {
+                    sendError("Provide an amount and KRW, USD, or EUR currency for the PHP QR quote", action = "quote_fx_php_qr")
+                }
+            }
+            "generate_quoted_krw_php_qr" -> {
+                val quoteToken = request.data?.jsonObject?.get("quoteToken")?.jsonPrimitive?.content
+                if (!quoteToken.isNullOrBlank() && onGenerateQuotedKrwPhpQr != null) {
+                    onGenerateQuotedKrwPhpQr.invoke(quoteToken)
+                } else {
+                    sendError("Request a new KRW-to-PHP quote before creating this QR", action = "generate_quoted_krw_php_qr")
+                }
+            }
+            "generate_quoted_fx_php_qr" -> {
+                val quoteToken = request.data?.jsonObject?.get("quoteToken")?.jsonPrimitive?.content
+                if (!quoteToken.isNullOrBlank() && onGenerateQuotedFxPhpQr != null) {
+                    onGenerateQuotedFxPhpQr.invoke(quoteToken)
+                } else {
+                    sendError("Request a new FX-to-PHP quote before creating this QR", action = "generate_quoted_fx_php_qr")
+                }
             }
             "start_deposit_wizard" -> onStartDepositWizard()
             "scan_qr_to_send" -> onScanQrToSend()
