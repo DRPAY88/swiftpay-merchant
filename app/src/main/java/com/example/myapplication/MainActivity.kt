@@ -17,7 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PersonOutline
-import androidx.compose.material.icons.rounded.Payment
+import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -256,11 +256,7 @@ fun SwiftPayApp() {
                 navigationSuiteItems = {
                     val activeColor = FastPayBlue
                     val inactiveColor = Color.Gray.copy(alpha = 0.6f)
-                    val collectRouteSelected = currentRoute is Route.MiniApp && (
-                        currentRoute.initialPath == "topup-page" ||
-                            currentRoute.initialPath == "qr-page" ||
-                            currentRoute.initialPath == "payment-link-page"
-                        )
+                    val qrRouteSelected = currentRoute is Route.MiniApp && currentRoute.initialPath == "qr-page"
 
                     item(
                         selected = currentRoute == Route.Home,
@@ -282,21 +278,21 @@ fun SwiftPayApp() {
                         },
                     )
                     item(
-                        selected = collectRouteSelected,
-                        onClick = { navController.navigate(Route.MiniApp("topup-page")) },
+                        selected = qrRouteSelected,
+                        onClick = { navController.navigate(Route.MiniApp("qr-page")) },
                         icon = {
                             Icon(
-                                Icons.Rounded.Payment,
-                                contentDescription = "Collect",
-                                tint = if (collectRouteSelected) activeColor else inactiveColor
+                                Icons.Rounded.QrCode2,
+                                contentDescription = "QR payments",
+                                tint = if (qrRouteSelected) activeColor else inactiveColor
                             )
                         },
                         label = {
                             Text(
-                                "Collect",
+                                "QR",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (collectRouteSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (collectRouteSelected) activeColor else inactiveColor
+                                fontWeight = if (qrRouteSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (qrRouteSelected) activeColor else inactiveColor
                             )
                         },
                     )

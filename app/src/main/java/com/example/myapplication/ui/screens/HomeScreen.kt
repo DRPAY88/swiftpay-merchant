@@ -127,6 +127,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(24.dp))
             QuickActionsSection(
                 onCollect = { onLaunchMiniApp("topup-page") },
+                onQrClick = { onLaunchMiniApp("qr-page") },
                 onTransfer = { onLaunchMiniApp("disbursement-page") },
                 onPaymentLink = { onLaunchMiniApp("payment-link-page") },
                 onNavigateToWallet = onNavigateToWallet,
@@ -263,6 +264,7 @@ fun WalletBalanceCard(
 @Composable
 fun QuickActionsSection(
     onCollect: () -> Unit,
+    onQrClick: () -> Unit,
     onTransfer: () -> Unit,
     onPaymentLink: () -> Unit,
     onNavigateToWallet: () -> Unit,
@@ -282,7 +284,7 @@ fun QuickActionsSection(
         Spacer(modifier = Modifier.height(14.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             QuickAction(Icons.Rounded.AccountBalance, "Cash in", FastPayMeshBlue, onDeposit, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Activity", FastPayMeshBlue, onNavigateToWallet, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.QrCode2, "QR", FastPayMeshBlue, onQrClick, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Terminal, "API docs", Color(0xFFF3EBDD), onDeveloperDocs, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Person, "Profile", FastPayMeshBlue, onProfileClick, Modifier.weight(1f))
         }

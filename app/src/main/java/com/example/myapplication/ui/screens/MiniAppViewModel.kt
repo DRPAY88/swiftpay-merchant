@@ -132,7 +132,11 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         return settingsManager.createSwiftPayService()
     }
 
-    private fun launchProcessingAction(message: String, action: suspend () -> Unit) {
+    private fun launchProcessingAction(
+        message: String,
+        bridgeAction: String? = null,
+        action: suspend () -> Unit
+    ) {
         viewModelScope.launch {
             uiState = MiniAppUiState.Processing(message)
             try {
@@ -142,8 +146,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             } catch (error: Exception) {
                 val errorMessage = error.message ?: "The request failed. Please try again."
                 Log.e("MiniAppViewModel", message, error)
-                bridge?.sendError(errorMessage)
-                uiState = MiniAppUiState.Error(errorMessage)
+                bridge?.sendError(errorMessage, action = bridgeAction)
+                uiState = if (bridgeAction == null) MiniAppUiState.Error(errorMessage) else MiniAppUiState.Idle
             }
         }
     }
@@ -313,7 +317,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onGenerateDynamicQr(amount: Double, currency: String = "PHP") {
-        launchProcessingAction("Generating dynamic QR Ph code...") {
+        launchProcessingAction("Generating dynamic QR Ph code...", bridgeAction = "generate_dynamic_qr") {
             val result = getService().createDynamicQr(amount, currency)
 
             result.onSuccess { response ->
@@ -330,9 +334,12 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                     )
                     uiState = MiniAppUiState.PaymentRedirect(
                         checkoutUrl,
-                        PaymentData(amount = amount, currency = "PHP", description = "QR Ph collection")
+                        PaymentData(amount = amount, currency = currency, description = "$currency QR Ph collection")
                     )
-                    bridge?.sendResponse(mapOf("checkoutUrl" to checkoutUrl, "paymentId" to paymentId))
+                    bridge?.sendResponse(
+                        mapOf("checkoutUrl" to checkoutUrl, "paymentId" to paymentId),
+                        action = "generate_dynamic_qr"
+                    )
                 } else if (!qrCode.isNullOrBlank() && !qrImageBase64.isNullOrBlank() && !paymentId.isNullOrBlank()) {
                     recordLocalTransaction(
                         id = paymentId,
@@ -346,16 +353,16 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                         bankAccountNumber = response.bankAccountNumber,
                         instapayBankCode = response.instapayBankCode
                     )
-                    bridge?.sendResponse(mapOf("qrCodeBody" to qrCode))
+                    bridge?.sendResponse(mapOf("qrCodeBody" to qrCode), action = "generate_dynamic_qr")
                 } else {
                     val errorMsg = "SwiftPay returned an incomplete QR Ph payment"
-                    bridge?.sendError(errorMsg)
-                    uiState = MiniAppUiState.Error(errorMsg)
+                    bridge?.sendError(errorMsg, action = "generate_dynamic_qr")
+                    uiState = MiniAppUiState.Idle
                 }
             }.onFailure { error ->
                 val errorMsg = error.message ?: "QR generation failed"
-                bridge?.sendError(errorMsg)
-                uiState = MiniAppUiState.Error(errorMsg)
+                bridge?.sendError(errorMsg, action = "generate_dynamic_qr")
+                uiState = MiniAppUiState.Idle
             }
         }
     }
@@ -480,7 +487,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             uiState = MiniAppUiState.Error("Please enter a valid transfer amount.")
             return
         }
-        launchProcessingAction("Processing SwiftPay transfer...") {
+        launchProcessingAction("Processing SwiftPay transfer...", bridgeAction = "send_disbursement") {
             val result = getService().disburse(amount, bankCode, accountNumber, recipientName)
             result.onSuccess { response ->
                 val status = normalizePaymentStatus(response.status)
@@ -502,7 +509,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             }.onFailure { error ->
                 val errorMsg = error.message ?: "Transfer failed"
                 bridge?.sendError(errorMsg, action = "send_disbursement")
-                uiState = MiniAppUiState.Error(errorMsg)
+                uiState = MiniAppUiState.Idle
             }
         }
     }
