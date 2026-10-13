@@ -98,6 +98,21 @@ async function loadBalance() {
   document.querySelector("#adjustment-total").textContent =
     `₱ ${Number(adjustment.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
   renderAdjustments(adjustment.adjustments);
+  await loadManualDeposits();
+}
+
+async function loadManualDeposits() {
+  const deposits = await api("/v1/wallet/manual-deposits?limit=100");
+  const tbody = document.querySelector("#manual-deposits-table");
+  tbody.replaceChildren();
+  for (const deposit of deposits) {
+    const row = document.createElement("tr");
+    cell(row, `₱ ${Number(deposit.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+    cell(row, deposit.bankName);
+    cell(row, deposit.referenceNo);
+    cell(row, new Date(deposit.createdAt).toLocaleString());
+    tbody.append(row);
+  }
 }
 
 function renderAdjustments(items) {
@@ -199,6 +214,26 @@ document.querySelector("#adjustment-form").addEventListener("submit", async (eve
     event.currentTarget.reset();
     await Promise.all([loadBalance(), loadAudit()]);
     showMessage(dashboardMessage, "Internal adjustment recorded.", false);
+  } catch (error) {
+    showMessage(dashboardMessage, error.message);
+  }
+});
+
+document.querySelector("#manual-deposit-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const amount = Number(document.querySelector("#manual-deposit-amount").value);
+  const bankName = document.querySelector("#manual-deposit-bank").value.trim();
+  const referenceNo = document.querySelector("#manual-deposit-reference").value.trim();
+  const notes = document.querySelector("#manual-deposit-notes").value.trim();
+  if (!window.confirm("Confirm that this PHP bank deposit has been verified before recording it?")) return;
+  try {
+    await api("/v1/admin/manual-bank-deposits", {
+      method: "POST",
+      body: JSON.stringify({ amount, bankName, referenceNo, notes })
+    });
+    event.currentTarget.reset();
+    await Promise.all([loadManualDeposits(), loadAudit()]);
+    showMessage(dashboardMessage, "Verified manual bank deposit recorded in wallet history.", false);
   } catch (error) {
     showMessage(dashboardMessage, error.message);
   }

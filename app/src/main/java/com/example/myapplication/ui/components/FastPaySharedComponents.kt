@@ -26,7 +26,7 @@ fun DrPayLogo(
 ) {
     Image(
         painter = painterResource(R.drawable.drpay_logo),
-        contentDescription = "DRPAY logo",
+        contentDescription = "Denshitx Bank logo",
         contentScale = ContentScale.Fit,
         modifier = modifier.size(size)
     )
@@ -39,7 +39,7 @@ fun DrPayMark(
 ) {
     Image(
         painter = painterResource(R.drawable.drpay_mark),
-        contentDescription = null,
+        contentDescription = "DRPAY",
         contentScale = ContentScale.Fit,
         modifier = modifier.size(size)
     )
@@ -60,16 +60,6 @@ fun DrPayMarkBadge(
             DrPayMark(modifier = Modifier.fillMaxSize().padding(size * 0.08f))
         }
     }
-}
-
-@Deprecated("Use DrPayLogo")
-@Composable
-fun DenshitxBankLogo(
-    modifier: Modifier = Modifier,
-    isDark: Boolean = false,
-    scale: Float = 1f
-) {
-    DrPayLogo(modifier = modifier, size = 120.dp * scale)
 }
 
 @Composable

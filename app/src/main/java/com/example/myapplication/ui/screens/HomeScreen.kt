@@ -83,9 +83,15 @@ fun HomeScreen(
                     Log.e("HomeScreen", "Failed to load wallet balance", error)
                 }
             val localTransactions = transactionStore.transactions.first()
-            val remoteResult = service.getInternalTransactions()
-            transactionHistoryUnavailable = remoteResult.isFailure && localTransactions.isEmpty()
-            recentTransactions = mergeTransactions(localTransactions, remoteResult.getOrNull().orEmpty()).take(3)
+            val history = service.getWalletTransactionHistory()
+            history.errors.forEach { error ->
+                Log.e("HomeScreen", "Failed to load a transaction history source: $error")
+            }
+            transactionHistoryUnavailable = history.errors.isNotEmpty() && localTransactions.isEmpty()
+            recentTransactions = mergeTransactions(
+                localTransactions,
+                history.transactions
+            ).take(3)
         } catch (error: Exception) {
             Log.e("HomeScreen", "Failed to refresh wallet and transaction history", error)
             balanceError = "Could not connect to the wallet service. Check your connection and retry."
@@ -129,7 +135,7 @@ fun HomeScreen(
                 onCollect = { onLaunchMiniApp("topup-page") },
                 onTransfer = { onLaunchMiniApp("disbursement-page") },
                 onPaymentLink = { onLaunchMiniApp("payment-link-page") },
-                onNavigateToWallet = onNavigateToWallet,
+                onScanQr = { onLaunchMiniApp("scan-qr-page") },
                 onDeposit = { onLaunchMiniApp("deposit-page") },
                 onDeveloperDocs = { onLaunchMiniApp("api-docs-page") },
                 onProfileClick = onProfileClick
@@ -157,23 +163,13 @@ fun HomeGreeting(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White,
-                shadowElevation = 4.dp,
-                tonalElevation = 0.dp,
-                modifier = Modifier.size(46.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    DrPayMarkBadge(size = 28.dp)
-                }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                DrPayMarkBadge(size = 42.dp)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
                 Text("Hello!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
                 Text("Premium account", style = MaterialTheme.typography.labelMedium, color = FastPayTextSecondary, fontWeight = FontWeight.SemiBold)
             }
@@ -307,7 +303,7 @@ fun QuickActionsSection(
     onCollect: () -> Unit,
     onTransfer: () -> Unit,
     onPaymentLink: () -> Unit,
-    onNavigateToWallet: () -> Unit,
+    onScanQr: () -> Unit,
     onDeposit: () -> Unit,
     onDeveloperDocs: () -> Unit,
     onProfileClick: () -> Unit
@@ -319,7 +315,7 @@ fun QuickActionsSection(
             QuickAction(Icons.Rounded.Payments, "Collect", FastPayMeshBlue, onCollect, Modifier.weight(1f))
             QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", FastPayMeshBlue, onTransfer, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Link, "Payment link", FastPayMeshBlue, onPaymentLink, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.AccountBalanceWallet, "Wallet", Color(0xFFF3EBDD), onNavigateToWallet, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.QrCodeScanner, "QR Scanner", Color(0xFFF3EBDD), onScanQr, Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth()) {

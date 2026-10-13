@@ -31,6 +31,7 @@ import com.example.myapplication.ui.theme.FintechMotion
 @Composable
 fun MiniAppScreen(
     initialPath: String? = null,
+    openQrScanner: Boolean = false,
     modifier: Modifier = Modifier,
     viewModel: MiniAppViewModel = viewModel()
 ) {
@@ -44,8 +45,11 @@ fun MiniAppScreen(
 
     val uiState = viewModel.uiState
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(initialPath, openQrScanner) {
         viewModel.refreshBalance()
+        if (openQrScanner) {
+            viewModel.onScanQrToSend()
+        }
     }
 
     Scaffold(
@@ -68,6 +72,8 @@ fun MiniAppScreen(
                 onGenerateDynamicQrWithCurrency = { amount, currency -> viewModel.onGenerateDynamicQr(amount, currency) },
                 onQuoteKrwPhpQr = viewModel::onQuoteKrwPhpQr,
                 onGenerateQuotedKrwPhpQr = viewModel::onGenerateQuotedKrwPhpQr,
+                onQuoteFxPhpQr = viewModel::onQuoteFxPhpQr,
+                onGenerateQuotedFxPhpQr = viewModel::onGenerateQuotedFxPhpQr,
                 onStartDepositWizard = viewModel::onStartDepositWizard,
                 onScanQrToSend = { viewModel.onScanQrToSend() },
                 onGetTransferInstitutions = viewModel::onGetTransferInstitutions,
@@ -117,6 +123,9 @@ fun MiniAppScreen(
                             currency = state.currency,
                             customerAmountKrw = state.customerAmountKrw,
                             ratePhpPerKrw = state.ratePhpPerKrw,
+                            customerAmountFx = state.customerAmountFx,
+                            customerCurrency = state.customerCurrency,
+                            ratePhpPerUnit = state.ratePhpPerUnit,
                             rateUpdatedAt = state.rateUpdatedAt
                         )
                     }
@@ -124,7 +133,29 @@ fun MiniAppScreen(
                         DepositWizardDialog(
                             accountNumber = state.accountNumber,
                             balance = state.balance,
+                            onCheckout = viewModel::startDepositCheckout,
                             onDismiss = { viewModel.dismissConsent() }
+                        )
+                    }
+                    is MiniAppUiState.DepositCheckoutReady -> {
+                        DepositCheckoutDialog(
+                            url = state.url,
+                            paymentId = state.paymentId,
+                            referenceNo = state.referenceNo,
+                            amount = state.amount,
+                            onDismiss = { viewModel.closeDepositCheckout() }
+                        )
+                    }
+                    is MiniAppUiState.DepositCheckoutComplete -> {
+                        DepositCheckoutResultDialog(
+                            paymentId = state.paymentId,
+                            amount = state.amount,
+                            success = state.success,
+                            status = state.status,
+                            onDismiss = {
+                                if (state.success) viewModel.refreshBalance()
+                                viewModel.dismissConsent()
+                            }
                         )
                     }
                     is MiniAppUiState.ScanQrToSend -> {
@@ -204,6 +235,11 @@ fun MiniAppScreen(
                     is MiniAppUiState.PaymentLinkReady -> {
                         EnhancedPaymentLinkDialog(
                             url = state.url,
+                            linkId = state.linkId,
+                            amount = state.amount,
+                            currency = state.currency,
+                            hasFixedAmount = true,
+                            description = state.description,
                             onOpen = { uriHandler.openUri(state.url) },
                             onDismiss = { viewModel.dismissConsent() }
                         )

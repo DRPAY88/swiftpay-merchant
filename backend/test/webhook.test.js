@@ -120,6 +120,26 @@ test("KRW receipt balance counts executed signed KRW payments once", async () =>
   assert.deepEqual(await response.json(), { currency: "KRW", balance: 12000, paymentCount: 1 });
 });
 
+test("signed USD and EUR payment receipts retain their original webhook currencies", async () => {
+  for (const [currency, amount] of [["USD", "20"], ["EUR", "10.50"]]) {
+    const fields = {
+      x_payment_id: paymentId,
+      x_payment_status: "EXECUTED",
+      x_reference_no: `ORDER-${currency}`,
+      x_amount: amount,
+      x_currency: currency,
+      x_access_key: config.swiftPayAccessKey
+    };
+    fields.signature = signOrder(fields, config.swiftPaySecretKey);
+    const response = await sendWebhook(fields);
+    assert.equal(response.status, 200);
+    assert.deepEqual(events.get(`payment:${paymentId}`).details, {
+      amount: Number(amount),
+      currency
+    });
+  }
+});
+
 test("webhook signature, access key and event schema are validated", async () => {
   events.clear();
   const tampered = signedPaymentEvent();

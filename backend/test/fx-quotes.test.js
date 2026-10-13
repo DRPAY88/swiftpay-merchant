@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   createKrwPhpQuote,
+  createFxPhpQuote,
   FxQuoteError,
+  getLatestPhpRate,
   getLatestKrwPhpRate,
   KRW_PHP_QUOTE_TTL_MS,
+  verifyFxPhpQuote,
   verifyKrwPhpQuote
 } from "../src/fx-quotes.js";
 
@@ -79,6 +82,52 @@ test("KRW/PHP quote is rounded to cents, bound to the merchant, and expires afte
   const tampered = quote.quoteToken.replace(/.$/, quote.quoteToken.endsWith("A") ? "B" : "A");
   assert.throws(
     () => verifyKrwPhpQuote(tampered, "merchant-a", signingKey, now),
+    (error) => error instanceof FxQuoteError && error.status === 400
+  );
+});
+
+test("USD and EUR FX quotes convert the exact customer price into locked PHP", async () => {
+  let requestUrl;
+  const rate = await getLatestPhpRate(
+    "EUR",
+    "test-key",
+    async (url) => {
+      requestUrl = url.toString();
+      return Response.json({
+        meta: { base_currency: "EUR", last_updated_at: new Date(now).toISOString() },
+        data: { PHP: { code: "PHP", value: 62 } }
+      });
+    },
+    now
+  );
+  assert.equal(requestUrl, "https://api.currencyapi.com/v3/latest?base_currency=EUR&currencies=PHP");
+  assert.equal(rate.phpPerUnit, 62);
+
+  const quote = createFxPhpQuote({
+    amount: 10.5,
+    currency: "EUR",
+    phpPerUnit: rate.phpPerUnit,
+    rateUpdatedAt: rate.updatedAt,
+    subject: "merchant-a",
+    signingKey,
+    now
+  });
+  assert.equal(quote.amountPhp, 651);
+  assert.equal(verifyFxPhpQuote(quote.quoteToken, "merchant-a", signingKey, now).customerCurrency, "EUR");
+  assert.throws(
+    () => verifyKrwPhpQuote(quote.quoteToken, "merchant-a", signingKey, now),
+    (error) => error instanceof FxQuoteError && error.status === 400
+  );
+  assert.throws(
+    () => createFxPhpQuote({
+      amount: 1.5,
+      currency: "KRW",
+      phpPerUnit: 0.0425,
+      rateUpdatedAt: rate.updatedAt,
+      subject: "merchant-a",
+      signingKey,
+      now
+    }),
     (error) => error instanceof FxQuoteError && error.status === 400
   );
 });

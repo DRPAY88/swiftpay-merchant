@@ -1,7 +1,13 @@
 package com.example.myapplication
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,9 +20,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PersonOutline
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,6 +50,7 @@ import androidx.navigation3.ui.NavDisplay
 import com.example.myapplication.data.SessionManager
 import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.data.DevicePinManager
+import com.example.myapplication.data.IncomingMoneyPush
 import com.example.myapplication.navigation.Route
 import com.example.myapplication.ui.screens.ApiDocsScreen
 import com.example.myapplication.ui.screens.ApiKeysScreen
@@ -129,6 +136,9 @@ fun SwiftPayApp() {
     val backendAccessToken by settings.backendAccessToken.collectAsState(initial = null)
     val isLoggedIn = isLoggedInFlag && !backendAccessToken.isNullOrBlank()
     val loggedInEmail by settings.loggedInEmail.collectAsState(initial = null)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
     var hasDevicePin by remember { mutableStateOf(false) }
     var isDeviceUnlocked by remember { mutableStateOf(false) }
 
@@ -141,6 +151,19 @@ fun SwiftPayApp() {
     androidx.compose.runtime.LaunchedEffect(isLoggedIn) {
         hasDevicePin = isLoggedIn && withContext(Dispatchers.IO) { devicePinManager.hasPin() }
         if (!isLoggedIn) isDeviceUnlocked = false
+    }
+
+    androidx.compose.runtime.LaunchedEffect(isLoggedIn, backendAccessToken) {
+        val accessToken = backendAccessToken
+        if (isLoggedIn && !accessToken.isNullOrBlank() && IncomingMoneyPush.isConfigured()) {
+            if (
+                Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            IncomingMoneyPush.registerCurrentDevice(context, accessToken)
+        }
     }
 
     androidx.compose.runtime.LaunchedEffect(isLoggedIn, hasDevicePin, isDeviceUnlocked) {
@@ -193,6 +216,7 @@ fun SwiftPayApp() {
                 isDeviceUnlocked = false
                 hasDevicePin = false
                 (context as? ComponentActivity)?.lifecycleScope?.launch {
+                    settings.getAccessToken()?.let { IncomingMoneyPush.unregisterCurrentDevice(context, it) }
                     settings.clearSession()
                     sessionManager.clearSession()
                     backStack.clear()
@@ -276,21 +300,21 @@ fun SwiftPayApp() {
                         },
                     )
                     item(
-                        selected = currentRoute == Route.Wallet,
-                        onClick = { navController.navigate(Route.Wallet) },
+                        selected = currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page",
+                        onClick = { navController.navigate(Route.MiniApp("scan-qr-page")) },
                         icon = {
                             Icon(
-                                Icons.Rounded.AccountBalanceWallet,
-                                contentDescription = "Wallet",
-                                tint = if (currentRoute == Route.Wallet) activeColor else inactiveColor
+                                Icons.Rounded.QrCodeScanner,
+                                contentDescription = "QR Scanner",
+                                tint = if (currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page") activeColor else inactiveColor
                             )
                         },
                         label = {
                             Text(
-                                "Wallet",
+                                "QR Scanner",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (currentRoute == Route.Wallet) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (currentRoute == Route.Wallet) activeColor else inactiveColor
+                                fontWeight = if (currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page") FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page") activeColor else inactiveColor
                             )
                         },
                     )
@@ -359,7 +383,11 @@ fun SwiftPayApp() {
                             )
                         }
                         is Route.MiniApp -> NavEntry(key) {
-                            MiniAppScreen(initialPath = key.initialPath)
+                            val launchScanner = key.initialPath == "scan-qr-page"
+                            MiniAppScreen(
+                                initialPath = if (launchScanner) "disbursement-page" else key.initialPath,
+                                openQrScanner = launchScanner
+                            )
                         }
                         Route.Profile -> NavEntry(key) {
                             ProfileScreen()

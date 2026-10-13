@@ -17,6 +17,9 @@ data class BackendOrderRequest(
 )
 
 @Serializable
+data class BackendPushTokenRequest(val token: String)
+
+@Serializable
 data class BackendQrPaymentRequest(
     val amount: Double,
     val referenceNo: String,
@@ -28,11 +31,29 @@ data class BackendQrPaymentRequest(
 data class BackendKrwPhpQrQuoteRequest(val amountKrw: Int)
 
 @Serializable
+data class BackendFxPhpQrQuoteRequest(
+    val amount: Double,
+    val currency: String
+)
+
+@Serializable
 data class BackendKrwPhpQrQuoteResponse(
     val quoteToken: String,
     val customerAmountKrw: Int,
     val settlementAmountPhp: Double,
     val ratePhpPerKrw: Double,
+    val rateUpdatedAt: String,
+    val expiresAt: String,
+    val settlementCurrency: String
+)
+
+@Serializable
+data class BackendFxPhpQrQuoteResponse(
+    val quoteToken: String,
+    val customerAmount: Double,
+    val customerCurrency: String,
+    val settlementAmountPhp: Double,
+    val ratePhpPerUnit: Double,
     val rateUpdatedAt: String,
     val expiresAt: String,
     val settlementCurrency: String
@@ -58,6 +79,9 @@ data class BackendQrPaymentResponse(
     val instapayBankCode: String? = null,
     val customerAmountKrw: Int? = null,
     val ratePhpPerKrw: Double? = null,
+    val customerAmount: Double? = null,
+    val customerCurrency: String? = null,
+    val ratePhpPerUnit: Double? = null,
     val rateUpdatedAt: String? = null,
     val settlementCurrency: String? = null
 )
@@ -97,6 +121,26 @@ data class BackendWalletBalanceResponse(
 )
 
 @Serializable
+data class BackendManualBankDeposit(
+    val id: String,
+    val amount: Double,
+    val bankName: String,
+    val referenceNo: String,
+    val notes: String = "",
+    val createdAt: String
+)
+
+@Serializable
+data class BackendPaymentTransaction(
+    val id: String,
+    val referenceNo: String,
+    val amount: Double,
+    val currency: String,
+    val status: String,
+    val createdAt: String
+)
+
+@Serializable
 data class BackendKrwReceiptBalanceResponse(
     val currency: String = "KRW",
     val balance: Double,
@@ -125,6 +169,7 @@ data class BackendPaymentLinkResponse(
     val linkStatus: String? = null,
     val status: String? = null,
     val amount: Double? = null,
+    val currency: String? = null,
     val description: String? = null
 )
 
@@ -172,15 +217,35 @@ data class BackendTransferInstitution(
     val code: String,
     val name: String,
     val instapayEnabled: Boolean = false,
-    val pesonetEnabled: Boolean = false
+    val pesonetEnabled: Boolean = false,
+    val logoUrl: String? = null
+)
+
+@Serializable
+data class BackendPaymentInstitutionLogo(
+    val code: String,
+    val name: String,
+    val logoUrl: String? = null
 )
 
 interface SwiftPayBackendApi {
+    @POST("v1/notifications/push-token")
+    suspend fun registerPushToken(@Body request: BackendPushTokenRequest): Response<Unit>
+
+    @retrofit2.http.HTTP(method = "DELETE", path = "v1/notifications/push-token", hasBody = true)
+    suspend fun deletePushToken(@Body request: BackendPushTokenRequest): Response<Unit>
+
     @POST("v1/crypto/widget-url")
     suspend fun createCryptoWidgetUrl(@Body request: CryptoWidgetRequest): Response<CryptoWidgetResponse>
 
     @GET("v1/wallet/balance")
     suspend fun getWalletBalance(): Response<BackendWalletBalanceResponse>
+
+    @GET("v1/wallet/manual-deposits")
+    suspend fun getManualBankDeposits(): Response<List<BackendManualBankDeposit>>
+
+    @GET("v1/wallet/payment-transactions")
+    suspend fun getPaymentTransactions(): Response<List<BackendPaymentTransaction>>
 
     @GET("v1/wallet/krw-receipts")
     suspend fun getKrwReceiptBalance(): Response<BackendKrwReceiptBalanceResponse>
@@ -193,6 +258,9 @@ interface SwiftPayBackendApi {
 
     @POST("v1/payments/qrph/quote")
     suspend fun getKrwPhpQrQuote(@Body request: BackendKrwPhpQrQuoteRequest): Response<BackendKrwPhpQrQuoteResponse>
+
+    @POST("v1/payments/qrph/quote")
+    suspend fun getFxPhpQrQuote(@Body request: BackendFxPhpQrQuoteRequest): Response<BackendFxPhpQrQuoteResponse>
 
     @POST("v1/payments/qrph")
     suspend fun createQuotedKrwPhpQr(@Body request: BackendQuotedQrPaymentRequest): Response<BackendQrPaymentResponse>
@@ -217,6 +285,9 @@ interface SwiftPayBackendApi {
 
     @GET("v1/disbursement-institutions")
     suspend fun getDisbursementInstitutions(): Response<List<BackendTransferInstitution>>
+
+    @GET("v1/payment-institutions")
+    suspend fun getPaymentInstitutions(): Response<List<BackendPaymentInstitutionLogo>>
 
     @GET("v1/disbursements/{id}")
     suspend fun getDisbursement(@Path("id") id: String): Response<BackendDisbursementRecord>

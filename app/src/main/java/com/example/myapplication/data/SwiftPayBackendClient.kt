@@ -7,14 +7,19 @@ import com.example.myapplication.data.api.BackendDisbursementRequest
 import com.example.myapplication.data.api.CryptoWidgetRequest
 import com.example.myapplication.data.api.CryptoWidgetResponse
 import com.example.myapplication.data.api.BackendOrderRequest
+import com.example.myapplication.data.api.BackendPushTokenRequest
 import com.example.myapplication.data.api.BackendPaymentLinkRequest
 import com.example.myapplication.data.api.BackendQrPaymentRequest
 import com.example.myapplication.data.api.BackendKrwPhpQrQuoteRequest
 import com.example.myapplication.data.api.BackendKrwPhpQrQuoteResponse
+import com.example.myapplication.data.api.BackendFxPhpQrQuoteRequest
+import com.example.myapplication.data.api.BackendFxPhpQrQuoteResponse
 import com.example.myapplication.data.api.BackendQuotedQrPaymentRequest
 import com.example.myapplication.data.api.BackendRecipientInformation
 import com.example.myapplication.data.api.BackendTransferInstitution
+import com.example.myapplication.data.api.BackendPaymentInstitutionLogo
 import com.example.myapplication.data.api.BackendWalletBalanceResponse
+import com.example.myapplication.data.api.BackendManualBankDeposit
 import com.example.myapplication.data.api.BackendKrwReceiptBalanceResponse
 import com.example.myapplication.data.api.BackendWalletDepositAccount
 import com.example.myapplication.data.api.CardDetails
@@ -42,6 +47,11 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+
+data class WalletTransactionHistory(
+    val transactions: List<InternalTransaction>,
+    val errors: List<String>
+)
 
 internal fun hasCompleteRecipientName(value: String): Boolean =
     value.trim().split(Regex("\\s+")).count { it.isNotBlank() } >= 2
@@ -100,6 +110,26 @@ class SwiftPayService(
             }
         )
     )
+
+    suspend fun registerPushToken(token: String): Result<Unit> = updatePushToken(token, remove = false)
+
+    suspend fun removePushToken(token: String): Result<Unit> = updatePushToken(token, remove = true)
+
+    private suspend fun updatePushToken(token: String, remove: Boolean): Result<Unit> {
+        if (!hasApiKey) return missingSession()
+        if (token.length !in 20..4096 || token.any(Char::isWhitespace)) {
+            return Result.failure(IllegalArgumentException("Invalid Firebase push token"))
+        }
+        return try {
+            val request = BackendPushTokenRequest(token)
+            val response = if (remove) api.deletePushToken(request) else api.registerPushToken(request)
+            if (response.isSuccessful) Result.success(Unit) else failure(response)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
 
     suspend fun sendCustomOtp(email: String, code: String): Result<Boolean> =
         Result.failure(UnsupportedOperationException("Use BackendAuthService to request sign-in codes"))
@@ -165,15 +195,22 @@ class SwiftPayService(
     suspend fun createPaymentLink(
         amount: Double,
         description: String? = null,
-        merchantAliasOverride: String? = null
+        merchantAliasOverride: String? = null,
+        currency: String = "PHP"
     ): Result<SwiftPayPaymentLinkResponse> {
         if (!hasApiKey) return missingSession()
-        if (amount <= 0.0) return Result.failure(IllegalArgumentException("SwiftPay payment links require a fixed amount"))
+        if (!amount.isFinite() || amount <= 0.0) {
+            return Result.failure(IllegalArgumentException("SwiftPay payment links require a valid fixed amount"))
+        }
+        val normalizedCurrency = currency.uppercase()
+        if (normalizedCurrency !in setOf("PHP", "USD", "EUR")) {
+            return Result.failure(IllegalArgumentException("SwiftPay payment links support PHP, USD, and EUR"))
+        }
         return try {
             val response = api.createPaymentLink(
                 BackendPaymentLinkRequest(
                     amount = amount,
-                    currency = "PHP",
+                    currency = normalizedCurrency,
                     title = description?.take(100),
                     description = description?.take(500),
                     referenceNo = "LINK-${UUID.randomUUID()}"
@@ -181,13 +218,17 @@ class SwiftPayService(
             )
             if (!response.isSuccessful) return failure(response)
             val body = response.body() ?: return Result.failure(IllegalStateException("Empty payment-link response"))
+            if (body.currency != null && body.currency != normalizedCurrency) {
+                return Result.failure(IllegalStateException("SwiftPay returned a payment link in a different currency"))
+            }
             Result.success(
                 SwiftPayPaymentLinkResponse(
                     id = body.code,
                     paymentLinkUrl = body.paymentUrl,
                     status = body.linkStatus ?: body.status,
                     description = body.description,
-                    amount = body.amount
+                    amount = body.amount,
+                    currency = body.currency ?: normalizedCurrency
                 )
             )
         } catch (error: Exception) {
@@ -199,7 +240,7 @@ class SwiftPayService(
         if (!hasApiKey) return missingSession()
         if (!amount.isFinite() || amount <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid QR Ph amount"))
         if (currency != "PHP") {
-            return Result.failure(IllegalArgumentException("SwiftPay QR Ph accepts PHP only. Request a KRW-to-PHP quote first."))
+            return Result.failure(IllegalArgumentException("SwiftPay QR Ph settles in PHP. Request a KRW, USD, or EUR-to-PHP quote first."))
         }
         return try {
             val refNo = "QR-${UUID.randomUUID()}"
@@ -247,6 +288,42 @@ class SwiftPayService(
         }
     }
 
+    suspend fun getFxPhpQrQuote(amount: Double, currency: String): Result<BackendFxPhpQrQuoteResponse> {
+        if (!hasApiKey) return missingSession()
+        if (!amount.isFinite() || amount <= 0.0 || amount > 1_000_000.0) {
+            return Result.failure(IllegalArgumentException("Enter a valid customer amount."))
+        }
+        if (currency !in setOf("KRW", "USD", "EUR")) {
+            return Result.failure(IllegalArgumentException("QR Ph quotes support KRW, USD, and EUR customer prices."))
+        }
+        if (currency == "KRW" && amount % 1.0 != 0.0) {
+            return Result.failure(IllegalArgumentException("KRW prices must be whole numbers."))
+        }
+        return try {
+            val response = api.getFxPhpQrQuote(BackendFxPhpQrQuoteRequest(amount, currency))
+            if (!response.isSuccessful) return failure(response)
+            val quote = response.body()
+                ?: return Result.failure(IllegalStateException("Empty FX-to-PHP quote response"))
+            if (
+                quote.customerAmount != amount ||
+                quote.customerCurrency != currency ||
+                quote.settlementCurrency != "PHP" ||
+                !quote.settlementAmountPhp.isFinite() ||
+                quote.settlementAmountPhp <= 0.0 ||
+                !quote.ratePhpPerUnit.isFinite() ||
+                quote.ratePhpPerUnit <= 0.0 ||
+                quote.quoteToken.isBlank()
+            ) {
+                return Result.failure(IllegalStateException("Backend returned an invalid FX-to-PHP quote"))
+            }
+            Result.success(quote)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
     suspend fun createKrwPhpQuotedQr(quoteToken: String): Result<SwiftPayQrResponse> {
         if (!hasApiKey) return missingSession()
         if (quoteToken.isBlank()) {
@@ -259,6 +336,32 @@ class SwiftPayService(
                 ?: return Result.failure(IllegalStateException("Empty PHP QR response for KRW quote"))
             if (body.currency != "PHP" || body.settlementCurrency != "PHP" || body.customerAmountKrw == null) {
                 return Result.failure(IllegalStateException("Backend returned a QR that does not match the KRW-to-PHP quote"))
+            }
+            Result.success(toSwiftPayQrResponse(body))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun createFxPhpQuotedQr(quoteToken: String): Result<SwiftPayQrResponse> {
+        if (!hasApiKey) return missingSession()
+        if (quoteToken.isBlank()) {
+            return Result.failure(IllegalArgumentException("Request a new currency quote before creating the QR."))
+        }
+        return try {
+            val response = api.createQuotedKrwPhpQr(BackendQuotedQrPaymentRequest(quoteToken))
+            if (!response.isSuccessful) return failure(response)
+            val body = response.body()
+                ?: return Result.failure(IllegalStateException("Empty PHP QR response for FX quote"))
+            if (
+                body.currency != "PHP" ||
+                body.settlementCurrency != "PHP" ||
+                body.customerAmount == null ||
+                body.customerCurrency?.let { it in setOf("KRW", "USD", "EUR") } != true
+            ) {
+                return Result.failure(IllegalStateException("Backend returned a QR that does not match the FX-to-PHP quote"))
             }
             Result.success(toSwiftPayQrResponse(body))
         } catch (error: CancellationException) {
@@ -287,6 +390,9 @@ class SwiftPayService(
             instapayBankCode = body.instapayBankCode,
             customerAmountKrw = body.customerAmountKrw,
             ratePhpPerKrw = body.ratePhpPerKrw,
+            customerAmount = body.customerAmount,
+            customerCurrency = body.customerCurrency,
+            ratePhpPerUnit = body.ratePhpPerUnit,
             rateUpdatedAt = body.rateUpdatedAt,
             settlementCurrency = body.settlementCurrency
         )
@@ -376,10 +482,88 @@ class SwiftPayService(
         }
     }
 
+    suspend fun getManualBankDepositTransactions(): Result<List<InternalTransaction>> {
+        if (!hasApiKey) return missingSession()
+        return try {
+            val response = api.getManualBankDeposits()
+            if (!response.isSuccessful) return failure(response)
+            Result.success(response.body().orEmpty().map { deposit ->
+                InternalTransaction(
+                    transactionId = deposit.id,
+                    amount = deposit.amount,
+                    status = "SUCCESS",
+                    date = deposit.createdAt,
+                    transactionType = "MANUAL_BANK_DEPOSIT",
+                    referenceNo = deposit.referenceNo,
+                    description = deposit.notes,
+                    bankName = deposit.bankName
+                )
+            })
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun getPaymentTransactions(): Result<List<InternalTransaction>> {
+        if (!hasApiKey) return missingSession()
+        return try {
+            val response = api.getPaymentTransactions()
+            if (!response.isSuccessful) return failure(response)
+            val payments = response.body()
+                ?: return Result.failure(IllegalStateException("Empty payment transaction response"))
+            if (payments.any {
+                    it.currency != "PHP" || !it.amount.isFinite() || it.amount <= 0.0
+                }
+            ) {
+                return Result.failure(IllegalStateException("Backend returned an invalid PHP payment transaction"))
+            }
+            Result.success(payments.map { payment ->
+                InternalTransaction(
+                    transactionId = payment.id,
+                    amount = payment.amount,
+                    status = payment.status.toTransactionStatus(),
+                    date = payment.createdAt,
+                    transactionType = "PAYMENT",
+                    referenceNo = payment.referenceNo,
+                    bankName = "SwiftPay"
+                )
+            })
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun getWalletTransactionHistory(): WalletTransactionHistory {
+        val disbursements = getInternalTransactions()
+        val deposits = getManualBankDepositTransactions()
+        val payments = getPaymentTransactions()
+        val results = listOf(disbursements, deposits, payments)
+
+        return WalletTransactionHistory(
+            transactions = results.flatMap { it.getOrNull().orEmpty() },
+            errors = results.mapNotNull { it.exceptionOrNull()?.message }
+        )
+    }
+
     suspend fun getTransferInstitutions(): Result<List<BackendTransferInstitution>> {
         if (!hasApiKey) return missingSession()
         return try {
             val response = api.getDisbursementInstitutions()
+            if (!response.isSuccessful) return failure(response)
+            Result.success(response.body().orEmpty())
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun getPaymentInstitutionLogos(): Result<List<BackendPaymentInstitutionLogo>> {
+        if (!hasApiKey) return missingSession()
+        return try {
+            val response = api.getPaymentInstitutions()
             if (!response.isSuccessful) return failure(response)
             Result.success(response.body().orEmpty())
         } catch (error: Exception) {
@@ -483,7 +667,15 @@ class SwiftPayService(
             transactionId = transactionId,
             amount = -transactionAmount,
             status = normalizedStatus,
-            date = registrationTime ?: createdOn ?: createdAt ?: ""
+            date = registrationTime ?: createdOn ?: createdAt ?: "",
+            transactionType = "DISBURSEMENT",
+            referenceNo = merchantReferenceNo
         )
     }
+}
+
+private fun String.toTransactionStatus(): String = when (uppercase()) {
+    "EXECUTED", "SUCCESS", "COMPLETED" -> "SUCCESS"
+    "REJECTED", "ERROR", "FAILED", "CANCELED", "CANCELLED", "EXPIRED" -> "FAILED"
+    else -> "PENDING"
 }

@@ -13,6 +13,9 @@ fun optionalProperty(name: String): String {
         ?: ""
 }
 
+fun buildConfigString(value: String): String =
+    "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
 val PAYMENT_BACKEND_URL_OVERRIDE: String? = providers.gradleProperty("PAYMENT_BACKEND_URL").orNull
     ?: providers.environmentVariable("PAYMENT_BACKEND_URL").orNull
     ?: localProps.getProperty("PAYMENT_BACKEND_URL")
@@ -40,7 +43,10 @@ android {
         versionName = "1.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
+        buildConfigField("String", "FCM_PROJECT_ID", buildConfigString(optionalProperty("FCM_PROJECT_ID")))
+        buildConfigField("String", "FCM_APPLICATION_ID", buildConfigString(optionalProperty("FCM_APPLICATION_ID")))
+        buildConfigField("String", "FCM_SENDER_ID", buildConfigString(optionalProperty("FCM_SENDER_ID")))
+        buildConfigField("String", "FCM_API_KEY", buildConfigString(optionalProperty("FCM_API_KEY")))
     }
 
     signingConfigs {
@@ -105,6 +111,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.work)
+    implementation(libs.firebase.messaging)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

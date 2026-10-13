@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -486,10 +485,8 @@ fun LandingContent(
     Spacer(modifier = Modifier.height(4.dp))
     Text(
         text = "Banko ng mga tunay na amo",
-        style = MaterialTheme.typography.titleMedium.copy(
-            fontSize = 18.sp,
-            fontStyle = FontStyle.Italic
-        ),
+        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+        fontWeight = FontWeight.SemiBold,
         color = supportingColor,
         textAlign = TextAlign.Center
     )

@@ -144,3 +144,98 @@ test("internal adjustments are audited but do not affect the provider balance; a
   assert.equal(JSON.stringify(transferEvent).includes("123456"), false);
   assert.equal(Number(await store.adjustmentTotal()), 100);
 });
+
+test("merchant wallet payment history includes PHP payment webhook receipts", async () => {
+  await store.recordWebhookEvent({
+    eventKey: "payment:00000000-0000-4000-8000-000000000004",
+    eventType: "payment",
+    paymentId: "00000000-0000-4000-8000-000000000004",
+    referenceNo: "ORDER-PHP-2",
+    status: "EXECUTED",
+    amount: 825,
+    currency: "PHP"
+  });
+  const payments = await fetch(`${baseUrl}/v1/wallet/payment-transactions`, {
+    headers: { authorization: "Bearer merchant-token" }
+  });
+  assert.equal(payments.status, 200);
+  const paymentTransactions = await payments.json();
+  assert.deepEqual(paymentTransactions.map(({ id, referenceNo, amount, currency, status }) => ({
+    id,
+    referenceNo,
+    amount,
+    currency,
+    status
+  })), [{
+    id: "00000000-0000-4000-8000-000000000004",
+    referenceNo: "ORDER-PHP-2",
+    amount: 825,
+    currency: "PHP",
+    status: "EXECUTED"
+  }]);
+});
+
+test("super admins can record verified manual bank deposits for merchant wallet history", async () => {
+  const adminHeaders = {
+    authorization: "******",
+    "content-type": "application/json"
+  };
+  const merchantHeaders = { authorization: "******" };
+
+  const forbidden = await fetch(`${baseUrl}/v1/admin/manual-bank-deposits`, {
+    method: "POST",
+    headers: {
+      authorization: "******",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      amount: 500,
+      bankName: "Example Bank",
+      referenceNo: "BANK-REF-1"
+    })
+  });
+  assert.equal(forbidden.status, 403);
+
+  const invalid = await fetch(`${baseUrl}/v1/admin/manual-bank-deposits`, {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({
+      amount: -500,
+      bankName: "Example Bank",
+      referenceNo: "BANK-REF-1"
+    })
+  });
+  assert.equal(invalid.status, 400);
+
+  const recorded = await fetch(`${baseUrl}/v1/admin/manual-bank-deposits`, {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({
+      amount: 500,
+      bankName: "Example Bank",
+      referenceNo: "BANK-REF-1",
+      notes: "Verified incoming transfer"
+    })
+  });
+  assert.equal(recorded.status, 201);
+  const created = await recorded.json();
+  assert.equal(created.amount, 500);
+  assert.equal(created.bankName, "Example Bank");
+  assert.equal(created.referenceNo, "BANK-REF-1");
+  assert.equal(created.affectsProviderFunds, false);
+
+  const history = await fetch(`${baseUrl}/v1/wallet/manual-deposits`, {
+    headers: merchantHeaders
+  });
+  assert.equal(history.status, 200);
+  assert.deepEqual(await history.json(), [{
+    id: created.id,
+    amount: 500,
+    bankName: "Example Bank",
+    referenceNo: "BANK-REF-1",
+    notes: "Verified incoming transfer",
+    createdAt: created.createdAt
+  }]);
+
+  assert.ok((await store.listAudit(10)).some((entry) => entry.action === "manual_bank_deposit.recorded"));
+});

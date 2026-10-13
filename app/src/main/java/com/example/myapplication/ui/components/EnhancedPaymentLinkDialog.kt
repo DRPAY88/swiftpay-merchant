@@ -29,6 +29,15 @@ import com.example.myapplication.ui.localization.rememberPaymentLinkLocalization
 import com.example.myapplication.ui.theme.FastPayBlack
 import com.example.myapplication.ui.theme.FastPayNavy
 import com.example.myapplication.ui.components.FastPayInfoCard
+import java.text.NumberFormat
+import java.util.Currency
+import java.util.Locale
+
+private fun formatPaymentLinkAmount(amount: Double, currency: String): String {
+    val formatter = NumberFormat.getCurrencyInstance(Locale.US)
+    formatter.currency = Currency.getInstance(currency)
+    return formatter.format(amount)
+}
 
 /**
  * Enhanced payment link dialog with localization, analytics, and expiry support.
@@ -39,7 +48,9 @@ fun EnhancedPaymentLinkDialog(
     url: String,
     linkId: String = "LINK${System.currentTimeMillis()}",
     amount: Double = 0.0,
+    currency: String = "PHP",
     hasFixedAmount: Boolean = false,
+    description: String? = null,
     expiryTimestamp: Long? = null,
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
@@ -123,13 +134,31 @@ fun EnhancedPaymentLinkDialog(
                     textAlign = TextAlign.Center
                 )
 
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    "Customers see a Denshitx Bank checkout page before continuing to SwiftPay's secure payment page.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
+
                 Spacer(Modifier.height(20.dp))
 
                 // Amount display (if fixed)
                 if (hasFixedAmount && amount > 0) {
                     FastPayInfoCard(
                         title = "Amount",
-                        value = "₱${String.format("%.2f", amount)}",
+                        value = formatPaymentLinkAmount(amount, currency),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                description?.takeIf(String::isNotBlank)?.let {
+                    FastPayInfoCard(
+                        title = "Description",
+                        value = it,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(12.dp))
@@ -205,7 +234,7 @@ fun EnhancedPaymentLinkActions(
             onClick = {
                 val sendIntent = Intent().apply {
                     action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_TEXT, "Pay me using this link: $url")
+                    putExtra(Intent.EXTRA_TEXT, "Complete your payment securely using this Denshitx Bank checkout page: $url")
                     type = "text/plain"
                 }
                 val shareIntent = Intent.createChooser(sendIntent, localization.shareLink)
@@ -268,6 +297,3 @@ fun EnhancedPaymentLinkActions(
         }
     }
 }
-
-
-

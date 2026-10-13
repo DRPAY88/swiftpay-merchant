@@ -1,6 +1,8 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
-export const KRW_PHP_QUOTE_TTL_MS = 5 * 60 * 1000;
+export const FX_PHP_QUOTE_TTL_MS = 5 * 60 * 1000;
+export const KRW_PHP_QUOTE_TTL_MS = FX_PHP_QUOTE_TTL_MS;
+const FX_CURRENCIES = new Set(["KRW", "USD", "EUR"]);
 
 export class FxQuoteError extends Error {
   constructor(status, message) {
@@ -9,15 +11,18 @@ export class FxQuoteError extends Error {
   }
 }
 
-export async function getLatestKrwPhpRate(apiKey, fetchImpl = fetch, now = Date.now()) {
+export async function getLatestPhpRate(baseCurrency, apiKey, fetchImpl = fetch, now = Date.now()) {
+  if (!FX_CURRENCIES.has(baseCurrency)) {
+    throw new FxQuoteError(400, "Only KRW, USD, and EUR customer prices can be quoted for PHP QR settlement");
+  }
   if (!apiKey) {
-    throw new FxQuoteError(503, "KRW-to-PHP quotes are not configured on this server");
+    throw new FxQuoteError(503, "FX-to-PHP quotes are not configured on this server");
   }
 
   let response;
   try {
     response = await fetchImpl(
-      "https://api.currencyapi.com/v3/latest?base_currency=KRW&currencies=PHP",
+      `https://api.currencyapi.com/v3/latest?base_currency=${baseCurrency}&currencies=PHP`,
       {
         headers: { Accept: "application/json", apikey: apiKey },
         signal: AbortSignal.timeout(8000)
@@ -47,7 +52,7 @@ export async function getLatestKrwPhpRate(apiKey, fetchImpl = fetch, now = Date.
   const rate = body?.data?.PHP?.value;
   const updatedAt = Date.parse(body?.meta?.last_updated_at);
   if (
-    body?.meta?.base_currency !== "KRW" ||
+    body?.meta?.base_currency !== baseCurrency ||
     typeof rate !== "number" ||
     !Number.isFinite(rate) ||
     rate <= 0 ||
@@ -55,10 +60,52 @@ export async function getLatestKrwPhpRate(apiKey, fetchImpl = fetch, now = Date.
     updatedAt > now + 60_000 ||
     now - updatedAt > 2 * 60 * 60 * 1000
   ) {
-    throw new FxQuoteError(502, "The FX rate service returned a missing or stale KRW/PHP rate");
+    throw new FxQuoteError(502, `The FX rate service returned a missing or stale ${baseCurrency}/PHP rate`);
   }
 
-  return { phpPerKrw: rate, updatedAt: new Date(updatedAt).toISOString() };
+  return { phpPerUnit: rate, updatedAt: new Date(updatedAt).toISOString() };
+}
+
+export function getLatestKrwPhpRate(apiKey, fetchImpl = fetch, now = Date.now()) {
+  return getLatestPhpRate("KRW", apiKey, fetchImpl, now)
+    .then(({ phpPerUnit, updatedAt }) => ({ phpPerKrw: phpPerUnit, updatedAt }));
+}
+
+export function createFxPhpQuote({
+  amount,
+  currency,
+  phpPerUnit,
+  rateUpdatedAt,
+  subject,
+  signingKey,
+  now = Date.now()
+}) {
+  if (!FX_CURRENCIES.has(currency) || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
+    throw new FxQuoteError(400, "Enter a valid KRW, USD, or EUR customer amount");
+  }
+  if (currency === "KRW" && !Number.isInteger(amount)) {
+    throw new FxQuoteError(400, "KRW customer amounts must be whole numbers");
+  }
+  const amountPhp = Math.round(amount * phpPerUnit * 100) / 100;
+  if (!Number.isFinite(amountPhp) || amountPhp < 0.01 || amountPhp > 1_000_000) {
+    throw new FxQuoteError(400, "The converted PHP QR amount is outside the supported range");
+  }
+
+  const payload = {
+    purpose: "fx-php-qr",
+    quoteId: randomUUID(),
+    subject,
+    customerAmount: amount,
+    customerCurrency: currency,
+    amountPhp,
+    phpPerUnit,
+    rateUpdatedAt,
+    issuedAt: now,
+    expiresAt: now + FX_PHP_QUOTE_TTL_MS
+  };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", signingKey).update(encoded).digest("base64url");
+  return { ...payload, quoteToken: `${encoded}.${signature}` };
 }
 
 export function createKrwPhpQuote({
@@ -69,76 +116,87 @@ export function createKrwPhpQuote({
   signingKey,
   now = Date.now()
 }) {
-  const amountPhp = Math.round(amountKrw * phpPerKrw * 100) / 100;
-  if (!Number.isFinite(amountPhp) || amountPhp < 0.01 || amountPhp > 1_000_000) {
-    throw new FxQuoteError(400, "The converted PHP QR amount is outside the supported range");
-  }
-
-  const payload = {
-    purpose: "krw-php-qr",
-    quoteId: randomUUID(),
-    subject,
-    amountKrw,
-    amountPhp,
-    phpPerKrw,
+  return createFxPhpQuote({
+    amount: amountKrw,
+    currency: "KRW",
+    phpPerUnit: phpPerKrw,
     rateUpdatedAt,
-    issuedAt: now,
-    expiresAt: now + KRW_PHP_QUOTE_TTL_MS
-  };
-  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = createHmac("sha256", signingKey).update(encoded).digest("base64url");
-  return { ...payload, quoteToken: `${encoded}.${signature}` };
+    subject,
+    signingKey,
+    now
+  });
 }
 
-export function verifyKrwPhpQuote(token, subject, signingKey, now = Date.now()) {
+export function verifyFxPhpQuote(token, subject, signingKey, now = Date.now()) {
   if (typeof token !== "string" || token.length > 2048) {
-    throw new FxQuoteError(400, "Request a new KRW-to-PHP quote before creating this QR");
+    throw new FxQuoteError(400, "Request a new FX-to-PHP quote before creating this QR");
   }
 
   const [encoded, submittedSignature, extra] = token.split(".");
   if (!encoded || !submittedSignature || extra !== undefined) {
-    throw new FxQuoteError(400, "Request a new KRW-to-PHP quote before creating this QR");
+    throw new FxQuoteError(400, "Request a new FX-to-PHP quote before creating this QR");
   }
   const expectedSignature = createHmac("sha256", signingKey).update(encoded).digest();
   let providedSignature;
   try {
     providedSignature = Buffer.from(submittedSignature, "base64url");
   } catch {
-    throw new FxQuoteError(400, "Request a new KRW-to-PHP quote before creating this QR");
+    throw new FxQuoteError(400, "Request a new FX-to-PHP quote before creating this QR");
   }
   if (
     providedSignature.length !== expectedSignature.length ||
     !timingSafeEqual(providedSignature, expectedSignature)
   ) {
-    throw new FxQuoteError(400, "Request a new KRW-to-PHP quote before creating this QR");
+    throw new FxQuoteError(400, "Request a new FX-to-PHP quote before creating this QR");
   }
 
   let payload;
   try {
     payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
   } catch {
-    throw new FxQuoteError(400, "Request a new KRW-to-PHP quote before creating this QR");
+    throw new FxQuoteError(400, "Request a new FX-to-PHP quote before creating this QR");
+  }
+  const isLegacyKrwQuote = payload?.purpose === "krw-php-qr";
+  if (isLegacyKrwQuote) {
+    payload.customerAmount = payload.amountKrw;
+    payload.customerCurrency = "KRW";
+    payload.phpPerUnit = payload.phpPerKrw;
   }
   if (
-    payload?.purpose !== "krw-php-qr" ||
+    (payload?.purpose !== "fx-php-qr" && !isLegacyKrwQuote) ||
     payload.subject !== subject ||
-    !Number.isInteger(payload.amountKrw) ||
-    payload.amountKrw < 1 ||
+    !FX_CURRENCIES.has(payload.customerCurrency) ||
+    !Number.isFinite(payload.customerAmount) ||
+    payload.customerAmount <= 0 ||
+    payload.customerAmount > 1_000_000 ||
+    (payload.customerCurrency === "KRW" && !Number.isInteger(payload.customerAmount)) ||
     !Number.isFinite(payload.amountPhp) ||
     payload.amountPhp < 0.01 ||
     payload.amountPhp > 1_000_000 ||
-    !Number.isFinite(payload.phpPerKrw) ||
-    payload.phpPerKrw <= 0 ||
+    !Number.isFinite(payload.phpPerUnit) ||
+    payload.phpPerUnit <= 0 ||
     !Number.isFinite(payload.issuedAt) ||
     !Number.isFinite(payload.expiresAt)
   ) {
-    throw new FxQuoteError(400, "Request a new KRW-to-PHP quote before creating this QR");
+    throw new FxQuoteError(400, "Request a new FX-to-PHP quote before creating this QR");
   }
   if (payload.expiresAt <= now) {
-    throw new FxQuoteError(410, "The KRW-to-PHP quote expired; request a new quote");
+    throw new FxQuoteError(410, "The FX-to-PHP quote expired; request a new quote");
   }
-  if (payload.issuedAt > now + 60_000 || payload.expiresAt - payload.issuedAt !== KRW_PHP_QUOTE_TTL_MS) {
-    throw new FxQuoteError(400, "Request a new KRW-to-PHP quote before creating this QR");
+  if (payload.issuedAt > now + 60_000 || payload.expiresAt - payload.issuedAt !== FX_PHP_QUOTE_TTL_MS) {
+    throw new FxQuoteError(400, "Request a new FX-to-PHP quote before creating this QR");
   }
   return payload;
+}
+
+export function verifyKrwPhpQuote(token, subject, signingKey, now = Date.now()) {
+  const quote = verifyFxPhpQuote(token, subject, signingKey, now);
+  if (quote.customerCurrency !== "KRW") {
+    throw new FxQuoteError(400, "Request a new KRW-to-PHP quote before creating this QR");
+  }
+  return {
+    ...quote,
+    amountKrw: quote.customerAmount,
+    phpPerKrw: quote.phpPerUnit
+  };
 }

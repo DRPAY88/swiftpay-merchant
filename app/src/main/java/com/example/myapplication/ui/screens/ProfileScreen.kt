@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.LocalNavController
 import com.example.myapplication.navigation.Route
-import com.example.myapplication.ui.components.MerchantLogo
 import com.example.myapplication.ui.components.DrPayMarkBadge
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.data.DebugNetworkTracker

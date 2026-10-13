@@ -37,6 +37,9 @@ import androidx.compose.ui.window.Dialog
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.widget.Toast
+import java.text.NumberFormat
+import java.util.Currency
+import java.util.Locale
 import com.example.myapplication.ui.theme.FastPayBlue
 import com.example.myapplication.ui.theme.FastPayDarkNavy
 import com.example.myapplication.ui.theme.FintechMotion
@@ -264,7 +267,10 @@ fun SwiftPayQrDialog(
     currency: String = "PHP",
     customerAmountKrw: Int? = null,
     ratePhpPerKrw: Double? = null,
-    rateUpdatedAt: String? = null
+    rateUpdatedAt: String? = null,
+    customerAmountFx: Double? = null,
+    customerCurrency: String? = null,
+    ratePhpPerUnit: Double? = null
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -272,7 +278,7 @@ fun SwiftPayQrDialog(
     SwiftPayBaseDialog(
         onDismissRequest = onDismiss,
         title = "SwiftPay QR Ph Payment",
-        description = "Pay the ${currency.uppercase()} amount using a supported QR Ph banking app.",
+        description = "Pay the ${(customerCurrency ?: currency).uppercase()} amount using a supported QR Ph banking app.",
         content = {
             val qrImage = remember(qrImageBase64) {
                 runCatching {
@@ -289,7 +295,7 @@ fun SwiftPayQrDialog(
                 if (qrImage != null) {
                     Image(
                         bitmap = qrImage,
-                        contentDescription = "QR Ph code for ${if (currency == "KRW") "₩${"%,.0f".format(amount)}" else "₱${"%,.2f".format(amount)}"}",
+                        contentDescription = "QR Ph code for ${formatQrCurrency(customerAmountFx ?: customerAmountKrw?.toDouble() ?: amount, customerCurrency ?: if (customerAmountKrw != null) "KRW" else currency)}",
                         modifier = Modifier.fillMaxSize().background(Color.White).padding(12.dp),
                         contentScale = ContentScale.Fit
                     )
@@ -312,22 +318,28 @@ fun SwiftPayQrDialog(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = if (currency == "KRW") "₩${"%,.0f".format(amount)} KRW" else "₱${"%,.2f".format(amount)} PHP",
+                text = formatQrCurrency(
+                    customerAmountFx ?: customerAmountKrw?.toDouble() ?: amount,
+                    customerCurrency ?: if (customerAmountKrw != null) "KRW" else currency
+                ),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            if (customerAmountKrw != null) {
+            if (customerAmountFx != null || customerAmountKrw != null) {
+                val quoteCurrency = customerCurrency ?: "KRW"
+                val quoteAmount = customerAmountFx ?: customerAmountKrw?.toDouble() ?: amount
+                val quoteRate = ratePhpPerUnit ?: ratePhpPerKrw
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "KRW price: ₩${"%,d".format(customerAmountKrw)} · PHP QR settlement",
+                    text = "${quoteCurrency} price: ${formatQrCurrency(quoteAmount, quoteCurrency)} · PHP QR settlement: ${formatQrCurrency(amount, "PHP")}",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                if (ratePhpPerKrw != null && rateUpdatedAt != null) {
+                if (quoteRate != null && rateUpdatedAt != null) {
                     Text(
-                        text = "Reference: ₩1 = ₱${"%.6f".format(ratePhpPerKrw)} (rate updated $rateUpdatedAt). The payer’s bank may apply its own conversion.",
+                        text = "Reference: 1 $quoteCurrency = ${formatQrCurrency(quoteRate, "PHP")} (rate updated $rateUpdatedAt). The payer's bank may apply its own conversion.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -389,6 +401,7 @@ fun SwiftPayQrDialog(
                                         modifier = Modifier.size(14.dp)
                                     )
                                 }
+
                             }
                         }
                     }
@@ -399,6 +412,12 @@ fun SwiftPayQrDialog(
             SwiftPayPrimaryButton(text = "Done", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
         }
     )
+}
+
+private fun formatQrCurrency(amount: Double, currency: String): String {
+    val formatter = NumberFormat.getCurrencyInstance(Locale.US)
+    formatter.currency = Currency.getInstance(currency)
+    return formatter.format(amount)
 }
 
 @Composable

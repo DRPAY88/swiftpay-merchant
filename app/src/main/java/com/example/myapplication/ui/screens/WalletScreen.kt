@@ -84,6 +84,7 @@ fun WalletScreen(
     val balance = viewModel.walletBalance
     val adjustedBalance = viewModel.walletAdjustedBalance
     var transactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
+    var transactionHistoryError by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("All") }
     var selectedWallet by remember { mutableStateOf("PHP") }
@@ -112,10 +113,14 @@ fun WalletScreen(
                 val settings = SettingsManager(context)
                 val transactionStore = TransactionStore(context)
                 val service = settings.createSwiftPayService()
-                
+
                 transactionStore.transactions.collectLatest { localTransactions ->
-                    val remoteTransactions = service.getInternalTransactions().getOrNull() ?: emptyList()
-                    transactions = mergeTransactions(localTransactions, remoteTransactions)
+                    val history = service.getWalletTransactionHistory()
+                    transactions = mergeTransactions(
+                        localTransactions,
+                        history.transactions
+                    )
+                    transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
                 }
             } catch (e: Exception) {
                 Log.e("WalletScreen", "Error loading transactions", e)
@@ -171,8 +176,12 @@ fun WalletScreen(
                                     val transactionStore = TransactionStore(context)
                                     val service = settings.createSwiftPayService()
                                     val localTransactions = transactionStore.transactions.first()
-                                    val remoteTransactions = service.getInternalTransactions().getOrNull() ?: emptyList()
-                                    transactions = mergeTransactions(localTransactions, remoteTransactions)
+                                    val history = service.getWalletTransactionHistory()
+                                    transactions = mergeTransactions(
+                                        localTransactions,
+                                        history.transactions
+                                    )
+                                    transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
                                     delay(800L)
                                 } catch (e: Exception) {
                                     Log.e("WalletScreen", "Refresh Error", e)
@@ -202,6 +211,7 @@ fun WalletScreen(
                     accountNumber = depositAccountNumber,
                     transactions = filteredTransactions,
                     selectedFilter = selectedFilter,
+                    transactionHistoryError = transactionHistoryError,
                     selectedWallet = selectedWallet,
                     onWalletSelected = { selectedWallet = it },
                     onFilterSelected = { selectedFilter = it },
@@ -240,6 +250,7 @@ fun WalletListContent(
     transactions: List<InternalTransaction>,
     selectedFilter: String,
     selectedWallet: String = "PHP",
+    transactionHistoryError: String? = null,
     onWalletSelected: (String) -> Unit = {},
     onFilterSelected: (String) -> Unit,
     onTransactionClick: (InternalTransaction) -> Unit,
@@ -305,6 +316,15 @@ fun WalletListContent(
                     contentPadding = PaddingValues(bottom = 28.dp),
                     modifier = Modifier.weight(1f)
                 ) {
+                    transactionHistoryError?.let { error ->
+                        item {
+                            Text(
+                                text = "Some transaction history could not be loaded: $error",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                     if (transactions.isEmpty()) {
                         item { EmptyHistoryState() }
                     } else {
@@ -558,7 +578,7 @@ fun PremiumBalanceCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "AVAILABLE BALANCE",
+                        text = "PHP BALANCE",
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White.copy(alpha = 0.72f),
                         fontWeight = FontWeight.Bold,
@@ -593,20 +613,23 @@ fun PremiumBalanceCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1.15f)) {
-                        Text(
-                            text = "ADJUSTED BALANCE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.62f),
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.6.sp
-                        )
-                        Text(
-                            text = adjustedBalance?.let { "₱ ${"%,.2f".format(it)}" } ?: "--",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                    if (adjustedBalance != null || errorMessage != null) {
+                        Column(modifier = Modifier.weight(1.15f)) {
+                            adjustedBalance?.let {
+                                Text(
+                                    text = "ADJUSTED BALANCE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.62f),
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp
+                                )
+                                Text(
+                                    text = "₱ ${"%,.2f".format(it)}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         if (errorMessage != null) {
                             Text(
                                 text = errorMessage,
@@ -614,6 +637,7 @@ fun PremiumBalanceCard(
                                 color = Color.White.copy(alpha = 0.8f),
                                 maxLines = 1
                             )
+                        }
                         }
                     }
                     if (errorMessage != null) {
@@ -801,6 +825,7 @@ fun AnimatedTransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewMo
 @Composable
 fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: MiniAppViewModel? = null) {
     val isExpense = tx.amount < 0
+    val isManualBankDeposit = tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)
     val normalizedStatus = tx.status.uppercase()
     val apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
     val apiStatus = apiPaymentStatus?.status?.uppercase()
@@ -870,6 +895,7 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = when {
+                        isManualBankDeposit -> "Manual bank deposit"
                         isFailed && isExpense -> "Transfer failed"
                         isFailed -> "Payment failed"
                         isPending && isExpense -> "Transfer pending"
@@ -916,8 +942,10 @@ fun TransactionDetailScreen(
     var apiPaymentStatus by remember { mutableStateOf<VaultPaymentResponse?>(null) }
     
     LaunchedEffect(tx.transactionId) {
-        viewModel?.fetchPaymentStatus(tx.transactionId)
-        apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
+        if (!tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)) {
+            viewModel?.fetchPaymentStatus(tx.transactionId)
+            apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
+        }
     }
     
     @Suppress("DEPRECATION")
@@ -936,6 +964,7 @@ fun TransactionDetailScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         val isExpense = tx.amount < 0
+        val isManualBankDeposit = tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)
         val statusToDisplay = apiPaymentStatus?.status?.uppercase() ?: tx.status.uppercase()
         val color = when {
             statusToDisplay.contains("FAIL") -> FastPayRed
@@ -978,6 +1007,7 @@ fun TransactionDetailScreen(
                 
                 Text(
                     text = when {
+                        isManualBankDeposit -> "Manual Bank Deposit Received"
                         statusToDisplay.contains("FAIL") || statusToDisplay.contains("REJECT") || statusToDisplay == "ERROR" ->
                             if (isExpense) "Transfer Failed" else "Payment Failed"
                         statusToDisplay.contains("PEND") -> if (isExpense) "Transfer Pending" else "Payment Pending"
@@ -1010,8 +1040,19 @@ fun TransactionDetailScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     ReceiptRow("Status", statusToDisplay, color, isBadge = true)
                     ReceiptRow("Date", tx.date, textColor)
-                    ReceiptRow("Type", if (isExpense) "Business Expense" else "Sales Revenue", textColor)
-                    ReceiptRow("Channel", "SwiftPay Corporate", textColor)
+                    ReceiptRow(
+                        "Type",
+                        when {
+                            isManualBankDeposit -> "Manual bank deposit"
+                            tx.transactionType.equals("PAYMENT", ignoreCase = true) -> "Payment received"
+                            tx.transactionType.equals("DISBURSEMENT", ignoreCase = true) -> "Bank transfer"
+                            isExpense -> "Business Expense"
+                            else -> "Sales Revenue"
+                        },
+                        textColor
+                    )
+                    ReceiptRow("Channel", tx.bankName ?: "SwiftPay Corporate", textColor)
+                    tx.description?.takeIf { it.isNotBlank() }?.let { ReceiptRow("Notes", it, textColor) }
                     
                     val pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f)
                     Canvas(Modifier.fillMaxWidth().height(1.dp)) {
@@ -1038,7 +1079,7 @@ fun TransactionDetailScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = tx.transactionId,
+                                text = tx.referenceNo ?: tx.transactionId,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = textColor,
                                 fontFamily = FontFamily.Monospace,
@@ -1046,7 +1087,7 @@ fun TransactionDetailScreen(
                             )
                             IconButton(
                                 onClick = {
-                                    clipboardManager.setText(AnnotatedString(tx.transactionId))
+                                    clipboardManager.setText(AnnotatedString(tx.referenceNo ?: tx.transactionId))
                                     onShowSnackbar("Reference number copied")
                                 },
                                 modifier = Modifier.size(32.dp)
