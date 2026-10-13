@@ -20,6 +20,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.CurrencyBitcoin
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PersonOutline
 import androidx.compose.material.icons.rounded.QrCodeScanner
@@ -54,6 +56,7 @@ import com.example.myapplication.data.IncomingMoneyPush
 import com.example.myapplication.navigation.Route
 import com.example.myapplication.ui.screens.ApiDocsScreen
 import com.example.myapplication.ui.screens.ApiKeysScreen
+import com.example.myapplication.ui.screens.CryptoScreen
 import com.example.myapplication.ui.screens.HomeScreen
 import com.example.myapplication.ui.screens.LoginScreen
 import com.example.myapplication.ui.screens.DevicePinScreen
@@ -319,6 +322,44 @@ fun SwiftPayApp() {
                         },
                     )
                     item(
+                        selected = currentRoute == Route.Scanner,
+                        onClick = { navController.navigate(Route.Scanner) },
+                        icon = {
+                            Icon(
+                                Icons.Rounded.QrCodeScanner,
+                                contentDescription = "QR Scanner",
+                                tint = if (currentRoute == Route.Scanner) activeColor else inactiveColor
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Scan",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (currentRoute == Route.Scanner) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (currentRoute == Route.Scanner) activeColor else inactiveColor
+                            )
+                        },
+                    )
+                    item(
+                        selected = currentRoute == Route.Crypto,
+                        onClick = { navController.navigate(Route.Crypto) },
+                        icon = {
+                            Icon(
+                                Icons.Rounded.CurrencyBitcoin,
+                                contentDescription = "Crypto",
+                                tint = if (currentRoute == Route.Crypto) activeColor else inactiveColor
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Crypto",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (currentRoute == Route.Crypto) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (currentRoute == Route.Crypto) activeColor else inactiveColor
+                            )
+                        },
+                    )
+                    item(
                         selected = currentRoute == Route.Profile,
                         onClick = { navController.navigate(Route.Profile) },
                         icon = {
@@ -400,6 +441,12 @@ fun SwiftPayApp() {
                         }
                         Route.Wallet -> NavEntry(key) {
                             WalletScreen()
+                        }
+                        Route.Scanner -> NavEntry(key) {
+                            MiniAppScreen(startQrScanner = true)
+                        }
+                        Route.Crypto -> NavEntry(key) {
+                            CryptoScreen()
                         }
                         else -> NavEntry(key) {}
                     }

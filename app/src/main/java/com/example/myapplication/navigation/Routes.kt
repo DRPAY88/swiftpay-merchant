@@ -20,6 +20,12 @@ sealed interface Route {
     data object Wallet : Route
 
     @Serializable
+    data object Scanner : Route
+
+    @Serializable
+    data object Crypto : Route
+
+    @Serializable
     data class Payment(val amount: Double) : Route
 
     @Serializable

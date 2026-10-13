@@ -87,7 +87,6 @@ fun WalletScreen(
     var transactionHistoryError by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("All") }
-    var selectedWallet by remember { mutableStateOf("PHP") }
     val scope = rememberCoroutineScope()
 
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
@@ -100,6 +99,7 @@ fun WalletScreen(
         when (selectedFilter) {
             "Income" -> transactions.filter { it.amount > 0 }
             "Expense" -> transactions.filter { it.amount < 0 }
+            "Bank Deposits" -> transactions.filter { it.transactionId.startsWith("DEP") || it.transactionId.contains("NETBANK") || (it.amount > 0 && it.transactionId.startsWith("VA")) }
             "Failed" -> transactions.filter { it.status.uppercase() == "FAILED" }
             else -> transactions
         }
@@ -212,8 +212,6 @@ fun WalletScreen(
                     transactions = filteredTransactions,
                     selectedFilter = selectedFilter,
                     transactionHistoryError = transactionHistoryError,
-                    selectedWallet = selectedWallet,
-                    onWalletSelected = { selectedWallet = it },
                     onFilterSelected = { selectedFilter = it },
                     onTransactionClick = { tx ->
                         scope.launch {
@@ -249,9 +247,7 @@ fun WalletListContent(
     accountNumber: String? = null,
     transactions: List<InternalTransaction>,
     selectedFilter: String,
-    selectedWallet: String = "PHP",
     transactionHistoryError: String? = null,
-    onWalletSelected: (String) -> Unit = {},
     onFilterSelected: (String) -> Unit,
     onTransactionClick: (InternalTransaction) -> Unit,
     viewModel: MiniAppViewModel? = null
@@ -274,81 +270,96 @@ fun WalletListContent(
             .padding(horizontal = 20.dp)
     ) {
         Spacer(Modifier.height(12.dp))
-        WalletTypeSelector(selected = selectedWallet, onSelect = onWalletSelected)
+        PremiumBalanceCard(
+            balance = balance,
+            adjustedBalance = adjustedBalance,
+            accountNumber = accountNumber,
+            errorMessage = viewModel?.walletBalanceError,
+            onRetry = { viewModel?.refreshBalance() }
+        )
+
         Spacer(Modifier.height(18.dp))
-
-        when (selectedWallet) {
-            "USDT" -> CryptoWalletContent(modifier = Modifier.weight(1f))
-            else -> {
-                PremiumBalanceCard(
-                    balance = balance,
-                    adjustedBalance = adjustedBalance,
-                    accountNumber = accountNumber,
-                    errorMessage = viewModel?.walletBalanceError,
-                    onRetry = { viewModel?.refreshBalance() }
+        QuickActionsRow()
+        Spacer(Modifier.height(22.dp))
+        SectionHeader(
+            title = "Transaction History",
+            subtitle = "Recent activity on your PHP wallet",
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(14.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            val filters = listOf("All", "Income", "Expense", "Bank Deposits", "Failed")
+            items(filters) { filter ->
+                PremiumFilterChip(
+                    selected = selectedFilter == filter,
+                    text = filter,
+                    onClick = { onFilterSelected(filter) }
                 )
-
-                Spacer(Modifier.height(18.dp))
-                QuickActionsRow()
-                Spacer(Modifier.height(22.dp))
-                SectionHeader(
-                    title = "Transaction History",
-                    subtitle = "Recent activity on your PHP wallet",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(14.dp))
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val filters = listOf("All", "Income", "Expense", "Failed")
-                    items(filters) { filter ->
-                        PremiumFilterChip(
-                            selected = selectedFilter == filter,
-                            text = filter,
-                            onClick = { onFilterSelected(filter) }
-                        )
-                    }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 28.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            transactionHistoryError?.let { error ->
+                item {
+                    Text(
+                        text = "Some transaction history could not be loaded: $error",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
-                Spacer(Modifier.height(16.dp))
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 28.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    transactionHistoryError?.let { error ->
-                        item {
-                            Text(
-                                text = "Some transaction history could not be loaded: $error",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                    if (transactions.isEmpty()) {
-                        item { EmptyHistoryState() }
-                    } else {
-                        items(transactions, key = { it.transactionId }) { tx ->
-                            AnimatedTransactionItem(tx = tx, onClick = { onTransactionClick(tx) }, viewModel = viewModel)
-                        }
-                    }
+            }
+            if (transactions.isEmpty()) {
+                item { EmptyHistoryState() }
+            } else {
+                items(transactions, key = { it.transactionId }) { tx ->
+                    AnimatedTransactionItem(tx = tx, onClick = { onTransactionClick(tx) }, viewModel = viewModel)
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WalletTypeSelector(selected: String, onSelect: (String) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("PHP" to "PHP", "USDT" to "USDT").forEach { (value, label) ->
-            FilterChip(
-                selected = selected == value,
-                onClick = { onSelect(value) },
-                label = { Text(label, maxLines = 1) },
-                modifier = Modifier.weight(1f)
+fun CryptoScreen(modifier: Modifier = Modifier) {
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        DrPayMarkBadge(size = 30.dp)
+                        Text(
+                            text = "Crypto",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
+    ) { innerPadding ->
+        CryptoWalletContent(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+        )
     }
 }
 
