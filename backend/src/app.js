@@ -136,13 +136,6 @@ function escapeHtml(value) {
   })[character]);
 }
 
-const requestedCheckoutMethods = [
-  { id: "alipay", name: "Alipay" },
-  { id: "naver-pay", name: "Naver Pay" },
-  { id: "kakao-pay", name: "Kakao Pay" },
-  { id: "toss-bank", name: "Toss Bank" }
-];
-
 function trustedInstitutionLogoUrl(logoUrl) {
   if (!logoUrl) return null;
   try {
@@ -169,62 +162,76 @@ function trustedInstitutionLogoUrl(logoUrl) {
   return null;
 }
 
-function checkoutMethodOptions() {
-  return requestedCheckoutMethods.map((method) => ({
-    id: method.id,
-    name: method.name
-  }));
-}
-
-function checkoutPage({ code, title, amount, currency, paymentUrl, methods }) {
+function checkoutPage({ code, title, amount, currency, paymentUrl, institutions, institutionLoadFailed }) {
   const displayTitle = escapeHtml(title);
   const displayAmount = escapeHtml(new Intl.NumberFormat("en", {
     style: "currency",
     currency
   }).format(amount));
   const safePaymentUrl = escapeHtml(paymentUrl);
-  const methodOptions = methods.map((method) => {
-    const logo = `<span class="method-logo method-logo-fallback" aria-hidden="true">QR</span>`;
-    return `<form class="method-form" action="/checkout/${encodeURIComponent(code)}/qrph" method="post">
-      <input type="hidden" name="paymentApp" value="${escapeHtml(method.id)}">
-      <button class="method-option" type="submit">
-        ${logo}<span>${escapeHtml(method.name)}</span>
-        <small>Continue with SwiftPay QR Ph</small>
-      </button>
-    </form>`;
-  }).join("");
+  const institutionCards = institutions.map(({ name, logoUrl }) => `
+      <li class="institution-card">
+        <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(name)} logo" loading="lazy" decoding="async">
+        <span>${escapeHtml(name)}</span>
+      </li>`).join("");
+  const institutionContent = institutionCards
+    ? `<ul class="institution-grid" aria-label="Available banks and wallets">${institutionCards}</ul>`
+    : `<p class="institution-empty">${institutionLoadFailed
+      ? "Bank and wallet options are available on SwiftPay’s secure payment page."
+      : "More bank and wallet options are available on SwiftPay’s secure payment page."}</p>`;
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>Secure payment · DRPAY</title>
+  <meta name="theme-color" content="#f4f7fb">
+  <title>Checkout · DRPAY</title>
   <link rel="stylesheet" href="/checkout-assets/checkout.css">
 </head>
 <body>
   <main class="checkout-card">
-    <div class="brand-mark" aria-hidden="true">D</div>
-    <p class="eyebrow">DRPAY · Secure checkout</p>
-    <h1>Complete your payment</h1>
-    <p class="description">${displayTitle}</p>
-    <p class="amount">${displayAmount}</p>
-    <p class="notice">Choose a payment method. SwiftPay securely processes your payment.</p>
-    <section class="payment-methods" aria-label="Payment methods">
-      <h2>Pay with</h2>
-      ${methodOptions}
-      <form class="method-form" action="/checkout/${encodeURIComponent(code)}/qrph" method="post">
-        <input type="hidden" name="paymentApp" value="qrph">
-        <button class="method-option qr-method" type="submit">
-          <span class="method-logo method-logo-fallback" aria-hidden="true">QR</span>
-          <span>QR Ph</span>
-          <small>Pay from a supported QR Ph app; settlement is in PHP</small>
-        </button>
-      </form>
+    <header class="checkout-header">
+      <div class="brand-mark" aria-hidden="true">D</div>
+      <div class="brand-copy">
+        <p class="eyebrow">DRPAY checkout</p>
+        <p class="secure-label"><span aria-hidden="true">✓</span> Secure payment</p>
+      </div>
+    </header>
+    <section class="payment-summary" aria-labelledby="checkout-title">
+      <p class="summary-label">Payment request</p>
+      <h1 id="checkout-title">${displayTitle}</h1>
+      <p class="amount">${displayAmount}</p>
+      <p class="summary-note">Select a payment option to continue.</p>
     </section>
-    <p class="notice">The named apps use the same QR Ph checkout. Complete payment only in an app that supports QR Ph. Other banks and e-wallets are available on SwiftPay's payment page.</p>
-    <a class="pay-button" href="${safePaymentUrl}" rel="noopener noreferrer">Other payment methods</a>
-    <p class="powered-by">Payment details are handled by SwiftPay.</p>
+    <section class="payment-methods" aria-labelledby="payment-methods-title">
+      <div class="section-heading">
+        <div>
+          <h2 id="payment-methods-title">Banks &amp; wallets</h2>
+          <p>Official payment partner logos</p>
+        </div>
+        <span class="powered-badge">Powered by SwiftPay</span>
+      </div>
+      ${institutionContent}
+      <a class="pay-button" href="${safePaymentUrl}" rel="noopener noreferrer">
+        Continue to secure payment
+        <span aria-hidden="true">→</span>
+      </a>
+      <p class="provider-note">You’ll see all supported banks and payment methods on SwiftPay’s secure page.</p>
+    </section>
+    <div class="checkout-divider"><span>or</span></div>
+    <form class="qr-form" action="/checkout/${encodeURIComponent(code)}/qrph" method="post">
+      <input type="hidden" name="paymentApp" value="qrph">
+      <button class="qr-button" type="submit">
+        <span class="qr-icon" aria-hidden="true">QR</span>
+        <span class="qr-copy"><strong>Pay with QR Ph</strong><small>Use a banking or wallet app that supports QR Ph</small></span>
+        <span class="qr-arrow" aria-hidden="true">→</span>
+      </button>
+    </form>
+    <footer class="checkout-footer">
+      <span class="footer-lock" aria-hidden="true">●</span>
+      Payment details are securely handled by SwiftPay.
+    </footer>
   </main>
 </body>
 </html>`;
@@ -243,20 +250,35 @@ function checkoutQrPage({ code, title, amount, currency, paymentApp, phpAmount, 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#f4f7fb">
   <title>QR Ph payment · DRPAY</title>
   <link rel="stylesheet" href="/checkout-assets/checkout.css">
 </head>
 <body>
   <main class="checkout-card">
-    <div class="brand-mark" aria-hidden="true">D</div>
-    <p class="eyebrow">DRPAY · Secure checkout</p>
-    <h1>${paymentApp ? `Scan with ${escapeHtml(paymentApp)}` : "Scan to pay"}</h1>
-    <p class="description">${displayTitle}</p>
-    <p class="amount">${customerAmount}</p>
-    <p class="notice">This is a SwiftPay QR Ph payment. Use ${paymentApp ? escapeHtml(paymentApp) : "a supported banking or wallet app"} only if it supports QR Ph. Settlement is in PHP at ${settlementAmount}. Your bank or wallet may apply its own conversion.</p>
+    <header class="checkout-header">
+      <div class="brand-mark" aria-hidden="true">D</div>
+      <div class="brand-copy">
+        <p class="eyebrow">DRPAY checkout</p>
+        <p class="secure-label"><span aria-hidden="true">✓</span> Secure payment</p>
+      </div>
+    </header>
+    <section class="payment-summary" aria-labelledby="checkout-title">
+      <p class="summary-label">QR Ph payment</p>
+      <h1 id="checkout-title">${paymentApp ? `Scan with ${escapeHtml(paymentApp)}` : "Scan to pay"}</h1>
+      <p class="amount">${customerAmount}</p>
+      <p class="summary-note">${displayTitle}</p>
+    </section>
+    <p class="qr-instructions">Scan this code with a banking or wallet app that supports QR Ph. The payment settles in PHP at <strong>${settlementAmount}</strong>. Your bank or wallet may apply its own conversion.</p>
     <img class="checkout-qr" src="data:image/png;base64,${imageBase64}" alt="QR Ph payment code">
-    <p class="powered-by">${rateDescription}</p>
-    <a class="pay-button" href="/checkout/${encodeURIComponent(code)}">Back to payment methods</a>
+    <p class="rate-note">${rateDescription}</p>
+    <div class="qr-back">
+      <a class="pay-button" href="/checkout/${encodeURIComponent(code)}">Back to payment options</a>
+    </div>
+    <footer class="checkout-footer">
+      <span class="footer-lock" aria-hidden="true">●</span>
+      Payment details are securely handled by SwiftPay.
+    </footer>
   </main>
 </body>
 </html>`;
@@ -268,15 +290,21 @@ function checkoutErrorPage(message) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f7fb">
   <title>Checkout unavailable · DRPAY</title>
   <link rel="stylesheet" href="/checkout-assets/checkout.css">
 </head>
 <body>
   <main class="checkout-card">
-    <div class="brand-mark" aria-hidden="true">D</div>
-    <p class="eyebrow">DRPAY</p>
-    <h1>Checkout unavailable</h1>
-    <p class="description">${escapeHtml(message)}</p>
+    <header class="checkout-header">
+      <div class="brand-mark" aria-hidden="true">D</div>
+      <div class="brand-copy"><p class="eyebrow">DRPAY checkout</p></div>
+    </header>
+    <section class="payment-summary">
+      <p class="summary-label">Payment request</p>
+      <h1>Checkout unavailable</h1>
+      <p class="summary-note error-message">${escapeHtml(message)}</p>
+    </section>
   </main>
 </body>
 </html>`;
@@ -378,7 +406,31 @@ export function createApp({
     const code = paymentLinkCodeSchema.parse(req.params.code);
     try {
       const link = await loadPublicPaymentLink(code);
-      const methods = checkoutMethodOptions();
+      let institutions = [];
+      let institutionLoadFailed = false;
+      try {
+        const result = await requestProvider("institutions");
+        const parsedInstitutions = z.array(paymentInstitutionSchema).safeParse(result.data);
+        if (!parsedInstitutions.success) {
+          throw new SwiftPayError(502, "SwiftPay returned an invalid payment institution catalogue");
+        }
+        institutions = parsedInstitutions.data
+          .filter((institution) =>
+            institution.enabled !== false &&
+            institution.live !== false &&
+            (!institution.currencies || institution.currencies.includes(link.currency)) &&
+            (institution.minAmount === undefined || link.amount >= institution.minAmount) &&
+            (institution.maxAmount === undefined || link.amount <= institution.maxAmount)
+          )
+          .map(({ name, logoUrl }) => ({ name, logoUrl: trustedInstitutionLogoUrl(logoUrl) }))
+          .filter((institution) => institution.logoUrl !== null);
+      } catch (error) {
+        institutionLoadFailed = true;
+        console.error("Checkout institution logos could not be loaded", JSON.stringify({
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          ...(error instanceof SwiftPayError ? { status: error.status } : {})
+        }));
+      }
       const title = [link.title, link.description]
         .find((value) => typeof value === "string" && value.trim())
         || "Payment request";
@@ -392,7 +444,8 @@ export function createApp({
         amount: link.amount,
         currency: link.currency,
         paymentUrl: link.paymentUrl.href,
-        methods
+        institutions,
+        institutionLoadFailed
       }));
     } catch (error) {
       if (error instanceof SwiftPayError && [404, 410].includes(error.status)) {
@@ -407,7 +460,7 @@ export function createApp({
   app.post("/checkout/:code/qrph", checkoutPaymentLimiter, asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);
     const link = await loadPublicPaymentLink(code);
-    const paymentApp = z.enum(["alipay", "naver-pay", "kakao-pay", "toss-bank", "qrph"]).default("qrph")
+    const paymentApp = z.literal("qrph").default("qrph")
       .parse(req.body?.paymentApp || "qrph");
     const rate = link.currency === "PHP"
       ? { phpPerUnit: 1, updatedAt: new Date().toISOString() }
@@ -456,7 +509,7 @@ export function createApp({
       title,
       amount: link.amount,
       currency: link.currency,
-      paymentApp: requestedCheckoutMethods.find((method) => method.id === paymentApp)?.name || null,
+      paymentApp: paymentApp === "qrph" ? null : paymentApp,
       phpAmount,
       phpPerUnit: rate.phpPerUnit,
       imageBase64: image.data.toString("base64")
@@ -526,7 +579,7 @@ export function createApp({
     }
 
     const paymentEvent = z.object({
-      x_payment_id: z.string().uuid(),
+      x_payment_id: z.string().min(1).max(128).regex(/^[a-zA-Z0-9._:-]+$/),
       x_payment_status: z.enum(["EXECUTED", "REJECTED", "CANCELED", "EXPIRED"]),
       x_reference_no: referenceSchema,
       x_amount: z.coerce.number().finite().positive().optional(),

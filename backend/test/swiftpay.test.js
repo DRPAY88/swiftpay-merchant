@@ -672,12 +672,18 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   assert.match(checkoutPage, /Invoice &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(checkoutPage, /<script>/);
   assert.match(checkoutPage, /https:\/\/pay\.example\/link\/PL-1/);
-  for (const method of ["Alipay", "Naver Pay", "Kakao Pay", "Toss Bank"]) {
-    assert.match(checkoutPage, new RegExp(method.replace(" ", "\\s")));
-  }
+  assert.match(checkoutPage, /Official payment partner logos/);
+  assert.match(checkoutPage, /src="https:\/\/assets\.swiftpay\.ph\/institutions\/bpi\.png" alt="Bank of the Philippine Islands logo"/);
+  assert.match(checkoutPage, /src="https:\/\/swiftpay-qa-gateway-frontend\.s3-ap-southeast-1\.amazonaws\.com\/static\/media\/bank-icons\/vbank\.png" alt="VBank logo"/);
+  assert.doesNotMatch(checkoutPage, /logos\.example|disabled\.png|method-logo-fallback/);
+  assert.doesNotMatch(checkoutPage, /Continue with SwiftPay QR Ph|Other payment methods/);
   assert.match(checkoutPage, /action="\/checkout\/PL-1\/qrph"/);
-  assert.match(checkoutPage, /same QR Ph checkout/);
-  assert.match(checkoutPage, /Other payment methods/);
+  assert.match(checkoutPage, /Continue to secure payment/);
+  assert.match(checkoutPage, /Pay with QR Ph/);
+
+  const checkoutCss = await fetch(`${baseUrl}/checkout-assets/checkout.css`);
+  assert.equal(checkoutCss.status, 200);
+  assert.match(await checkoutCss.text(), /institution-grid/);
 
   const invalid = await fetch(`${baseUrl}/v1/payment-links`, {
     method: "POST",
@@ -690,16 +696,17 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   assert.equal(invalid.status, 400);
 });
 
-test("self-hosted Alipay choice uses SwiftPay QR Ph without claiming direct app support", async () => {
+test("self-hosted QR Ph checkout presents a valid generic scan flow", async () => {
   const response = await fetch(`${baseUrl}/checkout/PL-1/qrph`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: "paymentApp=alipay"
+    body: "paymentApp=qrph"
   });
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Scan with Alipay/);
-  assert.match(html, /only if it supports QR Ph/);
+  assert.match(html, /Scan to pay/);
+  assert.match(html, /supports QR Ph/);
+  assert.match(html, /class="checkout-qr"/);
   const qrRequest = JSON.parse(requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).options.body);
   assert.equal(qrRequest.x_currency, "PHP");
   assert.equal(qrRequest.x_amount, 125.5);

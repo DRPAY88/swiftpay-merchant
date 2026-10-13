@@ -136,7 +136,8 @@ fun HomeScreen(
                 onPaymentLink = { onLaunchMiniApp("payment-link-page") },
                 onScanQr = { onLaunchMiniApp("scan-qr-page") },
                 onDeveloperDocs = { onLaunchMiniApp("api-docs-page") },
-                onProfileClick = onProfileClick
+                onProfileClick = onProfileClick,
+                onTransactionsClick = onNavigateToWallet
             )
             Spacer(modifier = Modifier.height(22.dp))
             MerchantToolsBanner(onCreatePaymentLink = { onLaunchMiniApp("payment-link-page") })
@@ -291,7 +292,8 @@ fun QuickActionsSection(
     onPaymentLink: () -> Unit,
     onScanQr: () -> Unit,
     onDeveloperDocs: () -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    onTransactionsClick: () -> Unit
 ) {
     Column(modifier = Modifier.padding(horizontal = 18.dp)) {
         Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
@@ -305,6 +307,7 @@ fun QuickActionsSection(
         Spacer(modifier = Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             QuickAction(Icons.Rounded.Terminal, "API docs", Color(0xFFF3EBDD), onDeveloperDocs, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Transactions", FastPayMeshBlue, onTransactionsClick, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Person, "Profile", FastPayMeshBlue, onProfileClick, Modifier.weight(1f))
         }
     }

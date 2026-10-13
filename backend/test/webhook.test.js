@@ -140,6 +140,21 @@ test("signed USD and EUR payment receipts retain their original webhook currenci
   }
 });
 
+test("payment webhooks accept bounded opaque provider payment IDs", async () => {
+  const providerPaymentId = "01234567-89ab-7cde-f012-3456789abcde";
+  const fields = {
+    x_payment_id: providerPaymentId,
+    x_payment_status: "EXPIRED",
+    x_reference_no: "ORDER-OPAQUE-ID",
+    x_access_key: config.swiftPayAccessKey
+  };
+  fields.signature = signOrder(fields, config.swiftPaySecretKey);
+
+  const response = await sendWebhook(fields);
+  assert.equal(response.status, 200);
+  assert.equal(events.get(`payment:${providerPaymentId}`).paymentId, providerPaymentId);
+});
+
 test("webhook signature, access key and event schema are validated", async () => {
   events.clear();
   const tampered = signedPaymentEvent();

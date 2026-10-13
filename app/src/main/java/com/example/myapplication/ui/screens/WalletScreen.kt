@@ -72,7 +72,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.ui.theme.*
 
 import com.example.myapplication.ui.components.TransactionStatusIndicator
-import com.example.myapplication.ui.components.SectionHeader
 import com.example.myapplication.ui.components.FastPayStatusBadge
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3AdaptiveApi::class, ExperimentalAnimationApi::class)
@@ -267,9 +266,21 @@ fun WalletListContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 18.dp)
     ) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Your money",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Manage your balance and recent activity",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 3.dp, bottom = 16.dp)
+        )
         PremiumBalanceCard(
             balance = balance,
             adjustedBalance = adjustedBalance,
@@ -278,14 +289,41 @@ fun WalletListContent(
             onRetry = { viewModel?.refreshBalance() }
         )
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(20.dp))
         QuickActionsRow()
-        Spacer(Modifier.height(22.dp))
-        SectionHeader(
-            title = "Transaction History",
-            subtitle = "Recent activity on your PHP wallet",
-            modifier = Modifier.fillMaxWidth()
-        )
+        Spacer(Modifier.height(24.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "Transactions",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Activity on your PHP wallet",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 3.dp)
+                )
+            }
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+            ) {
+                Text(
+                    text = transactions.size.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
+                )
+            }
+        }
         Spacer(Modifier.height(14.dp))
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -309,14 +347,21 @@ fun WalletListContent(
             transactionHistoryError?.let { error ->
                 item {
                     Text(
-                        text = "Some transaction history could not be loaded: $error",
+                        text = "Some transaction history could not be loaded. $error",
                         color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(12.dp)
                     )
                 }
             }
-            if (transactions.isEmpty()) {
+            if (transactions.isEmpty() && selectedFilter == "All") {
                 item { EmptyHistoryState() }
+            } else if (transactions.isEmpty()) {
+                item { EmptyFilteredHistoryState(selectedFilter) }
             } else {
                 items(transactions, key = { it.transactionId }) { tx ->
                     AnimatedTransactionItem(tx = tx, onClick = { onTransactionClick(tx) }, viewModel = viewModel)
@@ -548,13 +593,13 @@ fun PremiumBalanceCard(
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
     var isBalanceVisible by remember { mutableStateOf(true) }
+    val formattedBalance = balance?.let { "₱ ${"%,.2f".format(it)}" } ?: "Unavailable"
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 204.dp),
-        shape = RoundedCornerShape(28.dp),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
         color = FastPayNavy,
+        shadowElevation = 8.dp
     ) {
         Box(
             modifier = Modifier
@@ -578,25 +623,28 @@ fun PremiumBalanceCard(
                         center = Offset(0f, size.height)
                     )
                 }
-                .padding(horizontal = 22.dp, vertical = 20.dp)
+                .padding(horizontal = 20.dp, vertical = 19.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "PHP BALANCE",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.72f),
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp,
+                        text = "AVAILABLE BALANCE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.74f),
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.sp,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = { isBalanceVisible = !isBalanceVisible }, modifier = Modifier.size(32.dp)) {
+                    IconButton(
+                        onClick = { isBalanceVisible = !isBalanceVisible },
+                        modifier = Modifier.size(34.dp)
+                    ) {
                         Icon(
                             imageVector = if (isBalanceVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
                             contentDescription = if (isBalanceVisible) "Hide balance" else "Show balance",
@@ -607,109 +655,111 @@ fun PremiumBalanceCard(
                 }
                 Text(
                     text = when {
-                        balance == null -> "Unavailable"
-                        isBalanceVisible -> "₱ ${"%,.2f".format(balance)}"
+                        balance == null -> formattedBalance
+                        isBalanceVisible -> formattedBalance
                         else -> "₱ ••••••"
                     },
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    fontSize = 32.sp,
-                    letterSpacing = (-0.5).sp,
-                    maxLines = 1
+                    fontSize = 34.sp,
+                    letterSpacing = (-0.7).sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(vertical = 2.dp)
                 )
-                HorizontalDivider(color = Color.White.copy(alpha = 0.18f))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (adjustedBalance != null || errorMessage != null) {
-                        Column(modifier = Modifier.weight(1.15f)) {
-                            adjustedBalance?.let {
-                                Text(
-                                    text = "ADJUSTED BALANCE",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.62f),
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.6.sp
-                                )
-                                Text(
-                                    text = "₱ ${"%,.2f".format(it)}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        if (errorMessage != null) {
-                            Text(
-                                text = errorMessage,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.8f),
-                                maxLines = 1
-                            )
-                        }
+                adjustedBalance?.let {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Adjusted balance",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = if (isBalanceVisible) "₱ ${"%,.2f".format(it)}" else "₱ ••••••",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                errorMessage?.let {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.1f))
+                            .padding(start = 12.dp, end = 4.dp, top = 5.dp, bottom = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.ErrorOutline,
+                            contentDescription = null,
+                            tint = Color(0xFFFFC7C7),
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            maxLines = 2,
+                            modifier = Modifier.weight(1f).padding(start = 8.dp)
+                        )
+                        TextButton(onClick = onRetry) {
+                            Text("Retry", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
-                    if (errorMessage != null) {
-                        TextButton(onClick = onRetry) {
-                            Text("RETRY", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    } else {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = FastPayGreen.copy(alpha = 0.2f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, FastPayGreen.copy(alpha = 0.3f))
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .background(FastPayGreen, CircleShape)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = "ACTIVE",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = FastPayGreen,
-                                    fontWeight = FontWeight.Black
-                                )
-                            }
-                        }
-                        Column(
-                            modifier = Modifier.weight(1f).padding(start = 8.dp),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Text("DEPOSIT ACCOUNT", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.62f), fontWeight = FontWeight.Bold)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable {
-                                        if (!accountNumber.isNullOrBlank()) {
-                                            clipboardManager.setText(AnnotatedString(accountNumber))
-                                            Toast.makeText(context, "Account number copied to clipboard", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                    .padding(vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = accountNumber?.takeIf { it.isNotBlank() } ?: "Loading...",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    maxLines = 1
-                                )
-                                if (!accountNumber.isNullOrBlank()) {
-                                    Spacer(Modifier.width(4.dp))
-                                    Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy account number", tint = Color.White, modifier = Modifier.size(13.dp))
+                }
+                HorizontalDivider(
+                    color = Color.White.copy(alpha = 0.17f),
+                    modifier = Modifier.padding(top = 3.dp)
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .then(
+                            if (!accountNumber.isNullOrBlank()) {
+                                Modifier.clickable {
+                                    clipboardManager.setText(AnnotatedString(accountNumber))
+                                    Toast.makeText(context, "Account number copied to clipboard", Toast.LENGTH_SHORT).show()
                                 }
-                            }
-                            Text("Tap to copy", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.48f))
-                        }
+                            } else Modifier
+                        )
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.AccountBalance,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.82f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+                        Text(
+                            text = "Deposit account",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.68f)
+                        )
+                        Text(
+                            text = accountNumber?.takeIf { it.isNotBlank() } ?: "Loading account number…",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                    }
+                    if (!accountNumber.isNullOrBlank()) {
+                        Icon(
+                            Icons.Rounded.ContentCopy,
+                            contentDescription = "Copy account number",
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(17.dp)
+                        )
                     }
                 }
             }
@@ -722,40 +772,65 @@ fun QuickActionsRow() {
     val navController = LocalNavController.current
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        QuickActionItem(Icons.Rounded.Payments, "Collect", FastPayBlue) {
-            navController.navigate(Route.MiniApp(null))
+        QuickActionItem(Icons.Rounded.Payments, "Collect", "Accept a payment", FastPayBlue, Modifier.weight(1f)) {
+            navController.navigate(Route.MiniApp("topup-page"))
         }
-        QuickActionItem(Icons.AutoMirrored.Rounded.Send, "Transfer", FastPayAccent) {
+        QuickActionItem(Icons.AutoMirrored.Rounded.Send, "Transfer", "Send money", FastPayAccent, Modifier.weight(1f)) {
             navController.navigate(Route.MiniApp("disbursement-page"))
         }
-        QuickActionItem(Icons.Rounded.MoreHoriz, "More", Color.LightGray) {
+        QuickActionItem(Icons.Rounded.MoreHoriz, "More", "More wallet actions", MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f)) {
             navController.navigate(Route.MiniApp())
         }
     }
 }
 
 @Composable
-fun QuickActionItem(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
-    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val surfaceColor = MaterialTheme.colorScheme.surface
-    val textColor = MaterialTheme.colorScheme.onSurface
-    
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(
-            modifier = Modifier.size(60.dp),
-            shape = RoundedCornerShape(12.dp),
-            color = surfaceColor,
-            shadowElevation = if (isDarkTheme) 0.dp else 2.dp,
-            onClick = onClick
+fun QuickActionItem(
+    icon: ImageVector,
+    label: String,
+    description: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        onClick = onClick
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 13.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(26.dp))
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(color.copy(alpha = 0.1f), RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = textColor)
     }
 }
 
@@ -763,7 +838,7 @@ fun QuickActionItem(icon: ImageVector, label: String, color: Color, onClick: () 
 fun PremiumFilterChip(selected: Boolean, text: String, onClick: () -> Unit) {
     val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val unselectedBg = MaterialTheme.colorScheme.surface
-    val selectedBg = if (isDarkTheme) MaterialTheme.colorScheme.primary else FastPayNavy
+    val selectedBg = if (isDarkTheme) MaterialTheme.colorScheme.primary else FastPayBlue
     val unselectedText = MaterialTheme.colorScheme.onSurface
     val borderColor = MaterialTheme.colorScheme.outlineVariant
 
@@ -771,8 +846,8 @@ fun PremiumFilterChip(selected: Boolean, text: String, onClick: () -> Unit) {
     
     Surface(
         color = if (selected) selectedBg else unselectedBg,
-        shape = RoundedCornerShape(10.dp),
-        shadowElevation = if (selected && !isDarkTheme) 1.dp else 0.dp,
+        shape = CircleShape,
+        shadowElevation = 0.dp,
         border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, borderColor),
         modifier = Modifier
             .clickable { onClick() }
@@ -780,9 +855,9 @@ fun PremiumFilterChip(selected: Boolean, text: String, onClick: () -> Unit) {
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
             color = if (selected) Color.White else unselectedText
         )
     }
@@ -847,7 +922,7 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
     val (icon, statusColor) = when {
         isFailed || apiStatus?.contains("FAIL") == true -> Icons.Rounded.ErrorOutline to Color(0xFFEF4444)
         isPending || apiStatus?.contains("PEND") == true -> Icons.Rounded.Schedule to Color(0xFFF59E0B)
-        isExpense -> Icons.Rounded.NorthEast to FastPayNavy
+        isExpense -> Icons.Rounded.NorthEast to FastPayRed
         else -> Icons.Rounded.SouthWest to Color(0xFF10B981)
     }
 
@@ -873,12 +948,12 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
                 indication = null,
                 onClick = onClick
             ),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         color = surfaceColor,
-        shadowElevation = if (isPressed) 1.dp else 4.dp,
+        shadowElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(
-            1.dp, 
-            if (isPressed) FastPayBlue.copy(alpha = 0.1f) else Color.Transparent
+            1.dp,
+            if (isPressed) FastPayBlue.copy(alpha = 0.38f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
         )
     ) {
         Row(
@@ -889,19 +964,19 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
         ) {
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .background(statusColor.copy(alpha = 0.08f), RoundedCornerShape(14.dp)),
+                    .size(46.dp)
+                    .background(statusColor.copy(alpha = 0.09f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     icon, 
                     contentDescription = null, 
                     tint = statusColor, 
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(23.dp)
                 )
             }
             
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(12.dp))
             
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -914,8 +989,8 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
                         isExpense -> "Transfer completed"
                         else -> "Payment received"
                     },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = textColor
                 )
                 Text(
@@ -930,7 +1005,11 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
                     text = "${if (!isExpense && !isFailed) "+" else ""}₱ ${"%,.2f".format(abs(tx.amount))}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
-                    color = if (!isExpense && !isFailed) Color(0xFF10B981) else FastPayNavy
+                    color = when {
+                        isFailed -> FastPayRed
+                        isExpense -> FastPayNavy
+                        else -> Color(0xFF12805C)
+                    }
                 )
                 
                 Spacer(Modifier.height(4.dp))
@@ -1275,6 +1354,43 @@ fun EmptyHistoryState() {
             "Your sales history will appear here.",
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray.copy(alpha = 0.7f)
+        )
+    }
+}
+
+@Composable
+fun EmptyFilteredHistoryState(filter: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 36.dp, bottom = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(58.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.AutoMirrored.Rounded.ReceiptLong,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(27.dp)
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "No $filter transactions",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = "Try another filter to see more activity.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
         )
     }
 }

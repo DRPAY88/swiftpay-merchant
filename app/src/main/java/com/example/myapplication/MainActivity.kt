@@ -24,7 +24,6 @@ import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.CurrencyBitcoin
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PersonOutline
-import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -303,40 +302,21 @@ fun SwiftPayApp() {
                         },
                     )
                     item(
-                        selected = currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page",
-                        onClick = { navController.navigate(Route.MiniApp("scan-qr-page")) },
+                        selected = currentRoute == Route.Wallet,
+                        onClick = { navController.navigate(Route.Wallet) },
                         icon = {
                             Icon(
-                                Icons.Rounded.QrCodeScanner,
-                                contentDescription = "QR Scanner",
-                                tint = if (currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page") activeColor else inactiveColor
+                                Icons.Rounded.AccountBalanceWallet,
+                                contentDescription = "Wallet",
+                                tint = if (currentRoute == Route.Wallet) activeColor else inactiveColor
                             )
                         },
                         label = {
                             Text(
-                                "QR Scanner",
+                                "Wallet",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page") FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (currentRoute is Route.MiniApp && currentRoute.initialPath == "scan-qr-page") activeColor else inactiveColor
-                            )
-                        },
-                    )
-                    item(
-                        selected = currentRoute == Route.Scanner,
-                        onClick = { navController.navigate(Route.Scanner) },
-                        icon = {
-                            Icon(
-                                Icons.Rounded.QrCodeScanner,
-                                contentDescription = "QR Scanner",
-                                tint = if (currentRoute == Route.Scanner) activeColor else inactiveColor
-                            )
-                        },
-                        label = {
-                            Text(
-                                "Scan",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (currentRoute == Route.Scanner) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (currentRoute == Route.Scanner) activeColor else inactiveColor
+                                fontWeight = if (currentRoute == Route.Wallet) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (currentRoute == Route.Wallet) activeColor else inactiveColor
                             )
                         },
                     )
