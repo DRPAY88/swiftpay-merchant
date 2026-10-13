@@ -20,12 +20,12 @@ import com.example.myapplication.R
 import com.example.myapplication.ui.theme.*
 
 @Composable
-fun DrPayLogo(
+fun DenshitxBankLogo(
     modifier: Modifier = Modifier,
     size: Dp = 120.dp
 ) {
     Image(
-        painter = painterResource(R.drawable.drpay_logo),
+        painter = painterResource(R.drawable.denshitx_bank_mark),
         contentDescription = "Denshitx Bank logo",
         contentScale = ContentScale.Fit,
         modifier = modifier.size(size)
@@ -33,20 +33,20 @@ fun DrPayLogo(
 }
 
 @Composable
-fun DrPayMark(
+fun DenshitxBankMark(
     modifier: Modifier = Modifier,
     size: Dp = 40.dp
 ) {
     Image(
-        painter = painterResource(R.drawable.drpay_mark),
-        contentDescription = "DRPAY",
+        painter = painterResource(R.drawable.denshitx_bank_mark),
+        contentDescription = "Denshitx Bank",
         contentScale = ContentScale.Fit,
         modifier = modifier.size(size)
     )
 }
 
 @Composable
-fun DrPayMarkBadge(
+fun DenshitxBankMarkBadge(
     modifier: Modifier = Modifier,
     size: Dp = 40.dp
 ) {
@@ -57,7 +57,7 @@ fun DrPayMarkBadge(
         border = androidx.compose.foundation.BorderStroke(1.dp, FastPayBlue.copy(alpha = 0.12f))
     ) {
         Box(contentAlignment = Alignment.Center) {
-            DrPayMark(modifier = Modifier.fillMaxSize().padding(size * 0.08f))
+            DenshitxBankMark(modifier = Modifier.fillMaxSize().padding(size * 0.08f))
         }
     }
 }

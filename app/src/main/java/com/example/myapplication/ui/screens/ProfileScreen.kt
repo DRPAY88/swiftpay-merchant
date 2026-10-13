@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.LocalNavController
 import com.example.myapplication.navigation.Route
-import com.example.myapplication.ui.components.DrPayMarkBadge
+import com.example.myapplication.ui.components.DenshitxBankMarkBadge
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.data.DebugNetworkTracker
 import com.example.myapplication.BuildConfig
@@ -66,7 +66,7 @@ fun ProfileScreen() {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        DrPayMarkBadge(size = 28.dp)
+                        DenshitxBankMarkBadge(size = 28.dp)
                         Text("Profile", color = textColor, fontWeight = FontWeight.Bold)
                     }
                 },

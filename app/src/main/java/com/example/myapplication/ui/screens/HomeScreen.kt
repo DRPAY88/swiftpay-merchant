@@ -37,7 +37,7 @@ import com.example.myapplication.data.TransactionStore
 import com.example.myapplication.data.createSwiftPayService
 import com.example.myapplication.data.mergeTransactions
 import com.example.myapplication.data.api.InternalTransaction
-import com.example.myapplication.ui.components.DrPayMarkBadge
+import com.example.myapplication.ui.components.DenshitxBankMarkBadge
 import com.example.myapplication.ui.theme.FastPayActionIcon
 import com.example.myapplication.ui.theme.FastPayBackground
 import com.example.myapplication.ui.theme.FastPayBlue
@@ -167,7 +167,7 @@ fun HomeGreeting(
             verticalAlignment = Alignment.CenterVertically
     ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                DrPayMarkBadge(size = 42.dp)
+                DenshitxBankMarkBadge(size = 42.dp)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                 Text("Hello!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)

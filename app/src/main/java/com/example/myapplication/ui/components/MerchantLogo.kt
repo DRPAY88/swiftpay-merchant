@@ -10,5 +10,5 @@ fun MerchantLogo(
     size: Dp = 120.dp,
     modifier: Modifier = Modifier
 ) {
-    DrPayLogo(modifier = modifier, size = size)
+    DenshitxBankLogo(modifier = modifier, size = size)
 }
