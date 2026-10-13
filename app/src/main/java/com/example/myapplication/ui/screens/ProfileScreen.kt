@@ -56,7 +56,7 @@ fun ProfileScreen() {
     val borderColor = MaterialTheme.colorScheme.outlineVariant
     val accountName = merchantAlias?.takeIf { it.isNotBlank() }
         ?: signedInEmail?.substringBefore('@')?.replace('.', ' ')?.replaceFirstChar { it.uppercase() }
-        ?: "Denshitx Bank merchant"
+        ?: "DRPAY merchant"
 
     Scaffold(
         topBar = {

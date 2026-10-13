@@ -2,7 +2,7 @@ package com.example.myapplication.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Denshitx Bank palette: deep navy, clear bank blue, and a restrained brass accent.
+// DRPAY palette: deep navy, clear bank blue, and a restrained brass accent.
 val FastPayNavy = Color(0xFF0B1F3A)
 val FastPayBlue = Color(0xFF1B4F9C)
 val FastPayAccent = Color(0xFFD5B16D)

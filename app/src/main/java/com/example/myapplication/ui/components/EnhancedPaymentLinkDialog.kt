@@ -137,7 +137,7 @@ fun EnhancedPaymentLinkDialog(
                 Spacer(Modifier.height(8.dp))
 
                 Text(
-                    "Customers see a Denshitx Bank checkout page before continuing to SwiftPay's secure payment page.",
+                    "Customers see a DRPAY checkout page before continuing to SwiftPay's secure payment page.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                     textAlign = TextAlign.Center
@@ -234,7 +234,7 @@ fun EnhancedPaymentLinkActions(
             onClick = {
                 val sendIntent = Intent().apply {
                     action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_TEXT, "Complete your payment securely using this Denshitx Bank checkout page: $url")
+                    putExtra(Intent.EXTRA_TEXT, "Complete your payment securely using this DRPAY checkout page: $url")
                     type = "text/plain"
                 }
                 val shareIntent = Intent.createChooser(sendIntent, localization.shareLink)

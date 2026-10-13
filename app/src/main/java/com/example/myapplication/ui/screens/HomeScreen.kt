@@ -123,7 +123,6 @@ fun HomeScreen(
                 balanceError = balanceError,
                 isBalanceVisible = isBalanceVisible,
                 onToggleBalance = { isBalanceVisible = !isBalanceVisible },
-                onDeposit = { onLaunchMiniApp("deposit-page") },
                 onBalanceRetry = {
                     isLoading = true
                     balanceError = null
@@ -136,7 +135,6 @@ fun HomeScreen(
                 onTransfer = { onLaunchMiniApp("disbursement-page") },
                 onPaymentLink = { onLaunchMiniApp("payment-link-page") },
                 onScanQr = { onLaunchMiniApp("scan-qr-page") },
-                onDeposit = { onLaunchMiniApp("deposit-page") },
                 onDeveloperDocs = { onLaunchMiniApp("api-docs-page") },
                 onProfileClick = onProfileClick
             )
@@ -207,7 +205,6 @@ fun WalletBalanceCard(
     balanceError: String?,
     isBalanceVisible: Boolean,
     onToggleBalance: () -> Unit,
-    onDeposit: () -> Unit,
     onBalanceRetry: () -> Unit
 ) {
     Surface(
@@ -275,17 +272,6 @@ fun WalletBalanceCard(
                         balance != null -> Text("₱ ••••••", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
                         else -> Text("Unavailable", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
                     }
-                    Button(
-                        onClick = onDeposit,
-                        shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = FastPayNavy),
-                        contentPadding = PaddingValues(horizontal = 14.dp),
-                        modifier = Modifier.height(42.dp)
-                    ) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(19.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Cash in", fontWeight = FontWeight.Bold, maxLines = 1)
-                    }
                 }
                 if (!isLoading && balanceError != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
@@ -304,7 +290,6 @@ fun QuickActionsSection(
     onTransfer: () -> Unit,
     onPaymentLink: () -> Unit,
     onScanQr: () -> Unit,
-    onDeposit: () -> Unit,
     onDeveloperDocs: () -> Unit,
     onProfileClick: () -> Unit
 ) {
@@ -319,7 +304,6 @@ fun QuickActionsSection(
         }
         Spacer(modifier = Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            QuickAction(Icons.Rounded.AccountBalance, "Cash in", FastPayMeshBlue, onDeposit, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Terminal, "API docs", Color(0xFFF3EBDD), onDeveloperDocs, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Person, "Profile", FastPayMeshBlue, onProfileClick, Modifier.weight(1f))
         }
@@ -368,7 +352,7 @@ fun MerchantToolsBanner(onCreatePaymentLink: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Denshitx Bank", style = MaterialTheme.typography.labelSmall, color = Color(0xFFD5B16D), fontWeight = FontWeight.Bold)
+                    Text("DRPAY", style = MaterialTheme.typography.labelSmall, color = Color(0xFFD5B16D), fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(6.dp))
                     Text("Get paid your way", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
                     Text("Collections, payment links and transfers in one place.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.78f))

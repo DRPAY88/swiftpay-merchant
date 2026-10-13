@@ -39,7 +39,7 @@ import com.example.myapplication.data.BackendAuthService
 import com.example.myapplication.data.DevicePinCheck
 import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.data.SettingsManager
-import com.example.myapplication.ui.components.DrPayMark
+import com.example.myapplication.ui.components.DrPayLogo
 import com.example.myapplication.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -307,7 +307,7 @@ fun MpinEnrollmentContent(
         )
         Text(
             if (isConfirmation) "Enter it once more to finish securing this device."
-            else "Use this six-digit code to unlock Denshitx Bank on this device. OTP sign-in is only needed to register another device.",
+            else "Use this six-digit code to unlock DRPAY on this device. OTP sign-in is only needed to register another device.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f),
             textAlign = TextAlign.Center,
@@ -473,16 +473,8 @@ fun LandingContent(
     horizontalAlignment = Alignment.CenterHorizontally
     ) {
     Spacer(modifier = Modifier.height(24.dp))
-    DrPayMark(size = 112.dp)
-    Spacer(modifier = Modifier.height(16.dp))
-    Text(
-        text = "Denshitx Bank",
-        style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp),
-        fontWeight = FontWeight.Bold,
-        color = headlineColor,
-        textAlign = TextAlign.Center
-    )
-    Spacer(modifier = Modifier.height(4.dp))
+    DrPayLogo(size = 190.dp)
+    Spacer(modifier = Modifier.height(8.dp))
     Text(
         text = "Banko ng mga tunay na amo",
         style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),

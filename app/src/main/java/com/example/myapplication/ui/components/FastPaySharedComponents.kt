@@ -26,7 +26,7 @@ fun DrPayLogo(
 ) {
     Image(
         painter = painterResource(R.drawable.drpay_logo),
-        contentDescription = "Denshitx Bank logo",
+        contentDescription = "DRPAY logo",
         contentScale = ContentScale.Fit,
         modifier = modifier.size(size)
     )

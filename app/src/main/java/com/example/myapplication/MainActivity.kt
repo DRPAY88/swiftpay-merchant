@@ -426,7 +426,7 @@ fun SwiftPayApp() {
                         is Route.MiniApp -> NavEntry(key) {
                             val launchScanner = key.initialPath == "scan-qr-page"
                             MiniAppScreen(
-                                initialPath = if (launchScanner) "disbursement-page" else key.initialPath,
+                                initialPath = key.initialPath,
                                 openQrScanner = launchScanner
                             )
                         }
@@ -443,7 +443,7 @@ fun SwiftPayApp() {
                             WalletScreen()
                         }
                         Route.Scanner -> NavEntry(key) {
-                            MiniAppScreen(startQrScanner = true)
+                            MiniAppScreen(openQrScanner = true)
                         }
                         Route.Crypto -> NavEntry(key) {
                             CryptoScreen()

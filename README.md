@@ -1,6 +1,6 @@
-# Denshitx Bank
+# DRPAY
 
-Denshitx Bank is an Android merchant app backed by the SwiftPay API. It includes a PHP wallet, transaction history, payment checkout, and merchant account tools.
+DRPAY is an Android merchant app backed by the SwiftPay API. It includes a PHP wallet, transaction history, payment checkout, and merchant account tools.
 
 ## Download
 

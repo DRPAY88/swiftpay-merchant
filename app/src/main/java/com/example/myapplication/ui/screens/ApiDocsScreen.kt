@@ -94,7 +94,7 @@ fun ApiDocsScreen() {
             DocSection(
                 title = "4. Payment links",
                 icon = Icons.Rounded.Description,
-                content = "Create a fixed-amount Denshitx Bank checkout page in PHP, USD, or EUR and share its public URL. Alipay, Naver Pay, Kakao Pay, and Toss Bank shortcuts use the same QR Ph flow; customers must use an app that supports QR Ph. Foreign-currency QR prices settle in PHP.",
+                content = "Create a fixed-amount DRPAY checkout page in PHP, USD, or EUR and share its public URL. Alipay, Naver Pay, Kakao Pay, and Toss Bank shortcuts use the same QR Ph flow; customers must use an app that supports QR Ph. Foreign-currency QR prices settle in PHP.",
                 code = "POST /v1/payment-links\n{\n  \"amount\": 50.00,\n  \"currency\": \"PHP\",\n  \"description\": \"Invoice 1002\"\n}",
                 cardColor = cardColor,
                 textColor = textColor

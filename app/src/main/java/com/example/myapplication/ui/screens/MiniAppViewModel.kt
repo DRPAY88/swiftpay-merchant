@@ -532,7 +532,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             val payment = PaymentData(
                 amount = amount,
                 currency = "PHP",
-                description = "Denshitx Bank wallet deposit"
+                description = "DRPAY wallet deposit"
             )
             getService().createCheckout(payment)
                 .onSuccess { response ->
@@ -553,7 +553,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                         status = "PENDING",
                         transactionType = "PAYMENT",
                         referenceNo = referenceNo,
-                        description = "Denshitx Bank wallet deposit"
+                        description = "DRPAY wallet deposit"
                     )
                     pendingCheckoutId = paymentId
                     uiState = MiniAppUiState.DepositCheckoutReady(

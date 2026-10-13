@@ -199,13 +199,13 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, methods }) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>Secure payment · Denshitx Bank</title>
+  <title>Secure payment · DRPAY</title>
   <link rel="stylesheet" href="/checkout-assets/checkout.css">
 </head>
 <body>
   <main class="checkout-card">
     <div class="brand-mark" aria-hidden="true">D</div>
-    <p class="eyebrow">Denshitx Bank · Secure checkout</p>
+    <p class="eyebrow">DRPAY · Secure checkout</p>
     <h1>Complete your payment</h1>
     <p class="description">${displayTitle}</p>
     <p class="amount">${displayAmount}</p>
@@ -243,13 +243,13 @@ function checkoutQrPage({ code, title, amount, currency, paymentApp, phpAmount, 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>QR Ph payment · Denshitx Bank</title>
+  <title>QR Ph payment · DRPAY</title>
   <link rel="stylesheet" href="/checkout-assets/checkout.css">
 </head>
 <body>
   <main class="checkout-card">
     <div class="brand-mark" aria-hidden="true">D</div>
-    <p class="eyebrow">Denshitx Bank · Secure checkout</p>
+    <p class="eyebrow">DRPAY · Secure checkout</p>
     <h1>${paymentApp ? `Scan with ${escapeHtml(paymentApp)}` : "Scan to pay"}</h1>
     <p class="description">${displayTitle}</p>
     <p class="amount">${customerAmount}</p>
@@ -268,13 +268,13 @@ function checkoutErrorPage(message) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Checkout unavailable · Denshitx Bank</title>
+  <title>Checkout unavailable · DRPAY</title>
   <link rel="stylesheet" href="/checkout-assets/checkout.css">
 </head>
 <body>
   <main class="checkout-card">
     <div class="brand-mark" aria-hidden="true">D</div>
-    <p class="eyebrow">Denshitx Bank</p>
+    <p class="eyebrow">DRPAY</p>
     <h1>Checkout unavailable</h1>
     <p class="description">${escapeHtml(message)}</p>
   </main>

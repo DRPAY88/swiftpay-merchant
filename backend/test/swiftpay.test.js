@@ -667,7 +667,7 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   assert.match(checkoutPageResponse.headers.get("content-type"), /text\/html/);
   assert.match(checkoutPageResponse.headers.get("cache-control"), /no-store/);
   const checkoutPage = await checkoutPageResponse.text();
-  assert.match(checkoutPage, /Denshitx Bank/);
+  assert.match(checkoutPage, /DRPAY/);
   assert.match(checkoutPage, /125\.50/);
   assert.match(checkoutPage, /Invoice &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(checkoutPage, /<script>/);
