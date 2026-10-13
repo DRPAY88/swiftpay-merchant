@@ -145,6 +145,33 @@ test("internal adjustments are audited but do not affect the provider balance; a
   assert.equal(Number(await store.adjustmentTotal()), 100);
 });
 
+test("internal server errors are logged with redacted diagnostics while responses stay generic", async () => {
+  const originalAdjustmentTotal = store.adjustmentTotal;
+  const originalConsoleError = console.error;
+  const logLines = [];
+  store.adjustmentTotal = async () => {
+    throw new Error(`Database connection failed using ${config.swiftPaySecretKey} Bearer sensitive-token`);
+  };
+  console.error = (...values) => logLines.push(values.join(" "));
+  try {
+    const response = await fetch(`${baseUrl}/v1/wallet/balance`, {
+      headers: { authorization: "Bearer merchant-token" }
+    });
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: "Internal server error" });
+  } finally {
+    store.adjustmentTotal = originalAdjustmentTotal;
+    console.error = originalConsoleError;
+  }
+  assert.equal(logLines.length, 1);
+  assert.match(logLines[0], /GET/);
+  assert.match(logLines[0], /\/v1\/wallet\/balance/);
+  assert.match(logLines[0], /Database connection failed/);
+  assert.match(logLines[0], /Bearer \[REDACTED\]/);
+  assert.equal(logLines[0].includes(config.swiftPaySecretKey), false);
+  assert.equal(logLines[0].includes("sensitive-token"), false);
+});
+
 test("merchant wallet payment history includes PHP payment webhook receipts", async () => {
   await store.recordWebhookEvent({
     eventKey: "payment:00000000-0000-4000-8000-000000000004",

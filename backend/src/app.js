@@ -1011,7 +1011,7 @@ export function createApp({
   }));
 
   app.use((_req, res) => res.status(404).json({ error: "not_found" }));
-  app.use((error, _req, res, _next) => {
+  app.use((error, req, res, _next) => {
     const status = error instanceof SwiftPayError || error instanceof TransakError
       ? error.status
       : Number.isInteger(error.status) && error.status >= 400 && error.status < 500
@@ -1022,7 +1022,33 @@ export function createApp({
       !(error instanceof FxQuoteError)
       ? "Internal server error"
       : error.message;
-    if (status >= 500) console.error("SwiftPay backend request failed");
+    if (status >= 500) {
+      const secrets = [
+        config.swiftPayAccessKey,
+        config.swiftPaySecretKey,
+        config.sessionSigningKey,
+        config.resendApiKey,
+        config.currencyApiKey,
+        config.fcmServiceAccountJson,
+        config.transak?.apiKey,
+        config.transak?.apiSecret
+      ].filter((secret) => typeof secret === "string" && secret.length >= 8);
+      let detail = error instanceof Error ? error.message : String(error);
+      for (const secret of secrets) detail = detail.replaceAll(secret, "[REDACTED]");
+      detail = detail
+        .replace(/\bBearer\s+\S+/gi, "Bearer [REDACTED]")
+        .replace(/\bBasic\s+\S+/gi, "Basic [REDACTED]")
+        .slice(0, 500);
+      console.error("Backend request failed", JSON.stringify({
+        method: req.method,
+        path: req.path,
+        status,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        ...(error instanceof SwiftPayError && error.errorCode ? { errorCode: error.errorCode } : {}),
+        ...(error instanceof SwiftPayError && error.supportReference ? { supportReference: error.supportReference } : {}),
+        detail
+      }));
+    }
     res.status(status).json({
       error: message,
       ...(error instanceof SwiftPayError && error.errorCode ? { errorCode: error.errorCode } : {}),
