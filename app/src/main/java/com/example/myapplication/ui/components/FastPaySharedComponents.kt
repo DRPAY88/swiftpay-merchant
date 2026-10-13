@@ -1,107 +1,75 @@
 package com.example.myapplication.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.myapplication.R
 import com.example.myapplication.ui.theme.*
 
+@Composable
+fun DrPayLogo(
+    modifier: Modifier = Modifier,
+    size: Dp = 120.dp
+) {
+    Image(
+        painter = painterResource(R.drawable.drpay_logo),
+        contentDescription = "DRPAY logo",
+        contentScale = ContentScale.Fit,
+        modifier = modifier.size(size)
+    )
+}
+
+@Composable
+fun DrPayMark(
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp
+) {
+    Image(
+        painter = painterResource(R.drawable.drpay_mark),
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = modifier.size(size)
+    )
+}
+
+@Composable
+fun DrPayMarkBadge(
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp
+) {
+    Surface(
+        modifier = modifier.size(size),
+        shape = RoundedCornerShape(size * 0.25f),
+        color = Color.White,
+        border = androidx.compose.foundation.BorderStroke(1.dp, FastPayBlue.copy(alpha = 0.12f))
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            DrPayMark(modifier = Modifier.fillMaxSize().padding(size * 0.08f))
+        }
+    }
+}
+
+@Deprecated("Use DrPayLogo")
 @Composable
 fun DenshitxBankLogo(
     modifier: Modifier = Modifier,
     isDark: Boolean = false,
     scale: Float = 1f
 ) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier
-                    .size((42 * scale).dp)
-                    .offset(y = (2 * scale).dp)
-                    .background(
-                        color = if (isDark) Color.Black.copy(alpha = 0.4f) else FastPayBlue.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape((14 * scale).dp)
-                    )
-            )
-            
-            Box(
-                modifier = Modifier
-                    .size((40 * scale).dp)
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(FastPayAccent, FastPayBlue),
-                            start = androidx.compose.ui.geometry.Offset.Zero,
-                            end = androidx.compose.ui.geometry.Offset.Infinite
-                        ),
-                        shape = RoundedCornerShape((12 * scale).dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size((36 * scale).dp)
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(FastPayBlue, FastPayNavy)
-                            ),
-                            shape = RoundedCornerShape((10 * scale).dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.AccountBalance,
-                        contentDescription = null,
-                        modifier = Modifier.size((22 * scale).dp),
-                        tint = Color.White
-                    )
-                }
-            }
-        }
-        
-        Spacer(modifier = Modifier.width((12 * scale).dp))
-        
-        Column(verticalArrangement = Arrangement.Center) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = "Denshitx",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = (21 * scale).sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = (-0.5f).sp
-                    ),
-                    color = if (isDark) Color.White else FastPayNavy
-                )
-                Text(
-                    text = "BANK",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = (11 * scale).sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    ),
-                    color = if (isDark) Color.White.copy(alpha = 0.9f) else FastPayBlue,
-                    modifier = Modifier.padding(start = (4 * scale).dp, bottom = (4 * scale).dp)
-                )
-            }
-        }
-    }
+    DrPayLogo(modifier = modifier, size = 120.dp * scale)
 }
 
 @Composable

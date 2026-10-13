@@ -17,7 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PersonOutline
-import androidx.compose.material.icons.rounded.QrCode2
+import androidx.compose.material.icons.rounded.Payment
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -56,6 +56,7 @@ import com.example.myapplication.ui.screens.MiniAppViewModel
 import com.example.myapplication.ui.screens.ProfileScreen
 import com.example.myapplication.ui.screens.WalletScreen
 import com.example.myapplication.ui.theme.FastPayBlue
+import com.example.myapplication.ui.theme.FintechMotion
 import com.example.myapplication.ui.theme.FastPayTheme
 import com.example.myapplication.util.DebugLogger
 import com.example.myapplication.util.DeepLinkBus
@@ -224,7 +225,8 @@ fun SwiftPayApp() {
                 modifier = Modifier.fillMaxSize(),
                 backStack = backStack,
                 transitionSpec = {
-                    fadeIn(tween(300)) togetherWith fadeOut(tween(300))
+                    fadeIn(tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing)) togetherWith
+                        fadeOut(tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing))
                 }
             ) { key ->
                 when (key) {
@@ -254,7 +256,11 @@ fun SwiftPayApp() {
                 navigationSuiteItems = {
                     val activeColor = FastPayBlue
                     val inactiveColor = Color.Gray.copy(alpha = 0.6f)
-                    val collectRouteSelected = currentRoute is Route.MiniApp && currentRoute.initialPath == "qr-page"
+                    val collectRouteSelected = currentRoute is Route.MiniApp && (
+                        currentRoute.initialPath == "topup-page" ||
+                            currentRoute.initialPath == "qr-page" ||
+                            currentRoute.initialPath == "payment-link-page"
+                        )
 
                     item(
                         selected = currentRoute == Route.Home,
@@ -277,10 +283,10 @@ fun SwiftPayApp() {
                     )
                     item(
                         selected = collectRouteSelected,
-                        onClick = { navController.navigate(Route.MiniApp("qr-page")) },
+                        onClick = { navController.navigate(Route.MiniApp("topup-page")) },
                         icon = {
                             Icon(
-                                Icons.Rounded.QrCode2,
+                                Icons.Rounded.Payment,
                                 contentDescription = "Collect",
                                 tint = if (collectRouteSelected) activeColor else inactiveColor
                             )
@@ -338,12 +344,32 @@ fun SwiftPayApp() {
                     modifier = Modifier.fillMaxSize(),
                     backStack = backStack,
                     transitionSpec = {
-                        (fadeIn(animationSpec = tween(300)) + slideInHorizontally(animationSpec = tween(400), initialOffsetX = { it }))
-                            .togetherWith(fadeOut(animationSpec = tween(300)) + slideOutHorizontally(animationSpec = tween(400), targetOffsetX = { -it }))
+                        (fadeIn(animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing)) +
+                            slideInHorizontally(
+                                animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing),
+                                initialOffsetX = { it }
+                            ))
+                            .togetherWith(
+                                fadeOut(animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing)) +
+                                    slideOutHorizontally(
+                                        animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing),
+                                        targetOffsetX = { -it }
+                                    )
+                            )
                     },
                     popTransitionSpec = {
-                        (fadeIn(animationSpec = tween(300)) + slideInHorizontally(animationSpec = tween(400), initialOffsetX = { -it }))
-                            .togetherWith(fadeOut(animationSpec = tween(300)) + slideOutHorizontally(animationSpec = tween(400), targetOffsetX = { it }))
+                        (fadeIn(animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing)) +
+                            slideInHorizontally(
+                                animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing),
+                                initialOffsetX = { -it }
+                            ))
+                            .togetherWith(
+                                fadeOut(animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing)) +
+                                    slideOutHorizontally(
+                                        animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing),
+                                        targetOffsetX = { it }
+                                    )
+                            )
                     },
                     onBack = {
                         navController.pop()

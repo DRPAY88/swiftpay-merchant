@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -59,7 +58,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import com.example.myapplication.ui.components.DenshitxBankLogo
+import com.example.myapplication.ui.components.DrPayLogo
+import com.example.myapplication.ui.components.DrPayMarkBadge
 import kotlin.math.abs
 
 import com.example.myapplication.LocalNavController
@@ -131,13 +131,19 @@ fun WalletScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { 
-                    Text(
-                        text = "Wallet",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = textColor
-                    )
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        DrPayMarkBadge(size = 30.dp)
+                        Text(
+                            text = "Wallet",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = textColor
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = bgColor,
@@ -347,7 +353,7 @@ private fun CryptoWalletContent(modifier: Modifier = Modifier) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
-            color = Color(0xFF102B59)
+            color = FastPayNavy
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -403,7 +409,7 @@ private fun KrwWalletContent(
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(modifier = Modifier.padding(22.dp)) {
-                Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFE5F0FF), modifier = Modifier.size(46.dp)) {
+                Surface(shape = RoundedCornerShape(12.dp), color = FastPayMeshBlue, modifier = Modifier.size(46.dp)) {
                     Box(contentAlignment = Alignment.Center) {
                         Text("₩", style = MaterialTheme.typography.headlineSmall, color = FastPayBlue, fontWeight = FontWeight.Bold)
                     }
@@ -769,7 +775,7 @@ fun QuickActionsRow() {
 
 @Composable
 fun QuickActionItem(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val surfaceColor = MaterialTheme.colorScheme.surface
     val textColor = MaterialTheme.colorScheme.onSurface
     
@@ -792,7 +798,7 @@ fun QuickActionItem(icon: ImageVector, label: String, color: Color, onClick: () 
 
 @Composable
 fun PremiumFilterChip(selected: Boolean, text: String, onClick: () -> Unit) {
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val unselectedBg = MaterialTheme.colorScheme.surface
     val selectedBg = if (isDarkTheme) MaterialTheme.colorScheme.primary else FastPayNavy
     val unselectedText = MaterialTheme.colorScheme.onSurface
@@ -1022,7 +1028,7 @@ fun TransactionDetailScreen(
                 modifier = Modifier.padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                DenshitxBankLogo(scale = 0.75f)
+                DrPayLogo(size = 90.dp)
                 
                 Spacer(Modifier.height(32.dp))
                 

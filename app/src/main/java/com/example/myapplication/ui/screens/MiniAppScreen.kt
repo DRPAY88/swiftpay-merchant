@@ -26,6 +26,7 @@ import com.example.myapplication.bridge.PaymentData
 import com.example.myapplication.bridge.SwiftPaySDKBridge
 import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.ui.components.*
+import com.example.myapplication.ui.theme.FintechMotion
 
 @Composable
 fun MiniAppScreen(
@@ -75,8 +76,25 @@ fun MiniAppScreen(
             AnimatedContent(
                 targetState = uiState,
                 transitionSpec = {
-                    (fadeIn(animationSpec = tween(300)) + scaleIn(initialScale = 0.95f))
-                        .togetherWith(fadeOut(animationSpec = tween(200)))
+                    (fadeIn(
+                        animationSpec = tween(
+                            FintechMotion.contentMillis,
+                            easing = FintechMotion.standardEasing
+                        )
+                    ) + scaleIn(
+                        initialScale = 0.97f,
+                        animationSpec = tween(
+                            FintechMotion.contentMillis,
+                            easing = FintechMotion.standardEasing
+                        )
+                    )).togetherWith(
+                        fadeOut(
+                            animationSpec = tween(
+                                FintechMotion.exitMillis,
+                                easing = FintechMotion.standardEasing
+                            )
+                        )
+                    )
                 },
                 label = "OverlayState"
             ) { state ->

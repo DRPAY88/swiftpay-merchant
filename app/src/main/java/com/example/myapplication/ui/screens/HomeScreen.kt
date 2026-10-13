@@ -2,6 +2,8 @@ package com.example.myapplication.ui.screens
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,9 +37,16 @@ import com.example.myapplication.data.TransactionStore
 import com.example.myapplication.data.createSwiftPayService
 import com.example.myapplication.data.mergeTransactions
 import com.example.myapplication.data.api.InternalTransaction
+import com.example.myapplication.ui.components.DrPayMarkBadge
 import com.example.myapplication.ui.theme.FastPayActionIcon
+import com.example.myapplication.ui.theme.FastPayBackground
+import com.example.myapplication.ui.theme.FastPayBlue
+import com.example.myapplication.ui.theme.FastPayGradient
+import com.example.myapplication.ui.theme.FastPayMeshBlue
+import com.example.myapplication.ui.theme.FastPayNavy
 import com.example.myapplication.ui.theme.FastPayTextPrimary
 import com.example.myapplication.ui.theme.FastPayTextSecondary
+import com.example.myapplication.ui.theme.FintechMotion
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -87,7 +96,7 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Color(0xFFF4F7F5))) {
+    Box(modifier = modifier.fillMaxSize().background(FastPayBackground)) {
         Column(
             modifier = Modifier
                 .widthIn(max = 560.dp)
@@ -152,11 +161,7 @@ fun HomeGreeting(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(14.dp), color = Color(0xFFE2EEE7), modifier = Modifier.size(44.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.AccountBalanceWallet, "Denshitx Bank", tint = Color(0xFF176B55), modifier = Modifier.size(25.dp))
-                }
-            }
+            DrPayMarkBadge(size = 44.dp)
             Spacer(modifier = Modifier.width(11.dp))
             Column {
                 Text("Hello!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
@@ -192,8 +197,14 @@ fun WalletBalanceCard(
     ) {
         Column(
             modifier = Modifier
-                .background(Brush.linearGradient(listOf(Color(0xFF245548), Color(0xFF0B2823))))
+                .background(Brush.linearGradient(FastPayGradient))
                 .padding(horizontal = 20.dp, vertical = 18.dp)
+                .animateContentSize(
+                    animationSpec = tween(
+                        FintechMotion.contentMillis,
+                        easing = FintechMotion.standardEasing
+                    )
+                )
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -230,7 +241,7 @@ fun WalletBalanceCard(
                 Button(
                     onClick = onDeposit,
                     shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF123C35)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = FastPayNavy),
                     contentPadding = PaddingValues(horizontal = 14.dp),
                     modifier = Modifier.height(42.dp)
                 ) {
@@ -263,17 +274,17 @@ fun QuickActionsSection(
         Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
         Spacer(modifier = Modifier.height(13.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            QuickAction(Icons.Rounded.Payments, "Collect", Color(0xFFE2EEE7), onCollect, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", Color(0xFFE7F0EA), onTransfer, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.Link, "Payment link", Color(0xFFE2EEE7), onPaymentLink, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Payments, "Collect", FastPayMeshBlue, onCollect, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", FastPayMeshBlue, onTransfer, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Link, "Payment link", FastPayMeshBlue, onPaymentLink, Modifier.weight(1f))
             QuickAction(Icons.Rounded.AccountBalanceWallet, "Wallet", Color(0xFFF3EBDD), onNavigateToWallet, Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(14.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            QuickAction(Icons.Rounded.AccountBalance, "Cash in", Color(0xFFE2EEE7), onDeposit, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Activity", Color(0xFFE7F0EA), onNavigateToWallet, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.AccountBalance, "Cash in", FastPayMeshBlue, onDeposit, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Activity", FastPayMeshBlue, onNavigateToWallet, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Terminal, "API docs", Color(0xFFF3EBDD), onDeveloperDocs, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.Person, "Profile", Color(0xFFE2EEE7), onProfileClick, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Person, "Profile", FastPayMeshBlue, onProfileClick, Modifier.weight(1f))
         }
     }
 }
@@ -289,7 +300,7 @@ fun QuickAction(icon: ImageVector, label: String, background: Color, onClick: ()
     ) {
         Surface(shape = RoundedCornerShape(17.dp), color = background, modifier = Modifier.size(56.dp)) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = Color(0xFF176B55), modifier = Modifier.size(29.dp))
+                Icon(icon, null, tint = FastPayActionIcon, modifier = Modifier.size(29.dp))
             }
         }
         Spacer(modifier = Modifier.height(7.dp))
@@ -302,7 +313,7 @@ fun MerchantToolsBanner(onCreatePaymentLink: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
         shape = RoundedCornerShape(20.dp),
-        color = Color(0xFF123C35)
+        color = FastPayNavy
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
@@ -341,8 +352,8 @@ fun TransactionHistorySection(
         ) {
             Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("See all", style = MaterialTheme.typography.labelMedium, color = Color(0xFF176B55), fontWeight = FontWeight.SemiBold)
-                Icon(Icons.Rounded.ChevronRight, null, tint = Color(0xFF176B55), modifier = Modifier.size(18.dp))
+                Text("See all", style = MaterialTheme.typography.labelMedium, color = FastPayBlue, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Rounded.ChevronRight, null, tint = FastPayBlue, modifier = Modifier.size(18.dp))
             }
         }
         Spacer(modifier = Modifier.height(14.dp))

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.LocalNavController
 import com.example.myapplication.navigation.Route
 import com.example.myapplication.ui.components.MerchantLogo
+import com.example.myapplication.ui.components.DrPayMarkBadge
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.data.DebugNetworkTracker
 import com.example.myapplication.BuildConfig
@@ -49,20 +50,27 @@ fun ProfileScreen() {
     val scope = rememberCoroutineScope()
     val navController = LocalNavController.current
 
-    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val bgColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F8FF)
-    val surfaceColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color.White
-    val textColor = if (isDarkTheme) Color.White else Color(0xFF10213D)
-    val secondaryTextColor = if (isDarkTheme) Color.LightGray else Color(0xFF65758B)
-    val borderColor = if (isDarkTheme) Color.DarkGray else Color(0xFFE1EAF5)
+    val bgColor = MaterialTheme.colorScheme.background
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
     val accountName = merchantAlias?.takeIf { it.isNotBlank() }
         ?: signedInEmail?.substringBefore('@')?.replace('.', ' ')?.replaceFirstChar { it.uppercase() }
-        ?: "SwiftPay merchant"
+        ?: "Denshitx Bank merchant"
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Profile", color = textColor, fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DrPayMarkBadge(size = 28.dp)
+                        Text("Profile", color = textColor, fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {},
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = bgColor,

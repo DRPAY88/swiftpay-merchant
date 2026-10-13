@@ -6,6 +6,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +38,8 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import android.widget.Toast
 import com.example.myapplication.ui.theme.FastPayBlue
+import com.example.myapplication.ui.theme.FastPayDarkNavy
+import com.example.myapplication.ui.theme.FintechMotion
 import com.example.myapplication.ui.theme.FastPayNavy
 
 @Composable
@@ -820,7 +824,7 @@ private fun NfcReaderIllustration(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(10.dp)
-                    .background(Color(0xFF0F172A), RoundedCornerShape(18.dp)),
+                    .background(FastPayDarkNavy, RoundedCornerShape(18.dp)),
                 contentAlignment = Alignment.TopCenter
             ) {
                 Column(
@@ -908,10 +912,21 @@ fun SwiftPayPrimaryButton(
     icon: ImageVector? = null,
     containerColor: Color = FastPayNavy
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed && enabled) 0.985f else 1f,
+        animationSpec = tween(FintechMotion.pressMillis, easing = FintechMotion.standardEasing),
+        label = "primaryButtonPress"
+    )
     Button(
         onClick = onClick,
-        modifier = modifier.height(52.dp),
+        modifier = modifier.height(52.dp).graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
         enabled = enabled,
+        interactionSource = interactionSource,
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
@@ -937,10 +952,21 @@ fun SwiftPaySecondaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed && enabled) 0.985f else 1f,
+        animationSpec = tween(FintechMotion.pressMillis, easing = FintechMotion.standardEasing),
+        label = "secondaryButtonPress"
+    )
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(52.dp),
+        modifier = modifier.height(52.dp).graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
         enabled = enabled,
+        interactionSource = interactionSource,
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.5.dp, FastPayNavy.copy(alpha = 0.2f)),
         colors = ButtonDefaults.outlinedButtonColors(

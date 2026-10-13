@@ -6,7 +6,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +38,7 @@ import com.example.myapplication.data.BackendAuthService
 import com.example.myapplication.data.DevicePinCheck
 import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.data.SettingsManager
-import com.example.myapplication.ui.components.DenshitxBankLogo
+import com.example.myapplication.ui.components.DrPayLogo
 import com.example.myapplication.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -283,13 +282,13 @@ fun MpinEnrollmentContent(
     onSubmit: (String) -> Unit
 ) {
     var pin by remember(isConfirmation) { mutableStateOf("") }
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val textColor = MaterialTheme.colorScheme.onBackground
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F8FF))
+            .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(horizontal = 24.dp, vertical = 18.dp),
@@ -367,7 +366,7 @@ fun DevicePinScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isSystemInDarkTheme()) Color(0xFF121212) else Color(0xFFF4F8FF))
+            .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(horizontal = 24.dp, vertical = 24.dp),
@@ -447,23 +446,23 @@ fun LandingContent(onLoginClick: () -> Unit) {
 
     val contentAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(800, easing = LinearOutSlowInEasing),
+        animationSpec = tween(FintechMotion.entranceMillis, easing = FintechMotion.standardEasing),
         label = "contentAlpha"
     )
     val contentOffset by animateFloatAsState(
-        targetValue = if (visible) 0f else 50f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 100f),
+        targetValue = if (visible) 0f else 20f,
+        animationSpec = tween(FintechMotion.entranceMillis, easing = FintechMotion.standardEasing),
         label = "contentOffset"
     )
 
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val bgColors = if (isDarkTheme) {
-        listOf(Color(0xFF0F172A), Color(0xFF020617))
+        listOf(FastPayNavy, FastPayDarkNavy)
     } else {
-        listOf(Color(0xFFF4F8FF), Color(0xFFE6F0FF))
+        listOf(FastPayBackground, FastPayMeshBlue)
     }
-    val headlineColor = if (isDarkTheme) Color.White else Color(0xFF102B59)
-    val supportingColor = if (isDarkTheme) Color.White.copy(alpha = 0.9f) else Color(0xFF526780)
+    val headlineColor = if (isDarkTheme) Color.White else FastPayNavy
+    val supportingColor = if (isDarkTheme) Color.White.copy(alpha = 0.9f) else FastPayTextSecondary
 
     Box(
         modifier = Modifier
@@ -483,7 +482,7 @@ fun LandingContent(onLoginClick: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            DenshitxBankLogo(scale = 1.35f, isDark = isDarkTheme)
+            DrPayLogo(size = 184.dp)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -547,8 +546,8 @@ fun CredentialsContent(
     onBack: () -> Unit,
     onLoginClick: () -> Unit
 ) {
-    val isDarkTheme = isSystemInDarkTheme()
-    val bgColor = if (isDarkTheme) Color(0xFF121212) else Color.White
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
+    val bgColor = MaterialTheme.colorScheme.background
     val textColor = if (isDarkTheme) Color.White else FastPayNavy
     val secondaryTextColor = if (isDarkTheme) Color.LightGray else FastPayTextSecondary
 
@@ -574,7 +573,7 @@ fun CredentialsContent(
         }
 
         Spacer(modifier = Modifier.height(40.dp))
-        DenshitxBankLogo(scale = 1.3f, isDark = isSystemInDarkTheme())
+        DrPayLogo(size = 136.dp)
 
         Spacer(modifier = Modifier.height(28.dp))
         Text(
@@ -597,7 +596,7 @@ fun CredentialsContent(
             placeholder = "Merchant email address",
             leadingIcon = Icons.Rounded.AlternateEmail,
             keyboardType = KeyboardType.Email,
-            isDarkTheme = isSystemInDarkTheme()
+            isDarkTheme = isDarkTheme
         )
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -715,7 +714,7 @@ fun OtpContent(
     onResendClick: () -> Unit,
     onVerifyClick: () -> Unit
 ) {
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val bgColor = MaterialTheme.colorScheme.background
     val textColor = MaterialTheme.colorScheme.onBackground
     val secondaryTextColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
