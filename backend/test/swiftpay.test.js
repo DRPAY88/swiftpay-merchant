@@ -8,7 +8,9 @@ import { TransakError } from "../src/transak.js";
 const config = {
   swiftPayBaseUrl: new URL("https://provider.example/api/"),
   swiftPayAccessKey: "A".repeat(32),
-  swiftPaySecretKey: "S".repeat(32)
+  swiftPaySecretKey: "S".repeat(32),
+  sessionSigningKey: "session-signing-key-for-merchant-tests-123",
+  currencyApiKey: "currencyapi-test-key"
 };
 const tokenPrincipal = {
   sub: "merchant-user-1",
@@ -17,6 +19,7 @@ const tokenPrincipal = {
 let server;
 let baseUrl;
 let requests;
+let fxRequests;
 let failOtpRequest = false;
 let accountResponse;
 let accountResponseStatus;
@@ -29,6 +32,7 @@ const storedPaymentEvents = new Map();
 
 before(async () => {
   requests = [];
+  fxRequests = [];
   accountResponse = { number: "001002003004", balance: 12500.75 };
   accountResponseStatus = 200;
   qrBootstrapStatus = 200;
@@ -37,6 +41,16 @@ before(async () => {
   let app;
   app = createApp({
     config,
+    fxFetchImpl: async (url, options) => {
+      fxRequests.push({ url: url.toString(), options });
+      return new Response(JSON.stringify({
+        meta: { base_currency: "KRW", last_updated_at: new Date().toISOString() },
+        data: { PHP: { code: "PHP", value: 0.0425 } }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    },
     requestOtp: async () => {
       if (failOtpRequest) throw new Error("OTP email provider rejected request (HTTP 403)");
     },
@@ -264,26 +278,75 @@ test("QR Ph bootstrap signs amount and returns the provider PNG", async () => {
   assert.equal(imageRequest.options.headers.Accept, "image/png");
 });
 
-test("KRW QR Ph bootstrap signs and returns KRW without changing the amount", async () => {
+test("KRW customer price is quoted and QR bootstrap charges the locked PHP amount", async () => {
+  fxRequests = [];
+  const quoteResponse = await fetch(`${baseUrl}/v1/payments/qrph/quote`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amountKrw: 12000 })
+  });
+  assert.equal(quoteResponse.status, 200);
+  const quote = await quoteResponse.json();
+  assert.equal(quote.customerAmountKrw, 12000);
+  assert.equal(quote.settlementAmountPhp, 510);
+  assert.equal(quote.ratePhpPerKrw, 0.0425);
+  assert.equal(quote.settlementCurrency, "PHP");
+  assert.ok(quote.quoteToken);
+  assert.ok(new Date(quote.expiresAt).getTime() - Date.now() <= 5 * 60_000);
+  assert.equal(fxRequests.length, 1);
+  const fxRequest = new URL(fxRequests[0].url);
+  assert.equal(fxRequest.href, "https://api.currencyapi.com/v3/latest?base_currency=KRW&currencies=PHP");
+  assert.equal(fxRequests[0].options.headers.apikey, "currencyapi-test-key");
+  assert.equal(fxRequest.searchParams.has("apikey"), false);
+
   const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
     method: "POST",
     headers: {
       authorization: "Bearer valid-test-token",
       "content-type": "application/json"
     },
-    body: JSON.stringify({ amount: 12000, referenceNo: "QR-KRW-1", currency: "KRW" })
+    body: JSON.stringify({ quoteToken: quote.quoteToken })
   });
   assert.equal(response.status, 201);
   const payment = await response.json();
-  assert.equal(payment.amount, 12000);
-  assert.equal(payment.currency, "KRW");
+  assert.equal(payment.amount, 510);
+  assert.equal(payment.currency, "PHP");
+  assert.equal(payment.customerAmountKrw, 12000);
+  assert.equal(payment.settlementCurrency, "PHP");
 
   const bootstrapRequest = requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M"));
   const payload = JSON.parse(bootstrapRequest.options.body);
-  assert.equal(payload.x_amount, 12000);
-  assert.equal(payload.x_currency, "KRW");
+  assert.equal(payload.x_amount, 510);
+  assert.equal(payload.x_currency, "PHP");
   assert.equal(verifySwiftPaySignature(payload, payload.signature, config.swiftPaySecretKey), true);
-  assert.deepEqual(storedPaymentEvents.get(`payment:${payment.paymentId}`).details, { amount: 12000, currency: "KRW" });
+  assert.deepEqual(storedPaymentEvents.get(`payment:${payment.paymentId}`).details, {
+    amount: 510,
+    currency: "PHP",
+    customerAmountKrw: 12000,
+    ratePhpPerKrw: 0.0425,
+    rateUpdatedAt: quote.rateUpdatedAt
+  });
+});
+
+test("QR Ph rejects direct KRW amounts instead of sending an unsupported currency", async () => {
+  const previousBootstrapCount = requests.filter(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).length;
+  const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer valid-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 12000, referenceNo: "QR-KRW-OLD", currency: "KRW" })
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /locked PHP quote/);
+  assert.equal(
+    requests.filter(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).length,
+    previousBootstrapCount
+  );
 });
 
 test("QR Ph signature verification rejects altered fields and malformed signatures", () => {

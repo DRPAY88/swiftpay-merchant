@@ -14,6 +14,8 @@ npm start
 
 The API refuses to start without SwiftPay credentials, an allowlist, a session-signing key, and a Resend key/from address. Sign-in codes are sent only to addresses in `AUTH_ALLOWED_EMAILS` or the optional `AUTH_ADDITIONAL_ALLOWED_EMAILS`; non-allowlisted addresses receive the same accepted response without an email. Codes expire after ten minutes, are single-use, and allow five attempts. The server issues an eight-hour scoped JWT after successful verification.
 
+KRW-priced QR payments require `CURRENCYAPI_KEY` from the paid CurrencyAPI commercial plan. The quote endpoint fails with an actionable service error until this server-side secret is configured. CurrencyAPI rates are hourly, quotes are valid for five minutes, and SwiftPay receives only the corresponding locked PHP amount. The payer's bank can apply its own KRW/PHP conversion and fees; the quoted KRW amount is a displayed price, not a guarantee of the payer's final bank debit.
+
 The Render blueprint configures `OTP_FROM_EMAIL` as `SwiftPay <login@swiftpay.site>`, matching the Resend DKIM and sending records for `swiftpay.site`. Keep `RESEND_API_KEY` configured as a Render secret with a valid production Resend API key.
 
 ## USDT buy and sell
@@ -44,7 +46,8 @@ The old app login creates a local UUID and is not accepted by this backend. The 
 ## Routes
 
 - `POST /v1/payments/orders` creates an HMAC-signed SwiftPay order and returns a hosted checkout URL. The `details` field is sent as a JSON-encoded string, as required by the provider contract.
-- `POST /v1/payments/qrph` requests a signed P2M QR Ph payment in PHP or KRW and its PNG image when the provider QR bootstrap endpoint is available. If that endpoint returns `404`, the request fails rather than converting currencies or fabricating a QR.
+- `POST /v1/payments/qrph/quote` returns a signed, merchant-bound five-minute KRW-to-PHP quote using the latest available CurrencyAPI rate.
+- `POST /v1/payments/qrph` requests a signed P2M QR Ph payment in PHP and its PNG image. A KRW-priced QR must include the signed quote token; SwiftPay is charged the locked PHP amount, with the KRW customer price and rate retained in the payment record. Direct KRW settlement is rejected because SwiftPay QR Ph supports PHP only.
 - `GET /v1/payments/:paymentToken/status` checks payment status using the payment-scoped token.
 - `GET /v1/wallet/balance` uses SwiftPay's documented `GET /api/disbursements/account` endpoint with HTTP Basic authentication. SwiftPay returns the inbound top-up account in `number` and the available disbursement-wallet funds in `balance`; the backend returns those as `accountNumber` and `balance`. If SwiftPay returns `404` because no disbursement account is configured for the merchant, the backend returns an actionable error instead of an unavailable balance.
 - `GET /v1/wallet/krw-receipts` returns the total of verified, executed KRW payment webhooks. This is an app-side receipt total, not a provider-reported spendable KRW account balance; the provider callback must include signed `x_amount` and `x_currency` fields for a payment to contribute.
@@ -59,7 +62,7 @@ All `/v1` routes require an issuer- and audience-verified JWT. Order creation re
 
 OTP challenges are currently held in process memory. Run a single backend instance until a shared persistent challenge store is configured; otherwise a restart or load balancing between instances can invalidate sign-in challenges.
 
-The published SwiftPay API exposes the PHP disbursement-wallet ledger balance, not a combined settlement or card balance. The KRW wallet view is derived only from verified executed QR payment webhooks and does not include withdrawals or manual adjustments. The wallet account number can be used as the destination for inbound top-ups, but the published API does not provide the receiving institution or beneficiary name and does not initiate or confirm inbound transfers; users must verify transfer details with their merchant administrator. Payment status, disbursement history, and the PHP disbursement balance are read from SwiftPay; the app does not treat a locally cached value as authoritative.
+The published SwiftPay API exposes the PHP disbursement-wallet ledger balance, not a combined settlement or card balance. The KRW receipt view is derived only from verified executed QR payment webhooks that SwiftPay reports in KRW; it is separate from KRW-priced QR sales, which settle in PHP and are recorded with their quoted KRW reference metadata. Neither view represents a separate provider-reported spendable KRW balance. The wallet account number can be used as the destination for inbound top-ups, but the published API does not provide the receiving institution or beneficiary name and does not initiate or confirm inbound transfers; users must verify transfer details with their merchant administrator. Payment status, disbursement history, and the PHP disbursement balance are read from SwiftPay; the app does not treat a locally cached value as authoritative.
 
 Deploy behind HTTPS, keep the environment variables in a secrets manager, and configure production only with `SWIFTPAY_BASE_URL=https://api.pay.live.swiftpay.ph/api/` and `SWIFTPAY_ALLOW_LIVE=true`. Do not place SwiftPay credentials or a shared backend secret in the Android build.
 

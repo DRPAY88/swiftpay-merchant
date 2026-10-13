@@ -62,6 +62,7 @@ export function loadConfig(env = process.env) {
     databaseUrl: env.DATABASE_URL?.trim() || null,
     resendApiKey: env.RESEND_API_KEY,
     otpFromEmail: env.OTP_FROM_EMAIL,
+    currencyApiKey: env.CURRENCYAPI_KEY?.trim() || null,
     transak: {
       apiKey: transakApiKey,
       apiSecret: transakApiSecret,

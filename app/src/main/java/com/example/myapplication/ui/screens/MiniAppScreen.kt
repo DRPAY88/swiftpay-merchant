@@ -66,6 +66,8 @@ fun MiniAppScreen(
                 onScanNFCCard = { viewModel.onScanNFCCard(it) },
                 onGenerateDynamicQr = { viewModel.onGenerateDynamicQr(it) },
                 onGenerateDynamicQrWithCurrency = { amount, currency -> viewModel.onGenerateDynamicQr(amount, currency) },
+                onQuoteKrwPhpQr = viewModel::onQuoteKrwPhpQr,
+                onGenerateQuotedKrwPhpQr = viewModel::onGenerateQuotedKrwPhpQr,
                 onStartDepositWizard = viewModel::onStartDepositWizard,
                 onScanQrToSend = { viewModel.onScanQrToSend() },
                 onGetTransferInstitutions = viewModel::onGetTransferInstitutions,
@@ -112,7 +114,10 @@ fun MiniAppScreen(
                             bankAccountNumber = state.bankAccountNumber,
                             instapayBankCode = state.instapayBankCode,
                             onDismiss = { viewModel.dismissConsent() },
-                            currency = state.currency
+                            currency = state.currency,
+                            customerAmountKrw = state.customerAmountKrw,
+                            ratePhpPerKrw = state.ratePhpPerKrw,
+                            rateUpdatedAt = state.rateUpdatedAt
                         )
                     }
                     is MiniAppUiState.DepositWizard -> {

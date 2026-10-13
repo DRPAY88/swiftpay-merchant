@@ -9,6 +9,9 @@ import com.example.myapplication.data.api.CryptoWidgetResponse
 import com.example.myapplication.data.api.BackendOrderRequest
 import com.example.myapplication.data.api.BackendPaymentLinkRequest
 import com.example.myapplication.data.api.BackendQrPaymentRequest
+import com.example.myapplication.data.api.BackendKrwPhpQrQuoteRequest
+import com.example.myapplication.data.api.BackendKrwPhpQrQuoteResponse
+import com.example.myapplication.data.api.BackendQuotedQrPaymentRequest
 import com.example.myapplication.data.api.BackendRecipientInformation
 import com.example.myapplication.data.api.BackendTransferInstitution
 import com.example.myapplication.data.api.BackendWalletBalanceResponse
@@ -192,7 +195,9 @@ class SwiftPayService(
     suspend fun createDynamicQr(amount: Double, currency: String = "PHP"): Result<SwiftPayQrResponse> {
         if (!hasApiKey) return missingSession()
         if (!amount.isFinite() || amount <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid QR Ph amount"))
-        if (currency !in setOf("PHP", "KRW")) return Result.failure(IllegalArgumentException("Choose PHP or KRW for QR Ph"))
+        if (currency != "PHP") {
+            return Result.failure(IllegalArgumentException("SwiftPay QR Ph accepts PHP only. Request a KRW-to-PHP quote first."))
+        }
         return try {
             val refNo = "QR-${UUID.randomUUID()}"
             val response = api.createQrPayment(
@@ -204,30 +209,84 @@ class SwiftPayService(
             )
             if (!response.isSuccessful) return failure(response)
             val body = response.body() ?: return Result.failure(IllegalStateException("Empty QR Ph response"))
-
-            val qrCodeValue = body.qrCode?.takeIf { it.isNotBlank() }
-                ?: return Result.failure(IllegalStateException("SwiftPay did not return a QR Ph payload"))
-            val qrImageBase64 = body.qrImageBase64?.takeIf { it.length > 200 }
-                ?: com.example.myapplication.util.generateQrBitmapBase64(qrCodeValue)
-
-            Result.success(
-                SwiftPayQrResponse(
-                    id = body.paymentId,
-                    paymentId = body.paymentId,
-                    qrCode = qrCodeValue,
-                    checkoutUrl = null,
-                    status = body.status,
-                    amount = body.amount,
-                    currency = body.currency ?: currency,
-                    qrCodeBody = qrCodeValue,
-                    qrImageBase64 = qrImageBase64,
-                    bankAccountNumber = body.bankAccountNumber,
-                    instapayBankCode = body.instapayBankCode
-                )
-            )
+            Result.success(toSwiftPayQrResponse(body))
         } catch (error: Exception) {
             Result.failure(error)
         }
+    }
+
+    suspend fun getKrwPhpQrQuote(amountKrw: Int): Result<BackendKrwPhpQrQuoteResponse> {
+        if (!hasApiKey) return missingSession()
+        if (amountKrw !in 1..1_000_000) {
+            return Result.failure(IllegalArgumentException("Enter a KRW price between ₩1 and ₩1,000,000."))
+        }
+        return try {
+            val response = api.getKrwPhpQrQuote(BackendKrwPhpQrQuoteRequest(amountKrw))
+            if (!response.isSuccessful) return failure(response)
+            val quote = response.body()
+                ?: return Result.failure(IllegalStateException("Empty KRW-to-PHP quote response"))
+            if (
+                quote.customerAmountKrw != amountKrw ||
+                quote.settlementCurrency != "PHP" ||
+                !quote.settlementAmountPhp.isFinite() ||
+                quote.settlementAmountPhp <= 0.0 ||
+                !quote.ratePhpPerKrw.isFinite() ||
+                quote.ratePhpPerKrw <= 0.0 ||
+                quote.quoteToken.isBlank()
+            ) {
+                return Result.failure(IllegalStateException("Backend returned an invalid KRW-to-PHP quote"))
+            }
+            Result.success(quote)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun createKrwPhpQuotedQr(quoteToken: String): Result<SwiftPayQrResponse> {
+        if (!hasApiKey) return missingSession()
+        if (quoteToken.isBlank()) {
+            return Result.failure(IllegalArgumentException("Request a new KRW-to-PHP quote before creating the QR."))
+        }
+        return try {
+            val response = api.createQuotedKrwPhpQr(BackendQuotedQrPaymentRequest(quoteToken))
+            if (!response.isSuccessful) return failure(response)
+            val body = response.body()
+                ?: return Result.failure(IllegalStateException("Empty PHP QR response for KRW quote"))
+            if (body.currency != "PHP" || body.settlementCurrency != "PHP" || body.customerAmountKrw == null) {
+                return Result.failure(IllegalStateException("Backend returned a QR that does not match the KRW-to-PHP quote"))
+            }
+            Result.success(toSwiftPayQrResponse(body))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    private fun toSwiftPayQrResponse(body: com.example.myapplication.data.api.BackendQrPaymentResponse): SwiftPayQrResponse {
+        val qrCodeValue = body.qrCode?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("SwiftPay did not return a QR Ph payload")
+        val qrImageBase64 = body.qrImageBase64?.takeIf { it.length > 200 }
+            ?: com.example.myapplication.util.generateQrBitmapBase64(qrCodeValue)
+        return SwiftPayQrResponse(
+            id = body.paymentId,
+            paymentId = body.paymentId,
+            qrCode = qrCodeValue,
+            checkoutUrl = null,
+            status = body.status,
+            amount = body.amount,
+            currency = body.currency,
+            qrCodeBody = qrCodeValue,
+            qrImageBase64 = qrImageBase64,
+            bankAccountNumber = body.bankAccountNumber,
+            instapayBankCode = body.instapayBankCode,
+            customerAmountKrw = body.customerAmountKrw,
+            ratePhpPerKrw = body.ratePhpPerKrw,
+            rateUpdatedAt = body.rateUpdatedAt,
+            settlementCurrency = body.settlementCurrency
+        )
     }
 
     suspend fun getWalletBalanceDetails(): Result<BackendWalletBalanceResponse> {

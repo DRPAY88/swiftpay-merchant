@@ -32,6 +32,8 @@ services:
         sync: false
       - key: OTP_FROM_EMAIL
         value: "SwiftPay <login@swiftpay.site>"
+      - key: CURRENCYAPI_KEY
+        sync: false
       - key: TRANSAK_ENVIRONMENT
         value: production
       - key: TRANSAK_API_KEY

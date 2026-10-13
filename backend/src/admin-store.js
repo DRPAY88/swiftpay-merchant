@@ -189,27 +189,54 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
   }
 
   async function recordWebhookEvent(event) {
-    await pool.query(
-      `INSERT INTO swiftpay_webhook_events
-         (event_key, event_type, payment_id, reference_no, status, details, amount, currency)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (event_key) DO UPDATE
-         SET status = EXCLUDED.status,
-           details = EXCLUDED.details,
-           amount = COALESCE(EXCLUDED.amount, swiftpay_webhook_events.amount),
-           currency = COALESCE(EXCLUDED.currency, swiftpay_webhook_events.currency),
-           received_at = NOW()`,
-      [
-        event.eventKey,
-        event.eventType,
-        event.paymentId || null,
-        event.referenceNo,
-        event.status,
-        JSON.stringify(event.details),
-        event.amount ?? event.details?.amount ?? null,
-        event.currency ?? event.details?.currency ?? null
-      ]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO swiftpay_webhook_events
+           (event_key, event_type, payment_id, reference_no, status, details, amount, currency)
+         VALUES ($1, $2, $3, $4, $5, '{}', $6, $7)
+         ON CONFLICT (event_key) DO NOTHING`,
+        [
+          event.eventKey,
+          event.eventType,
+          event.paymentId || null,
+          event.referenceNo,
+          event.status,
+          event.amount ?? event.details?.amount ?? null,
+          event.currency ?? event.details?.currency ?? null
+        ]
+      );
+      const existing = await client.query(
+        "SELECT details FROM swiftpay_webhook_events WHERE event_key = $1 FOR UPDATE",
+        [event.eventKey]
+      );
+      const details = { ...existing.rows[0].details, ...event.details };
+      await client.query(
+        `UPDATE swiftpay_webhook_events
+         SET payment_id = COALESCE($2, payment_id),
+           status = $3,
+           details = $4,
+           amount = COALESCE($5, amount),
+           currency = COALESCE($6, currency),
+           received_at = NOW()
+         WHERE event_key = $1`,
+        [
+          event.eventKey,
+          event.paymentId || null,
+          event.status,
+          JSON.stringify(details),
+          event.amount ?? event.details?.amount ?? null,
+          event.currency ?? event.details?.currency ?? null
+        ]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async function getPaymentWebhookStatus(paymentId) {

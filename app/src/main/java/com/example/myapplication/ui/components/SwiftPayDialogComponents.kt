@@ -261,7 +261,10 @@ fun SwiftPayQrDialog(
     bankAccountNumber: String?,
     instapayBankCode: String?,
     onDismiss: () -> Unit,
-    currency: String = "PHP"
+    currency: String = "PHP",
+    customerAmountKrw: Int? = null,
+    ratePhpPerKrw: Double? = null,
+    rateUpdatedAt: String? = null
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -314,6 +317,22 @@ fun SwiftPayQrDialog(
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            if (customerAmountKrw != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "KRW price: ₩${"%,d".format(customerAmountKrw)} · PHP QR settlement",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (ratePhpPerKrw != null && rateUpdatedAt != null) {
+                    Text(
+                        text = "Reference: ₩1 = ₱${"%.6f".format(ratePhpPerKrw)} (rate updated $rateUpdatedAt). The payer’s bank may apply its own conversion.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
             Spacer(Modifier.height(16.dp))
 

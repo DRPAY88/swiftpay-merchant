@@ -38,7 +38,10 @@ sealed interface MiniAppUiState {
         val amount: Double,
         val currency: String,
         val bankAccountNumber: String?,
-        val instapayBankCode: String?
+        val instapayBankCode: String?,
+        val customerAmountKrw: Int? = null,
+        val ratePhpPerKrw: Double? = null,
+        val rateUpdatedAt: String? = null
     ) : MiniAppUiState
     data class DepositWizard(
         val accountNumber: String,
@@ -317,53 +320,110 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onGenerateDynamicQr(amount: Double, currency: String = "PHP") {
+        if (currency != "PHP") {
+            bridge?.sendError(
+                "SwiftPay QR Ph accepts PHP only. Request a KRW-to-PHP quote first.",
+                action = "generate_dynamic_qr"
+            )
+            return
+        }
         launchProcessingAction("Generating dynamic QR Ph code...", bridgeAction = "generate_dynamic_qr") {
-            val result = getService().createDynamicQr(amount, currency)
+            handleQrGenerationResult(
+                result = getService().createDynamicQr(amount, currency),
+                amount = amount,
+                currency = currency,
+                bridgeAction = "generate_dynamic_qr"
+            )
+        }
+    }
 
-            result.onSuccess { response ->
-                val qrCode = response.qrCodeBody ?: response.qrCode
-                val qrImageBase64 = response.qrImageBase64
-                val paymentId = response.paymentId ?: response.id
-                val checkoutUrl = response.checkoutUrl
-                if (!checkoutUrl.isNullOrBlank() && !paymentId.isNullOrBlank()) {
-                    pendingCheckoutId = paymentId
-                    recordLocalTransaction(
-                        id = paymentId,
-                        amount = amount,
-                        status = "PENDING"
-                    )
-                    uiState = MiniAppUiState.PaymentRedirect(
-                        checkoutUrl,
-                        PaymentData(amount = amount, currency = currency, description = "$currency QR Ph collection")
-                    )
+    fun onQuoteKrwPhpQr(amountKrw: Int) {
+        launchProcessingAction("Getting current KRW-to-PHP quote...", bridgeAction = "quote_krw_php_qr") {
+            getService().getKrwPhpQrQuote(amountKrw)
+                .onSuccess { quote ->
                     bridge?.sendResponse(
-                        mapOf("checkoutUrl" to checkoutUrl, "paymentId" to paymentId),
-                        action = "generate_dynamic_qr"
+                        mapOf(
+                            "quoteToken" to quote.quoteToken,
+                            "customerAmountKrw" to quote.customerAmountKrw,
+                            "settlementAmountPhp" to quote.settlementAmountPhp,
+                            "ratePhpPerKrw" to quote.ratePhpPerKrw,
+                            "rateUpdatedAt" to quote.rateUpdatedAt,
+                            "expiresAt" to quote.expiresAt,
+                            "settlementCurrency" to quote.settlementCurrency
+                        ),
+                        action = "quote_krw_php_qr"
                     )
-                } else if (!qrCode.isNullOrBlank() && !qrImageBase64.isNullOrBlank() && !paymentId.isNullOrBlank()) {
-                    recordLocalTransaction(
-                        id = paymentId,
-                        amount = amount,
-                        status = "PENDING"
-                    )
-                    uiState = MiniAppUiState.DynamicQrReady(
-                        qrImageBase64 = qrImageBase64,
-                        amount = amount,
-                        currency = response.currency ?: currency,
-                        bankAccountNumber = response.bankAccountNumber,
-                        instapayBankCode = response.instapayBankCode
-                    )
-                    bridge?.sendResponse(mapOf("qrCodeBody" to qrCode), action = "generate_dynamic_qr")
-                } else {
-                    val errorMsg = "SwiftPay returned an incomplete QR Ph payment"
-                    bridge?.sendError(errorMsg, action = "generate_dynamic_qr")
                     uiState = MiniAppUiState.Idle
                 }
-            }.onFailure { error ->
-                val errorMsg = error.message ?: "QR generation failed"
-                bridge?.sendError(errorMsg, action = "generate_dynamic_qr")
+                .onFailure { error ->
+                    bridge?.sendError(
+                        error.message ?: "Could not get the KRW-to-PHP quote",
+                        action = "quote_krw_php_qr"
+                    )
+                    uiState = MiniAppUiState.Idle
+            }
+        }
+    }
+
+    fun onGenerateQuotedKrwPhpQr(quoteToken: String) {
+        launchProcessingAction("Creating PHP QR from the KRW price quote...", bridgeAction = "generate_quoted_krw_php_qr") {
+            handleQrGenerationResult(
+                result = getService().createKrwPhpQuotedQr(quoteToken),
+                amount = 0.0,
+                currency = "PHP",
+                bridgeAction = "generate_quoted_krw_php_qr"
+            )
+        }
+    }
+
+    private suspend fun handleQrGenerationResult(
+        result: Result<com.example.myapplication.data.api.SwiftPayQrResponse>,
+        amount: Double,
+        currency: String,
+        bridgeAction: String
+    ) {
+        result.onSuccess { response ->
+            val qrCode = response.qrCodeBody ?: response.qrCode
+            val qrImageBase64 = response.qrImageBase64
+            val paymentId = response.paymentId ?: response.id
+            val paymentAmount = response.amount ?: amount
+            val paymentCurrency = response.currency ?: currency
+            val checkoutUrl = response.checkoutUrl
+            if (!checkoutUrl.isNullOrBlank() && !paymentId.isNullOrBlank()) {
+                pendingCheckoutId = paymentId
+                recordLocalTransaction(id = paymentId, amount = paymentAmount, status = "PENDING")
+                uiState = MiniAppUiState.PaymentRedirect(
+                    checkoutUrl,
+                    PaymentData(
+                        amount = paymentAmount,
+                        currency = paymentCurrency,
+                        description = "$paymentCurrency QR Ph collection"
+                    )
+                )
+                bridge?.sendResponse(
+                    mapOf("checkoutUrl" to checkoutUrl, "paymentId" to paymentId),
+                    action = bridgeAction
+                )
+            } else if (!qrCode.isNullOrBlank() && !qrImageBase64.isNullOrBlank() && !paymentId.isNullOrBlank()) {
+                recordLocalTransaction(id = paymentId, amount = paymentAmount, status = "PENDING")
+                uiState = MiniAppUiState.DynamicQrReady(
+                    qrImageBase64 = qrImageBase64,
+                    amount = paymentAmount,
+                    currency = paymentCurrency,
+                    bankAccountNumber = response.bankAccountNumber,
+                    instapayBankCode = response.instapayBankCode,
+                    customerAmountKrw = response.customerAmountKrw,
+                    ratePhpPerKrw = response.ratePhpPerKrw,
+                    rateUpdatedAt = response.rateUpdatedAt
+                )
+                bridge?.sendResponse(mapOf("qrCodeBody" to qrCode), action = bridgeAction)
+            } else {
+                bridge?.sendError("SwiftPay returned an incomplete QR Ph payment", action = bridgeAction)
                 uiState = MiniAppUiState.Idle
             }
+        }.onFailure { error ->
+            bridge?.sendError(error.message ?: "QR generation failed", action = bridgeAction)
+            uiState = MiniAppUiState.Idle
         }
     }
 

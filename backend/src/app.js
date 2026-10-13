@@ -12,6 +12,7 @@ import {
   SwiftPayError,
   verifySwiftPaySignature
 } from "./swiftpay.js";
+import { createKrwPhpQuote, FxQuoteError, getLatestKrwPhpRate, verifyKrwPhpQuote } from "./fx-quotes.js";
 import { TransakError } from "./transak.js";
 
 const amountSchema = z.number().finite().min(0.01).max(1_000_000);
@@ -28,11 +29,19 @@ const orderSchema = z.object({
   merchantTag: z.string().trim().max(64).optional()
 }).strict();
 
-const qrPaymentSchema = z.object({
+const directQrPaymentSchema = z.object({
   amount: amountSchema,
   referenceNo: referenceSchema,
-  currency: qrCurrencySchema.default("PHP"),
+  currency: z.literal("PHP").default("PHP"),
   rejectDuplicatedPayments: z.boolean().default(true)
+}).strict();
+const quotedQrPaymentSchema = z.object({
+  quoteToken: z.string().min(1).max(2048),
+  rejectDuplicatedPayments: z.boolean().default(true)
+}).strict();
+const qrPaymentSchema = z.union([directQrPaymentSchema, quotedQrPaymentSchema]);
+const krwPhpQuoteRequestSchema = z.object({
+  amountKrw: z.number().int().min(1).max(1_000_000)
 }).strict();
 
 const paymentLinkSchema = z.object({
@@ -116,7 +125,16 @@ function requireSuperAdmin(req, res, next) {
   next();
 }
 
-export function createApp({ config, fetchImpl = fetch, verifyAccessToken, requestOtp, verifyOtp, cryptoWidgetService, userStore }) {
+export function createApp({
+  config,
+  fetchImpl = fetch,
+  fxFetchImpl = fetch,
+  verifyAccessToken,
+  requestOtp,
+  verifyOtp,
+  cryptoWidgetService,
+  userStore
+}) {
   if (!verifyAccessToken) throw new Error("A JWT verifier is required");
   if (!requestOtp || !verifyOtp) throw new Error("OTP auth handlers are required");
   const app = express();
@@ -322,11 +340,43 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     res.status(result.status).json({ paymentId: token, status: result.data });
   }));
 
+  app.post("/v1/payments/qrph/quote", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
+    const input = parse(krwPhpQuoteRequestSchema, req.body);
+    const rate = await getLatestKrwPhpRate(config.currencyApiKey, fxFetchImpl);
+    const quote = createKrwPhpQuote({
+      amountKrw: input.amountKrw,
+      phpPerKrw: rate.phpPerKrw,
+      rateUpdatedAt: rate.updatedAt,
+      subject: req.principal.sub,
+      signingKey: config.sessionSigningKey
+    });
+    res.json({
+      quoteToken: quote.quoteToken,
+      customerAmountKrw: quote.amountKrw,
+      settlementAmountPhp: quote.amountPhp,
+      ratePhpPerKrw: quote.phpPerKrw,
+      rateUpdatedAt: quote.rateUpdatedAt,
+      expiresAt: new Date(quote.expiresAt).toISOString(),
+      settlementCurrency: "PHP"
+    });
+  }));
+
   app.post("/v1/payments/qrph", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
-    const input = parse(qrPaymentSchema, req.body);
-    if (input.currency === "KRW" && !userStore?.recordWebhookEvent) {
-      throw new SwiftPayError(503, "KRW QR payment receipt storage is unavailable");
+    if (req.body?.currency === "KRW" && !req.body?.quoteToken) {
+      throw new FxQuoteError(400, "KRW-priced QR payments require a locked PHP quote; request a new quote first");
     }
+    const request = parse(qrPaymentSchema, req.body);
+    const quote = "quoteToken" in request
+      ? verifyKrwPhpQuote(request.quoteToken, req.principal.sub, config.sessionSigningKey)
+      : null;
+    const input = quote
+      ? {
+          amount: quote.amountPhp,
+          referenceNo: `KRW-${quote.quoteId}`,
+          currency: "PHP",
+          rejectDuplicatedPayments: request.rejectDuplicatedPayments
+        }
+      : request;
     const bootstrap = await requestProvider("bootstrap/qrph?type=P2M", {
       method: "POST",
       body: buildQrPayload(input, config)
@@ -336,7 +386,7 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       paymentStatus: z.string().min(1),
       referenceNo: z.string().min(1),
       amount: z.union([z.number(), z.string()]),
-      currency: qrCurrencySchema.optional(),
+      currency: z.literal("PHP").optional(),
       qrCode: z.string().min(1),
       bankAccountNumber: z.string().nullable().optional(),
       instapayBankCode: z.string().nullable().optional()
@@ -349,6 +399,9 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
     if (payment.currency && payment.currency !== input.currency) {
       throw new SwiftPayError(502, "SwiftPay returned a QR Ph payment in a different currency");
     }
+    if (quote && Math.round(Number(payment.amount) * 100) !== Math.round(quote.amountPhp * 100)) {
+      throw new SwiftPayError(502, "SwiftPay returned a PHP QR amount that does not match the locked quote");
+    }
     if (userStore?.recordWebhookEvent) {
       await userStore.recordWebhookEvent({
         eventKey: `payment:${payment.paymentId}`,
@@ -358,7 +411,12 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
         status: payment.paymentStatus,
         details: {
           amount: Number(payment.amount),
-          currency: payment.currency || input.currency
+          currency: payment.currency || input.currency,
+          ...(quote ? {
+            customerAmountKrw: quote.amountKrw,
+            ratePhpPerKrw: quote.phpPerKrw,
+            rateUpdatedAt: quote.rateUpdatedAt
+          } : {})
         }
       });
     }
@@ -382,7 +440,13 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       qrCode: payment.qrCode,
       qrImageBase64: qrImageBase64,
       bankAccountNumber: payment.bankAccountNumber ?? null,
-      instapayBankCode: payment.instapayBankCode ?? null
+      instapayBankCode: payment.instapayBankCode ?? null,
+      ...(quote ? {
+        customerAmountKrw: quote.amountKrw,
+        ratePhpPerKrw: quote.phpPerKrw,
+        rateUpdatedAt: quote.rateUpdatedAt,
+        settlementCurrency: "PHP"
+      } : {})
     });
   }));
 
@@ -547,7 +611,11 @@ export function createApp({ config, fetchImpl = fetch, verifyAccessToken, reques
       : Number.isInteger(error.status) && error.status >= 400 && error.status < 500
         ? error.status
         : 500;
-    const message = status >= 500 && !(error instanceof TransakError) ? "Internal server error" : error.message;
+    const message = status >= 500 &&
+      !(error instanceof TransakError) &&
+      !(error instanceof FxQuoteError)
+      ? "Internal server error"
+      : error.message;
     if (status >= 500) console.error("SwiftPay backend request failed");
     res.status(status).json({
       error: message,
