@@ -89,7 +89,7 @@ fun ProfileScreen() {
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(24.dp),
                 color = surfaceColor,
                 border = BorderStroke(1.dp, borderColor)
             ) {
@@ -118,6 +118,19 @@ fun ProfileScreen() {
                                 color = secondaryTextColor
                             )
                         }
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = if (signedInEmail != null) FastPayGreen.copy(alpha = 0.12f)
+                            else secondaryTextColor.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = if (signedInEmail != null) "ACTIVE" else "SIGNED OUT",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (signedInEmail != null) FastPayGreen else secondaryTextColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 18.dp), color = borderColor)
                     ProfileDetailRow("Account", if (signedInEmail == null) "Signed out" else "Merchant account", textColor, secondaryTextColor)
@@ -130,7 +143,7 @@ fun ProfileScreen() {
                 Text("PREFERENCES", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(18.dp),
                     color = surfaceColor,
                     border = BorderStroke(1.dp, borderColor)
                 ) {
@@ -156,7 +169,7 @@ fun ProfileScreen() {
                 Text("DEVELOPER", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(18.dp),
                     color = surfaceColor,
                     border = BorderStroke(1.dp, borderColor)
                 ) {

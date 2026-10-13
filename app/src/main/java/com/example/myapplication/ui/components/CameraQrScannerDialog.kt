@@ -11,6 +11,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -219,6 +221,15 @@ fun CameraQrScannerDialog(
                 }
             }
 
+            if (hasCameraPermission) {
+                Surface(
+                    modifier = Modifier.align(Alignment.Center).size(248.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(2.dp, Color.White.copy(alpha = 0.88f))
+                ) {}
+            }
+
             Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -238,7 +249,7 @@ fun CameraQrScannerDialog(
                     )
                 }
                 Text(
-                    "DENSHITX BANK",
+                    "DRPAY",
                     modifier = Modifier.weight(1f),
                     color = Color.White,
                     style = MaterialTheme.typography.titleLarge

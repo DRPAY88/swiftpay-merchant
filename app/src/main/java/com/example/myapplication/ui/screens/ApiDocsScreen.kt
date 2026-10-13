@@ -120,7 +120,7 @@ fun ApiDocsScreen() {
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = FastPayBlue),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(22.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {

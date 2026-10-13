@@ -476,19 +476,19 @@ fun LandingContent(
     DrPayLogo(size = 190.dp)
     Spacer(modifier = Modifier.height(8.dp))
     Text(
-        text = "Banko ng mga tunay na amo",
+        text = "Merchant payments, securely managed.",
         style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
         fontWeight = FontWeight.SemiBold,
         color = supportingColor,
         textAlign = TextAlign.Center
     )
 
-    Spacer(modifier = Modifier.height(56.dp))
+    Spacer(modifier = Modifier.height(36.dp))
     OutlinedTextField(
         value = username,
         onValueChange = onUsernameChange,
         modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("Username or Email") },
+        placeholder = { Text("Merchant email address") },
         leadingIcon = {
             Icon(
                 imageVector = Icons.Rounded.AlternateEmail,

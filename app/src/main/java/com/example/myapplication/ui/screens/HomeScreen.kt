@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.SettingsManager
@@ -60,6 +61,11 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
+    val merchantAlias by settingsManager.merchantAlias.collectAsState(initial = null)
+    val signedInEmail by settingsManager.loggedInEmail.collectAsState(initial = null)
+    val merchantName = merchantAlias?.takeIf { it.isNotBlank() }
+        ?: signedInEmail?.substringBefore('@')?.replace('.', ' ')?.replaceFirstChar { it.uppercase() }
+        ?: "Merchant account"
     val transactionStore = remember { TransactionStore(context) }
     var balance by remember { mutableStateOf<Double?>(null) }
     var balanceError by remember { mutableStateOf<String?>(null) }
@@ -113,6 +119,7 @@ fun HomeScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
             HomeGreeting(
+                merchantName = merchantName,
                 onProfileClick = onProfileClick,
                 onHelpClick = onHelpClick
             )
@@ -155,6 +162,7 @@ fun HomeScreen(
 
 @Composable
 fun HomeGreeting(
+    merchantName: String,
     onProfileClick: () -> Unit,
     onHelpClick: () -> Unit
 ) {
@@ -169,8 +177,15 @@ fun HomeGreeting(
                 DrPayMarkBadge(size = 42.dp)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                Text("Hello!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
-                Text("Premium account", style = MaterialTheme.typography.labelMedium, color = FastPayTextSecondary, fontWeight = FontWeight.SemiBold)
+                Text("Welcome back", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
+                Text(
+                    merchantName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = FastPayTextSecondary,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
