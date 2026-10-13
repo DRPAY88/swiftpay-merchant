@@ -59,7 +59,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import com.example.myapplication.ui.components.FastPayLogo
+import com.example.myapplication.ui.components.DenshitxBankLogo
 import kotlin.math.abs
 
 import com.example.myapplication.LocalNavController
@@ -1022,7 +1022,7 @@ fun TransactionDetailScreen(
                 modifier = Modifier.padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                FastPayLogo(scale = 0.75f)
+                DenshitxBankLogo(scale = 0.75f)
                 
                 Spacer(Modifier.height(32.dp))
                 

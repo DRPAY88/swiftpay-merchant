@@ -1,19 +1,21 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>FastPay Merchant Portal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#123C35">
+    <title>Denshitx Bank</title>
     <style>
         :root {
-            --fp-blue: #0757C8;
-            --fp-navy: #102B59;
-            --fp-sky: #E5F0FF;
-            --fp-accent: #45A1FF;
+            --fp-blue: #176B55;
+            --fp-navy: #123C35;
+            --fp-sky: #E2EEE7;
+            --fp-accent: #D5B16D;
             --surface: #FFFFFF;
-            --bg-gray: #F4F8FF;
-            --text-main: #10213D;
-            --text-muted: #65758B;
+            --bg-gray: #F4F7F5;
+            --text-main: #142B27;
+            --text-muted: #526861;
+            --focus-ring: #9CCDB5;
             --radius-xl: 24px;
             --radius-lg: 16px;
             --radius-md: 12px;
@@ -22,17 +24,25 @@
         * {
             box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
-            outline: none;
         }
 
         body {
-            font-family: "Aptos", "Segoe UI", sans-serif;
+            font-family: "Aptos", "Segoe UI", system-ui, sans-serif;
             margin: 0;
             background-color: var(--bg-gray);
             color: var(--text-main);
             overflow-x: hidden;
-            -webkit-user-select: none;
-            user-select: none;
+            min-height: 100%;
+            -webkit-text-size-adjust: 100%;
+        }
+
+        :focus-visible {
+            outline: 3px solid var(--focus-ring);
+            outline-offset: 3px;
+        }
+
+        button, input, select {
+            font: inherit;
         }
 
         .action-notice {
@@ -88,7 +98,7 @@
             background: var(--bg-gray);
             display: flex;
             align-items: center;
-            border-bottom: 1px solid rgba(16,43,89,0.08);
+            border-bottom: 1px solid rgba(18,60,53,0.08);
             height: 64px;
             position: sticky;
             top: 0;
@@ -98,6 +108,8 @@
         .btn-back {
             width: 40px;
             height: 40px;
+            flex: 0 0 40px;
+            border: 0;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -105,14 +117,26 @@
             color: var(--fp-blue);
             background: white;
             font-size: 24px;
+            line-height: 1;
             cursor: pointer;
         }
 
         .navbar-title {
+            margin: 0;
             font-weight: 700;
             font-size: 18px;
             color: var(--fp-navy);
             margin-left: 8px;
+        }
+
+        .text-action {
+            border: 0;
+            padding: 8px;
+            color: var(--fp-blue);
+            background: transparent;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
         }
 
         .page-content {
@@ -123,30 +147,36 @@
         }
 
         .hero {
-            background: linear-gradient(145deg, #1769E0, #0752C5);
+            background:
+                radial-gradient(ellipse at 100% 0%, rgba(213,177,109,0.24), transparent 42%),
+                linear-gradient(145deg, #245548, #123C35 58%, #0B2823);
             padding: max(24px, env(safe-area-inset-top)) 20px 34px;
             color: white;
             text-align: left;
             border-radius: 0 0 var(--radius-xl) var(--radius-xl);
             margin: 0 12px;
-            box-shadow: 0 10px 28px rgba(7,82,197,0.2);
+            box-shadow: 0 14px 34px rgba(18,60,53,0.2);
         }
 
         .hero-logo {
             min-height: 38px;
             background: rgba(255,255,255,0.14);
             border-radius: 12px;
+            border: 0;
             margin: 0 0 28px;
             display: flex;
             align-items: center;
             justify-content: flex-start;
             width: fit-content;
             padding: 6px 10px;
+            color: white;
+            font-size: 15px;
+            font-weight: 800;
         }
 
         .balance-badge {
             display: block;
-            margin-bottom: 6px;
+            margin: 0 0 6px;
             color: rgba(255,255,255,0.76);
             font-weight: 700;
             font-size: 12px;
@@ -170,20 +200,27 @@
         .action-card {
             background: transparent;
             padding: 8px 2px;
+            border: 0;
             border-radius: var(--radius-md);
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 7px;
+            font: inherit;
+            text-align: center;
             text-decoration: none;
             color: var(--text-main);
             transition: transform 0.15s, background 0.15s;
             cursor: pointer;
         }
 
+        .action-card:hover {
+            background: rgba(23,107,85,0.06);
+        }
+
         .action-card:active {
             transform: scale(0.95);
-            background: rgba(7,87,200,0.06);
+            background: rgba(23,107,85,0.1);
         }
 
         .action-icon {
@@ -196,6 +233,16 @@
             align-items: center;
             justify-content: center;
             font-size: 25px;
+        }
+
+        .action-icon svg {
+            width: 25px;
+            height: 25px;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
         }
 
         .action-title {
@@ -214,18 +261,24 @@
             align-items: center;
         }
 
+        .section-title h2 {
+            margin: 0;
+            font: inherit;
+            color: inherit;
+        }
+
         .transfer-card {
             background: white;
             border-radius: 20px;
-            box-shadow: 0 12px 36px rgba(9, 30, 66, 0.08);
+            box-shadow: 0 12px 36px rgba(18,60,53,0.08);
             overflow: hidden;
-            border: 1px solid rgba(0, 82, 204, 0.08);
+            border: 1px solid rgba(18,60,53,0.08);
         }
 
         .transfer-hero {
             padding: 20px 20px 12px;
-            background: linear-gradient(135deg, rgba(0,82,204,0.08), rgba(0,191,255,0.05));
-            border-bottom: 1px solid rgba(9,30,66,0.06);
+            background: linear-gradient(135deg, rgba(23,107,85,0.1), rgba(213,177,109,0.08));
+            border-bottom: 1px solid rgba(18,60,53,0.06);
         }
 
         .transfer-badge {
@@ -233,7 +286,7 @@
             align-items: center;
             padding: 8px 12px;
             border-radius: 999px;
-            background: rgba(0, 82, 204, 0.1);
+            background: rgba(23,107,85,0.1);
             color: var(--fp-blue);
             font-size: 11px;
             font-weight: 800;
@@ -261,7 +314,7 @@
 
         .transfer-summary {
             background: var(--bg-gray);
-            border: 1px solid rgba(9,30,66,0.06);
+            border: 1px solid rgba(18,60,53,0.06);
             border-radius: 18px;
             padding: 14px 16px;
             margin: 8px 0 16px;
@@ -301,16 +354,16 @@
 
         .modern-input:focus {
             border-color: var(--fp-blue);
-            box-shadow: 0 0 0 4px rgba(0, 82, 204, 0.08);
+            box-shadow: 0 0 0 4px rgba(23,107,85,0.12);
         }
 
         .api-card {
             background: white;
-            border: 1px solid rgba(16,43,89,0.08);
+            border: 1px solid rgba(18,60,53,0.08);
             border-radius: 16px;
             padding: 18px;
             margin-bottom: 14px;
-            box-shadow: 0 5px 16px rgba(16,43,89,0.04);
+            box-shadow: 0 5px 16px rgba(18,60,53,0.04);
         }
 
         .btn-action {
@@ -322,7 +375,7 @@
             width: 100%;
             font-size: 15px;
             font-weight: 750;
-            box-shadow: 0 6px 16px rgba(7,87,200,0.18);
+            box-shadow: 0 6px 16px rgba(18,60,53,0.18);
         }
 
         .btn-action:disabled {
@@ -360,8 +413,13 @@
             font-weight: 700;
             font-size: 16px;
             cursor: pointer;
-            box-shadow: 0 4px 14px rgba(0,82,204,0.28);
+            box-shadow: 0 4px 14px rgba(18,60,53,0.24);
             transition: all 0.2s ease;
+        }
+
+        .btn-action:hover:not(:disabled) {
+            background: #125742;
+            box-shadow: 0 8px 20px rgba(18,60,53,0.22);
         }
 
         .btn-action:active {
@@ -370,7 +428,7 @@
         }
 
         .btn-action:disabled {
-            background: #A5C7FF;
+            background: #76998A;
             box-shadow: none;
             cursor: not-allowed;
         }
@@ -480,8 +538,8 @@
 
         .channel-card.selected {
             border-color: var(--fp-blue);
-            background: #F0F7FF;
-            box-shadow: 0 4px 14px rgba(0,82,204,0.12);
+            background: #EAF2EC;
+            box-shadow: 0 4px 14px rgba(23,107,85,0.12);
         }
 
         .channel-icon {
@@ -527,7 +585,7 @@
             font-weight: 800;
             letter-spacing: 1px;
         }
-        .collect-heading h1 {
+        .collect-heading h1, .collect-heading h2 {
             margin: 0;
             color: var(--fp-navy);
             font-size: 25px;
@@ -586,7 +644,7 @@
         }
         .collect-preset.is-selected {
             border-color: var(--fp-blue);
-            background: #EAF2FF;
+            background: #E2EEE7;
             color: var(--fp-blue);
         }
         .collect-description { margin-top: 20px; }
@@ -603,7 +661,7 @@
             display: grid;
             place-items: center;
             border-radius: 10px;
-            background: #EAF2FF;
+            background: #E2EEE7;
             color: var(--fp-blue);
             font-size: 19px;
             font-weight: 800;
@@ -686,88 +744,107 @@
             background: #DCFCE7;
             color: #15803D;
         }
+
+        @media (min-width: 600px) {
+            .hero, .action-grid, #dashboard > .page-content {
+                max-width: 720px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            .action-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                scroll-behavior: auto !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
     </style>
 </head>
 <body>
     <div id="action-notice" class="action-notice" role="status" aria-live="polite"></div>
 
-    <div class="hero">
-        <div class="hero-logo" style="display: inline-flex; align-items: center; gap: 8px;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0052CC" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/>
-            </svg>
-            <span style="font-weight: 800; font-size: 15px; color: #FFFFFF;">SwiftPay</span>
-        </div>
-        <div class="balance-badge">AVAILABLE BALANCE</div>
-        <div id="balance-display" class="balance-amount">₱ --.--</div>
-    </div>
+    <main id="dashboard">
+        <header class="hero">
+            <h1 class="hero-logo">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D5B16D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 9h18M5 7l7-4 7 4M4 20h16M6 10v8M10 10v8M14 10v8M18 10v8"/>
+                </svg>
+                <span>Denshitx Bank</span>
+            </h1>
+            <p class="balance-badge">AVAILABLE BALANCE</p>
+            <div id="balance-display" class="balance-amount" aria-live="polite">&#8369; --.--</div>
+        </header>
 
-    <div class="action-grid">
-        <div class="action-card" onclick="openPage('topup-page')">
-            <div class="action-icon">💳</div>
-            <div class="action-title">Collect</div>
-        </div>
-        <div class="action-card" onclick="openPage('payment-link-page')">
-            <div class="action-icon">🔗</div>
-            <div class="action-title">Payment Link</div>
-        </div>
-        <div class="action-card" onclick="openPage('qr-page')">
-            <div class="action-icon">▦</div>
-            <div class="action-title">QR Ph</div>
-        </div>
-        <div class="action-card" onclick="startDepositWizard()">
-            <div class="action-icon">🏦</div>
-            <div class="action-title">Cash in</div>
-        </div>
-        <div class="action-card" onclick="openPage('disbursement-page')">
-            <div class="action-icon">↗</div>
-            <div class="action-title">Transfer</div>
-        </div>
-        <div class="action-card" onclick="openPage('api-docs-page')">
-            <div class="action-icon">📄</div>
-            <div class="action-title">API Docs</div>
-        </div>
-    </div>
+        <nav class="action-grid" aria-label="Banking actions">
+            <button type="button" class="action-card" onclick="openPage('topup-page')">
+                <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></svg></span>
+                <span class="action-title">Collect</span>
+            </button>
+            <button type="button" class="action-card" onclick="openPage('payment-link-page')">
+                <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l3-3A5 5 0 0 0 13 2.9l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3A5 5 0 0 0 11 21.1l1.7-1.7"/></svg></span>
+                <span class="action-title">Payment Link</span>
+            </button>
+            <button type="button" class="action-card" onclick="openPage('qr-page')">
+                <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM19 14v7M14 19h3"/></svg></span>
+                <span class="action-title">QR Ph</span>
+            </button>
+            <button type="button" class="action-card" onclick="startDepositWizard()">
+                <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 9h18M5 7l7-4 7 4M4 20h16M6 10v8M10 10v8M14 10v8M18 10v8"/></svg></span>
+                <span class="action-title">Cash in</span>
+            </button>
+            <button type="button" class="action-card" onclick="openPage('disbursement-page')">
+                <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></svg></span>
+                <span class="action-title">Transfer</span>
+            </button>
+            <button type="button" class="action-card" onclick="openPage('api-docs-page')">
+                <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7"/></svg></span>
+                <span class="action-title">API Docs</span>
+            </button>
+        </nav>
 
-    <!-- Payment Service Panel -->
-    <div class="page-content">
-        <div class="section-title">
-            <span>Payment Service</span>
-            <span style="font-size: 13px; color: var(--fp-blue); cursor: pointer;" onclick="openPage('api-docs-page')">Details</span>
-        </div>
+        <section class="page-content" aria-labelledby="payment-service-heading">
+            <div class="section-title">
+                <h2 id="payment-service-heading">Banking services</h2>
+                <button type="button" class="text-action" onclick="openPage('api-docs-page')">Details</button>
+            </div>
 
-        <div class="api-card">
-            <div style="font-size: 12px; color: var(--text-muted); font-weight: 700;">SESSION</div>
-            <div id="payment-service-status" class="api-key-val">Checking...</div>
-            <div style="font-size: 12px; color: var(--text-muted); font-weight: 700; margin-top: 12px;">PROVIDER CREDENTIALS</div>
-            <div class="api-key-val">Managed securely by the payment backend</div>
-        </div>
-    </div>
+            <div class="api-card">
+                <div class="input-label">SESSION</div>
+                <div id="payment-service-status" class="api-key-val" aria-live="polite">Checking...</div>
+                <div class="input-label">PAYMENT PARTNER</div>
+                <div class="api-key-val">SwiftPay checkout, securely managed by our payment backend</div>
+            </div>
+        </section>
+    </main>
 
     <!-- Hosted payment collection page -->
-    <div id="topup-page" class="page">
+    <section id="topup-page" class="page" role="dialog" aria-modal="true" aria-labelledby="topup-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <div class="btn-back" onclick="closePage('topup-page')" aria-label="Go back">‹</div>
-            <span class="navbar-title">Collect</span>
+            <button type="button" class="btn-back" onclick="closePage('topup-page')" aria-label="Back to Denshitx Bank dashboard">&#8249;</button>
+            <h1 id="topup-page-title" class="navbar-title" tabindex="-1">Collect</h1>
         </div>
         <div class="page-content collect-content">
             <header class="collect-heading">
                 <p class="collect-eyebrow">PAYMENT COLLECTION</p>
-                <h1>Collect a payment</h1>
+                <h2>Collect a payment</h2>
                 <p>Set the amount and a short description. Your customer will complete payment on SwiftPay checkout.</p>
             </header>
 
             <section class="collect-amount-panel" aria-label="Payment amount">
                 <label class="input-label" for="topup-amount">Amount to collect</label>
                 <div class="collect-amount-control">
-                    <span class="collect-currency">₱</span>
+                    <span class="collect-currency" aria-hidden="true">&#8369;</span>
                     <input type="number" id="topup-amount" class="collect-amount-input" min="0.01" max="1000000" step="0.01" inputmode="decimal" placeholder="0.00" oninput="updateTopUpSummary()">
                 </div>
                 <div class="collect-presets" aria-label="Common amounts">
-                    <button type="button" class="collect-preset" data-amount="500" aria-pressed="false" onclick="setTopUpPreset(500)">₱500</button>
-                    <button type="button" class="collect-preset" data-amount="1000" aria-pressed="false" onclick="setTopUpPreset(1000)">₱1,000</button>
-                    <button type="button" class="collect-preset" data-amount="2500" aria-pressed="false" onclick="setTopUpPreset(2500)">₱2,500</button>
-                    <button type="button" class="collect-preset" data-amount="5000" aria-pressed="false" onclick="setTopUpPreset(5000)">₱5,000</button>
+                    <button type="button" class="collect-preset" data-amount="500" aria-pressed="false" onclick="setTopUpPreset(500)">&#8369;500</button>
+                    <button type="button" class="collect-preset" data-amount="1000" aria-pressed="false" onclick="setTopUpPreset(1000)">&#8369;1,000</button>
+                    <button type="button" class="collect-preset" data-amount="2500" aria-pressed="false" onclick="setTopUpPreset(2500)">&#8369;2,500</button>
+                    <button type="button" class="collect-preset" data-amount="5000" aria-pressed="false" onclick="setTopUpPreset(5000)">&#8369;5,000</button>
                 </div>
             </section>
 
@@ -777,7 +854,7 @@
             </div>
 
             <div class="collect-checkout">
-                <div class="collect-checkout-mark" aria-hidden="true">↗</div>
+                <div class="collect-checkout-mark" aria-hidden="true">&#8599;</div>
                 <div>
                     <div class="collect-checkout-title">SwiftPay hosted checkout</div>
                     <div class="collect-checkout-copy">Your customer chooses an available payment method on SwiftPay.</div>
@@ -786,66 +863,66 @@
 
             <div class="collect-summary">
                 <span>Amount to collect</span>
-                <strong id="sum-amount">₱0.00</strong>
+                <strong id="sum-amount">&#8369;0.00</strong>
             </div>
             <p class="collect-note">Any applicable fees are shown to the customer before they pay.</p>
             <button class="btn-action" id="topup-submit-btn" onclick="executeTopUp()" style="margin-top:18px">
                 <span id="topup-btn-label">Continue to Checkout</span>
             </button>
         </div>
-    </div>
+    </section>
 
     <!-- Hidden Sub-pages -->
-    <div id="api-docs-page" class="page">
+    <section id="api-docs-page" class="page" role="dialog" aria-modal="true" aria-labelledby="api-docs-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <div class="btn-back" onclick="closePage('api-docs-page')">‹</div>
-            <span class="navbar-title">Payment Service</span>
+            <button type="button" class="btn-back" onclick="closePage('api-docs-page')" aria-label="Back to Denshitx Bank dashboard">&#8249;</button>
+            <h1 id="api-docs-page-title" class="navbar-title" tabindex="-1">Payment service</h1>
         </div>
         <div class="page-content">
             <div class="section-title">Secure connection</div>
 
             <div class="api-card">
                 <div class="input-label">SESSION STATUS</div>
-                <div id="payment-service-detail-status" class="api-key-val">Checking...</div>
+                <div id="payment-service-detail-status" class="api-key-val" aria-live="polite">Checking...</div>
                 <p class="channel-desc">SwiftPay merchant credentials are stored by the payment backend and are not available to this page.</p>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div id="payment-link-page" class="page">
+    <section id="payment-link-page" class="page" role="dialog" aria-modal="true" aria-labelledby="payment-link-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <div class="btn-back" onclick="closePage('payment-link-page')">‹</div>
-            <span class="navbar-title">Payment Link Generator</span>
+            <button type="button" class="btn-back" onclick="closePage('payment-link-page')" aria-label="Back to Denshitx Bank dashboard">&#8249;</button>
+            <h1 id="payment-link-page-title" class="navbar-title" tabindex="-1">Payment link</h1>
         </div>
         <div class="page-content">
             <div class="input-group">
-                <label class="input-label">Description / Order Name</label>
-                <input type="text" id="link-desc" class="modern-input" placeholder="Item or Service Name">
+                <label class="input-label" for="link-desc">Description / order name</label>
+                <input type="text" id="link-desc" class="modern-input" placeholder="Item or service name" maxlength="120">
             </div>
             <div class="input-group">
-                <label class="input-label">Amount (₱)</label>
-                <input type="number" id="link-amount" class="modern-input" placeholder="0.00">
+                <label class="input-label" for="link-amount">Amount (&#8369;)</label>
+                <input type="number" id="link-amount" class="modern-input" min="0.01" max="1000000" step="0.01" inputmode="decimal" placeholder="0.00">
             </div>
-            <button class="btn-action" onclick="generateLink()">Create SwiftPay Link</button>
+            <button type="button" class="btn-action" onclick="generateLink()">Create payment link</button>
         </div>
-    </div>
+    </section>
 
-    <div id="qr-page" class="page">
+    <section id="qr-page" class="page" role="dialog" aria-modal="true" aria-labelledby="qr-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <div class="btn-back" onclick="closePage('qr-page')">‹</div>
-            <span class="navbar-title">QR payments</span>
+            <button type="button" class="btn-back" onclick="closePage('qr-page')" aria-label="Back to Denshitx Bank dashboard">&#8249;</button>
+            <h1 id="qr-page-title" class="navbar-title" tabindex="-1">QR payments</h1>
         </div>
         <div class="page-content" style="text-align:center">
             <div class="api-card">
                 <div class="input-group">
                     <label class="input-label" for="qr-currency">Settlement currency</label>
                     <select id="qr-currency" class="modern-input" onchange="updateQrCurrency()">
-                        <option value="PHP">PHP · Philippine peso</option>
-                        <option value="KRW">KRW · Korean won</option>
+                        <option value="PHP">PHP Â· Philippine peso</option>
+                        <option value="KRW">KRW Â· Korean won</option>
                     </select>
                 </div>
                 <div class="input-group">
-                    <label id="qr-amount-label" class="input-label" for="qr-amount">Amount (₱)</label>
+                    <label id="qr-amount-label" class="input-label" for="qr-amount">Amount (&#8369;)</label>
                     <input type="number" id="qr-amount" class="modern-input" min="0.01" max="1000000" step="0.01" placeholder="0.00">
                 </div>
                 <p class="channel-desc">Generate a one-time QR Ph payment code. The QR code will appear in a secure native dialog.</p>
@@ -862,48 +939,48 @@
                 <button class="btn-action" disabled>Scan QR to capture payment (Unavailable)</button>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div id="deposit-page" class="page">
+    <section id="deposit-page" class="page" role="dialog" aria-modal="true" aria-labelledby="deposit-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <div class="btn-back" onclick="closePage('deposit-page')" aria-label="Go back">‹</div>
-            <span class="navbar-title">Deposit to wallet</span>
+            <button type="button" class="btn-back" onclick="closePage('deposit-page')" aria-label="Back to Denshitx Bank dashboard">&#8249;</button>
+            <h1 id="deposit-page-title" class="navbar-title" tabindex="-1">Deposit to wallet</h1>
         </div>
         <div class="page-content">
             <div class="api-card">
                 <div class="section-title" style="margin-top:0">Bank transfer guide</div>
-                <p class="channel-desc">View your SwiftPay wallet's inbound account number and follow the deposit steps. This guide does not initiate or confirm a transfer.</p>
+                <p class="channel-desc">View your wallet's inbound account number and follow the deposit steps. This guide does not initiate or confirm a transfer.</p>
                 <button class="btn-action" onclick="startDepositWizard()">View deposit instructions</button>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div id="card-payment-page" class="page">
+    <section id="card-payment-page" class="page" role="dialog" aria-modal="true" aria-labelledby="card-payment-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <div class="btn-back" onclick="closePage('card-payment-page')">‹</div>
-            <span class="navbar-title">Card payments</span>
+            <button type="button" class="btn-back" onclick="closePage('card-payment-page')" aria-label="Back to Denshitx Bank dashboard">&#8249;</button>
+            <h1 id="card-payment-page-title" class="navbar-title" tabindex="-1">Card payments</h1>
         </div>
         <div class="page-content" style="text-align:center">
             <div class="api-card">Direct card and tap-to-phone payments are not available through the configured SwiftPay service. Use hosted checkout instead.</div>
             <button class="btn-action" onclick="closePage('card-payment-page'); openPage('topup-page')" style="margin-top:20px">Open hosted checkout</button>
         </div>
-    </div>
+    </section>
 
-    <div id="disbursement-page" class="page">
+    <section id="disbursement-page" class="page" role="dialog" aria-modal="true" aria-labelledby="disbursement-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <div class="btn-back" onclick="closePage('disbursement-page')">‹</div>
-            <span class="navbar-title">Transfer</span>
+            <button type="button" class="btn-back" onclick="closePage('disbursement-page')" aria-label="Back to Denshitx Bank dashboard">&#8249;</button>
+            <h1 id="disbursement-page-title" class="navbar-title" tabindex="-1">Transfer</h1>
         </div>
         <div class="page-content">
             <div class="transfer-card">
                 <div class="transfer-hero">
-                    <span class="transfer-badge">SwiftPay transfer</span>
+                    <span class="transfer-badge">Bank transfer</span>
                     <h2>Send money</h2>
                     <p>Move funds from your wallet to a recipient using an InstaPay-supported institution.</p>
                 </div>
                 <div class="transfer-body">
                     <div class="input-group">
-                        <label class="input-label">Destination Bank / E-Wallet</label>
+                        <label class="input-label" for="disb-bank">Destination bank / e-wallet</label>
                         <select id="disb-bank" class="modern-input" style="background:#fff;">
                             <option value="">Loading supported institutions...</option>
                         </select>
@@ -913,37 +990,38 @@
                         </div>
                     </div>
                     <div class="input-group">
-                        <label class="input-label">Account / Mobile Number</label>
+                        <label class="input-label" for="disb-acc">Account / mobile number</label>
                         <input type="text" id="disb-acc" class="modern-input" placeholder="e.g. 09171234567 or Account No." autocomplete="off">
                     </div>
                     <div class="input-group">
-                        <label class="input-label">Recipient Name</label>
+                        <label class="input-label" for="disb-name">Recipient name</label>
                         <input type="text" id="disb-name" class="modern-input" placeholder="First and Last Name" autocomplete="name">
                     </div>
                     <div class="input-group">
-                        <label class="input-label">Amount (₱)</label>
+                        <label class="input-label" for="disb-amount">Amount (&#8369;)</label>
                         <input type="number" id="disb-amount" class="modern-input" placeholder="0.00" min="0.01" max="50000" step="0.01">
                     </div>
                     <div class="transfer-summary">
                         <div class="summary-row">
                             <span>Estimated transfer</span>
-                            <strong id="disb-summary">₱0.00</strong>
+                            <strong id="disb-summary">&#8369;0.00</strong>
                         </div>
                         <div class="summary-row">
                             <span>Transfer limit</span>
-                            <strong>₱50,000</strong>
+                            <strong>&#8369;50,000</strong>
                         </div>
                     </div>
                     <button class="btn-action" onclick="sendDisbursement()">Confirm Transfer</button>
-                    <p class="helper-copy">Transfers are accepted asynchronously and stay pending until SwiftPay reports a terminal status.</p>
+                    <p class="helper-copy">Transfers are accepted asynchronously and remain pending until the payment partner reports a final status.</p>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
     <script>
         let noticeTimer;
         let transferInstitutionsTimer;
+        let returnFocusElement = null;
 
         function formatPhp(value) {
             const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -998,14 +1076,72 @@
             }, 25000);
         }
         function openPage(id) {
-            const p = document.getElementById(id); if (p) p.classList.add('active');
+            const p = document.getElementById(id);
+            if (!p || !p.classList.contains('page')) return;
+
+            if (!document.querySelector('.page.active')) {
+                returnFocusElement = document.activeElement === document.body
+                    ? document.querySelector('#dashboard .action-card')
+                    : document.activeElement;
+            }
+            document.querySelectorAll('.page.active').forEach(page => {
+                page.classList.remove('active');
+                page.setAttribute('aria-hidden', 'true');
+                page.inert = true;
+            });
+            p.classList.add('active');
+            p.setAttribute('aria-hidden', 'false');
+            p.inert = false;
+            document.getElementById('dashboard').inert = true;
+            document.getElementById('dashboard').setAttribute('aria-hidden', 'true');
+            requestAnimationFrame(() => p.querySelector('.navbar-title')?.focus({ preventScroll: true }));
+
             if (id === 'api-docs-page') post("get_settings");
             if (id === 'disbursement-page') {
                 updateDisbursementSummary();
                 loadTransferInstitutions();
             }
         }
-        function closePage(id) { const p = document.getElementById(id); if (p) p.classList.remove('active'); }
+        function closePage(id) {
+            const p = document.getElementById(id);
+            if (!p || !p.classList.contains('active')) return;
+            p.classList.remove('active');
+            p.setAttribute('aria-hidden', 'true');
+            p.inert = true;
+            document.getElementById('dashboard').inert = false;
+            document.getElementById('dashboard').setAttribute('aria-hidden', 'false');
+            if (returnFocusElement instanceof HTMLElement && returnFocusElement.isConnected) {
+                returnFocusElement.focus({ preventScroll: true });
+            }
+            returnFocusElement = null;
+        }
+
+        document.addEventListener('keydown', event => {
+            const activePage = document.querySelector('.page.active');
+            if (!activePage) return;
+            if (event.key === 'Escape') {
+                closePage(activePage.id);
+                return;
+            }
+            if (event.key !== 'Tab') return;
+            const focusable = Array.from(activePage.querySelectorAll(
+                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            )).filter(element => element.getClientRects().length > 0);
+            if (focusable.length === 0) {
+                event.preventDefault();
+                activePage.querySelector('.navbar-title')?.focus();
+                return;
+            }
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && (document.activeElement === first || !activePage.contains(document.activeElement))) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && (document.activeElement === last || !activePage.contains(document.activeElement))) {
+                event.preventDefault();
+                first.focus();
+            }
+        });
         function getBalance() { post("get_balance"); }
         function startDepositWizard() { post("start_deposit_wizard"); }
         function generateLink() { const a = parseFloat(document.getElementById('link-amount').value) || 0; const d = document.getElementById('link-desc').value || "Payment Link"; post("create_payment_link", { currency: "PHP", description: d, amount: a }); }
@@ -1029,7 +1165,7 @@
         }
         function updateQrCurrency() {
             const isKrw = document.getElementById('qr-currency').value === 'KRW';
-            document.getElementById('qr-amount-label').textContent = isKrw ? 'Amount (₩)' : 'Amount (₱)';
+            document.getElementById('qr-amount-label').textContent = isKrw ? 'Amount (\u20A9)' : 'Amount (\u20B1)';
             document.getElementById('qr-amount').step = isKrw ? '1' : '0.01';
             document.getElementById('qr-amount').placeholder = isKrw ? '0' : '0.00';
         }
@@ -1046,7 +1182,7 @@
         }
         function updateTopUpSummary() {
             const a = parseFloat(document.getElementById('topup-amount').value) || 0;
-            const formatted = "₱" + a.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            const formatted = "\u20B1" + a.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
             document.getElementById('sum-amount').innerText = formatted;
             document.getElementById('topup-btn-label').innerText = a > 0 ? `Continue with ${formatted}` : "Continue to Checkout";
             document.querySelectorAll('.collect-preset').forEach(button => {
@@ -1058,7 +1194,7 @@
         function executeTopUp() {
             const a = Number(document.getElementById('topup-amount').value);
             if (!Number.isFinite(a) || a < 0.01 || a > 1000000) {
-                showNotice("Enter an amount between ₱0.01 and ₱1,000,000.00.", true);
+                showNotice("Enter an amount between \u20B10.01 and \u20B11,000,000.00.", true);
                 return;
             }
             const description = document.getElementById('topup-description').value.trim() || "Payment collection";
@@ -1097,7 +1233,7 @@
                 showNotice("Provide a valid account or mobile number for the recipient.", true);
                 return;
             }
-            if (!name || name.length < 2 || name.length > 100 || !/^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$/.test(name)) {
+            if (!name || name.length < 2 || name.length > 100 || !/^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF .'-]+$/.test(name)) {
                 showNotice("Enter the recipient's full name using letters and standard separators only.", true);
                 return;
             }
@@ -1154,7 +1290,7 @@
                 resetQrButton();
                 showNotice('SwiftPay checkout opened. Choose QR Ph on the secure checkout page.');
             }
-            if (typeof res.data === 'number') { document.getElementById('balance-display').innerText = '₱ ' + res.data.toLocaleString(undefined, {minimumFractionDigits: 2}); return; }
+            if (typeof res.data === 'number') { document.getElementById('balance-display').innerText = '\u20B1 ' + res.data.toLocaleString(undefined, {minimumFractionDigits: 2}); return; }
             if (res.data && res.data.managedByServer) {
                 const status = res.data.hasApiKey === 'true' ? 'Merchant session active' : 'Sign in required';
                 document.getElementById('payment-service-status').innerText = status;

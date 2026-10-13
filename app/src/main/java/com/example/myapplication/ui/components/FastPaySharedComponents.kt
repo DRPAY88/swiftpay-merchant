@@ -7,7 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.ElectricBolt
+import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.ui.theme.*
 
 @Composable
-fun FastPayLogo(
+fun DenshitxBankLogo(
     modifier: Modifier = Modifier,
     isDark: Boolean = false,
     scale: Float = 1f
@@ -67,7 +67,7 @@ fun FastPayLogo(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.ElectricBolt,
+                        imageVector = Icons.Rounded.AccountBalance,
                         contentDescription = null,
                         modifier = Modifier.size((22 * scale).dp),
                         tint = Color.White
@@ -81,40 +81,23 @@ fun FastPayLogo(
         Column(verticalArrangement = Arrangement.Center) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = "FAST",
+                    text = "Denshitx",
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = (26 * scale).sp,
+                        fontSize = (21 * scale).sp,
                         fontWeight = FontWeight.Black,
-                        letterSpacing = (-1).sp
+                        letterSpacing = (-0.5f).sp
                     ),
                     color = if (isDark) Color.White else FastPayNavy
                 )
                 Text(
-                    text = "PAY",
+                    text = "BANK",
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = (26 * scale).sp,
-                        fontWeight = FontWeight.ExtraLight,
-                        letterSpacing = (-1).sp
+                        fontSize = (11 * scale).sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
                     ),
                     color = if (isDark) Color.White.copy(alpha = 0.9f) else FastPayBlue,
-                    modifier = Modifier.offset(x = (-1 * scale).dp)
-                )
-            }
-            
-            Surface(
-                color = if (isDark) Color.White.copy(alpha = 0.15f) else FastPayNavy,
-                shape = RoundedCornerShape((2 * scale).dp),
-                modifier = Modifier.offset(y = (-2 * scale).dp)
-            ) {
-                Text(
-                    text = "ENTERPRISE",
-                    modifier = Modifier.padding(horizontal = (6 * scale).dp, vertical = (2 * scale).dp),
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = (8 * scale).sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    ),
-                    color = Color.White
+                    modifier = Modifier.padding(start = (4 * scale).dp, bottom = (4 * scale).dp)
                 )
             }
         }

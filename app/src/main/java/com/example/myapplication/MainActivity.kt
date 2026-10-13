@@ -214,7 +214,7 @@ fun SwiftPayApp() {
                     val (linkId, _) = DeepLinkExtractor.extractPaymentInfo(payload)
                     if (linkId.isNotBlank()) {
                         miniAppViewModel.handleDeepLink(linkId)
-                        Toast.makeText(currentContext, "Checking payment status with SwiftPay", Toast.LENGTH_LONG).show()
+                        Toast.makeText(currentContext, "Checking your payment status", Toast.LENGTH_LONG).show()
                     }
                 }
             }

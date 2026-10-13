@@ -39,7 +39,7 @@ import com.example.myapplication.data.BackendAuthService
 import com.example.myapplication.data.DevicePinCheck
 import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.data.SettingsManager
-import com.example.myapplication.ui.components.FastPayLogo
+import com.example.myapplication.ui.components.DenshitxBankLogo
 import com.example.myapplication.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -318,7 +318,7 @@ fun MpinEnrollmentContent(
         )
         Text(
             if (isConfirmation) "Enter it once more to finish securing this device."
-            else "Use this six-digit code to unlock SwiftPay on this device. OTP sign-in is only needed to register another device.",
+            else "Use this six-digit code to unlock Denshitx Bank on this device. OTP sign-in is only needed to register another device.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f),
             textAlign = TextAlign.Center,
@@ -483,7 +483,7 @@ fun LandingContent(onLoginClick: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            FastPayLogo(scale = 1.35f, isDark = isDarkTheme)
+            DenshitxBankLogo(scale = 1.35f, isDark = isDarkTheme)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -574,7 +574,7 @@ fun CredentialsContent(
         }
 
         Spacer(modifier = Modifier.height(40.dp))
-        FastPayLogo(scale = 1.3f, isDark = isSystemInDarkTheme())
+        DenshitxBankLogo(scale = 1.3f, isDark = isSystemInDarkTheme())
 
         Spacer(modifier = Modifier.height(28.dp))
         Text(

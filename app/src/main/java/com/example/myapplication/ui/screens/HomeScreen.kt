@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -88,7 +87,7 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Color(0xFFF4F8FF))) {
+    Box(modifier = modifier.fillMaxSize().background(Color(0xFFF4F7F5))) {
         Column(
             modifier = Modifier
                 .widthIn(max = 560.dp)
@@ -153,15 +152,15 @@ fun HomeGreeting(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(14.dp), color = Color(0xFFDCEBFF), modifier = Modifier.size(44.dp)) {
+            Surface(shape = RoundedCornerShape(14.dp), color = Color(0xFFE2EEE7), modifier = Modifier.size(44.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.AccountBalanceWallet, "SwiftPay", tint = Color(0xFF0757C8), modifier = Modifier.size(25.dp))
+                    Icon(Icons.Rounded.AccountBalanceWallet, "Denshitx Bank", tint = Color(0xFF176B55), modifier = Modifier.size(25.dp))
                 }
             }
             Spacer(modifier = Modifier.width(11.dp))
             Column {
                 Text("Hello!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
-                Text("Your merchant wallet", style = MaterialTheme.typography.labelMedium, color = FastPayTextSecondary)
+                Text("Your Denshitx Bank account", style = MaterialTheme.typography.labelMedium, color = FastPayTextSecondary)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -193,7 +192,7 @@ fun WalletBalanceCard(
     ) {
         Column(
             modifier = Modifier
-                .background(Brush.linearGradient(listOf(Color(0xFF1769E0), Color(0xFF0752C5))))
+                .background(Brush.linearGradient(listOf(Color(0xFF245548), Color(0xFF0B2823))))
                 .padding(horizontal = 20.dp, vertical = 18.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -231,7 +230,7 @@ fun WalletBalanceCard(
                 Button(
                     onClick = onDeposit,
                     shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF0752C5)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF123C35)),
                     contentPadding = PaddingValues(horizontal = 14.dp),
                     modifier = Modifier.height(42.dp)
                 ) {
@@ -264,17 +263,17 @@ fun QuickActionsSection(
         Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
         Spacer(modifier = Modifier.height(13.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            QuickAction(Icons.Rounded.Payments, "Collect", Color(0xFFE5F0FF), onCollect, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", Color(0xFFE8F4FF), onTransfer, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.Link, "Payment link", Color(0xFFE8F8F5), onPaymentLink, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.AccountBalanceWallet, "Wallet", Color(0xFFFFF3E5), onNavigateToWallet, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Payments, "Collect", Color(0xFFE2EEE7), onCollect, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", Color(0xFFE7F0EA), onTransfer, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Link, "Payment link", Color(0xFFE2EEE7), onPaymentLink, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.AccountBalanceWallet, "Wallet", Color(0xFFF3EBDD), onNavigateToWallet, Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(14.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            QuickAction(Icons.Rounded.AccountBalance, "Cash in", Color(0xFFE8F8F5), onDeposit, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Activity", Color(0xFFE5F0FF), onNavigateToWallet, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.Terminal, "API docs", Color(0xFFF0ECFF), onDeveloperDocs, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.Person, "Profile", Color(0xFFFFF0EA), onProfileClick, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.AccountBalance, "Cash in", Color(0xFFE2EEE7), onDeposit, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Activity", Color(0xFFE7F0EA), onNavigateToWallet, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Terminal, "API docs", Color(0xFFF3EBDD), onDeveloperDocs, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Person, "Profile", Color(0xFFE2EEE7), onProfileClick, Modifier.weight(1f))
         }
     }
 }
@@ -284,21 +283,17 @@ fun QuickAction(icon: ImageVector, label: String, background: Color, onClick: ()
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .padding(vertical = 5.dp),
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Surface(shape = RoundedCornerShape(17.dp), color = background, modifier = Modifier.size(56.dp)) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(icon, label, tint = Color(0xFF0757C8), modifier = Modifier.size(29.dp))
+                Icon(icon, null, tint = Color(0xFF176B55), modifier = Modifier.size(29.dp))
             }
         }
         Spacer(modifier = Modifier.height(7.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = FastPayTextPrimary, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1, fontSize = 11.sp)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = FastPayTextPrimary, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1, fontSize = 12.sp)
     }
 }
 
@@ -307,14 +302,14 @@ fun MerchantToolsBanner(onCreatePaymentLink: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
         shape = RoundedCornerShape(20.dp),
-        color = Color(0xFF102B59)
+        color = Color(0xFF123C35)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("BUILT FOR YOUR BUSINESS", style = MaterialTheme.typography.labelSmall, color = Color(0xFFA9CBFF), fontWeight = FontWeight.Bold)
+                Text("Denshitx Bank", style = MaterialTheme.typography.labelSmall, color = Color(0xFFD5B16D), fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(5.dp))
                 Text("Get paid your way", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
                 Text("QR collections, payment links and transfers.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.76f))
@@ -323,7 +318,7 @@ fun MerchantToolsBanner(onCreatePaymentLink: () -> Unit) {
                     Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = Color.White, modifier = Modifier.padding(start = 5.dp).size(16.dp))
                 }
             }
-            Icon(Icons.Rounded.CurrencyExchange, null, tint = Color(0xFF79B1FF), modifier = Modifier.size(48.dp))
+            Icon(Icons.Rounded.CurrencyExchange, null, tint = Color(0xFFD5B16D), modifier = Modifier.size(48.dp))
         }
     }
 }
@@ -337,14 +332,17 @@ fun TransactionHistorySection(
 ) {
     Column(modifier = Modifier.padding(horizontal = 18.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { onClick() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+                .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("See all", style = MaterialTheme.typography.labelMedium, color = Color(0xFF0757C8), fontWeight = FontWeight.SemiBold)
-                Icon(Icons.Rounded.ChevronRight, null, tint = Color(0xFF0757C8), modifier = Modifier.size(18.dp))
+                Text("See all", style = MaterialTheme.typography.labelMedium, color = Color(0xFF176B55), fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Rounded.ChevronRight, null, tint = Color(0xFF176B55), modifier = Modifier.size(18.dp))
             }
         }
         Spacer(modifier = Modifier.height(14.dp))
@@ -418,4 +416,3 @@ fun TransactionListItem(transaction: InternalTransaction) {
         )
     }
 }
-

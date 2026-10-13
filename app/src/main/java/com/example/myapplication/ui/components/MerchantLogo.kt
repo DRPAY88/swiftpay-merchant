@@ -26,5 +26,5 @@ fun MerchantLogo(
     size: Dp = 120.dp,
     modifier: Modifier = Modifier
 ) {
-    FastPayLogo(modifier = modifier, scale = size.value / 120f)
+    DenshitxBankLogo(modifier = modifier, scale = size.value / 120f)
 }
