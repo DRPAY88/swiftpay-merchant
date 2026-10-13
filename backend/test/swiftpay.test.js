@@ -772,6 +772,7 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   assert.doesNotMatch(checkoutPage, /<script>/);
   assert.match(checkoutPage, /https:\/\/pay\.example\/link\/PL-1/);
   assert.match(checkoutPage, /Official payment partner logos/);
+  assert.match(checkoutPage, /<img src="\/checkout-assets\/drpay_mark\.png" alt="DRPAY">/);
   assert.match(checkoutPage, /src="https:\/\/assets\.swiftpay\.ph\/institutions\/bpi\.png" alt="Bank of the Philippine Islands logo"/);
   assert.match(checkoutPage, /src="https:\/\/swiftpay-qa-gateway-frontend\.s3-ap-southeast-1\.amazonaws\.com\/static\/media\/bank-icons\/vbank\.png" alt="VBank logo"/);
   assert.match(checkoutPage, /No logo institution/);
@@ -785,6 +786,9 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   const checkoutCss = await fetch(`${baseUrl}/checkout-assets/checkout.css`);
   assert.equal(checkoutCss.status, 200);
   assert.match(await checkoutCss.text(), /institution-grid/);
+  const brandMark = await fetch(`${baseUrl}/checkout-assets/drpay_mark.png`);
+  assert.equal(brandMark.status, 200);
+  assert.match(brandMark.headers.get("content-type"), /image\/png/);
 
   const invalid = await fetch(`${baseUrl}/v1/payment-links`, {
     method: "POST",

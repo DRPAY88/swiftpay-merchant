@@ -192,7 +192,7 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
 <body>
   <main class="checkout-card">
     <header class="checkout-header">
-      <div class="brand-mark" aria-hidden="true">D</div>
+      <div class="brand-mark"><img src="/checkout-assets/drpay_mark.png" alt="DRPAY"></div>
       <div class="brand-copy">
         <p class="eyebrow">DRPAY checkout</p>
         <p class="secure-label"><span aria-hidden="true">✓</span> Secure payment</p>
@@ -257,7 +257,7 @@ function checkoutQrPage({ code, title, amount, currency, paymentApp, phpAmount, 
 <body>
   <main class="checkout-card">
     <header class="checkout-header">
-      <div class="brand-mark" aria-hidden="true">D</div>
+      <div class="brand-mark"><img src="/checkout-assets/drpay_mark.png" alt="DRPAY"></div>
       <div class="brand-copy">
         <p class="eyebrow">DRPAY checkout</p>
         <p class="secure-label"><span aria-hidden="true">✓</span> Secure payment</p>
@@ -297,7 +297,7 @@ function checkoutErrorPage(message) {
 <body>
   <main class="checkout-card">
     <header class="checkout-header">
-      <div class="brand-mark" aria-hidden="true">D</div>
+      <div class="brand-mark"><img src="/checkout-assets/drpay_mark.png" alt="DRPAY"></div>
       <div class="brand-copy"><p class="eyebrow">DRPAY checkout</p></div>
     </header>
     <section class="payment-summary">
