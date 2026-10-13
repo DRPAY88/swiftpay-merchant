@@ -1120,53 +1120,6 @@
         </div>
     </section>
 
-    <section id="qr-page" class="page" role="dialog" aria-modal="true" aria-labelledby="qr-page-title" aria-hidden="true" inert>
-        <div class="navbar">
-            <button type="button" class="btn-back" onclick="closePage('qr-page')" aria-label="Back to Denshitx Bank dashboard">&#8249;</button>
-            <h1 id="qr-page-title" class="navbar-title" tabindex="-1">QR payments</h1>
-        </div>
-        <div class="page-content" style="text-align:center">
-            <div class="api-card">
-                <div class="input-group">
-                    <label class="input-label" for="qr-currency">Price shown to customer</label>
-                    <select id="qr-currency" class="modern-input" onchange="updateQrCurrency()">
-                        <option value="PHP">PHP price · PHP QR</option>
-                        <option value="KRW">KRW price · PHP QR</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label id="qr-amount-label" class="input-label" for="qr-amount">Amount (&#8369;)</label>
-                    <input type="number" id="qr-amount" class="modern-input" min="0.01" max="1000000" step="0.01" placeholder="0.00">
-                </div>
-                <p id="qr-currency-help" class="channel-desc">Generate a one-time PHP QR Ph payment code. KRW pricing is converted to a PHP QR using a short-lived live FX quote.</p>
-                <button id="qr-create-button" class="btn-action" onclick="generateQr()">Generate QR Ph code</button>
-                <div id="krw-quote-card" class="fx-quote-card" hidden>
-                    <div class="quote-row"><span>Customer price</span><strong id="krw-quote-customer-amount"></strong></div>
-                    <div class="quote-row"><span>PHP QR amount</span><strong id="krw-quote-php-amount"></strong></div>
-                    <div class="quote-row"><span>Live reference rate</span><strong id="krw-quote-rate"></strong></div>
-                    <p id="krw-quote-expiry" class="quote-note"></p>
-                    <p class="quote-note">The QR is encoded in PHP. The payer’s bank may apply its own KRW conversion and fees; the KRW figure is your displayed price, not a guaranteed bank debit.</p>
-                    <button id="krw-quote-confirm-button" type="button" class="btn-action" onclick="generateQrFromKrwQuote()">Create PHP QR</button>
-                </div>
-                <div id="qr-result" class="action-result" role="alert" aria-live="assertive" hidden>
-                    <strong id="qr-result-title"></strong>
-                    <p id="qr-result-message"></p>
-                    <span id="qr-result-reference" class="support-reference" hidden></span>
-                </div>
-            </div>
-            <div class="api-card">
-                <div class="section-title" style="margin-top:0">Send money</div>
-                <p class="channel-desc">Scan a recipient QR, review the transfer details, and confirm before submitting a QR_P2P InstaPay transfer.</p>
-                <button class="btn-action" onclick="scanQrToSend()">Scan QR to send money</button>
-            </div>
-            <div class="api-card">
-                <div class="section-title" style="margin-top:0">Capture payment</div>
-                <p class="channel-desc">SwiftPay's published API does not provide a scan-to-charge flow for scanning a customer's bank QR.</p>
-                <button class="btn-action" disabled>Scan QR to capture payment (Unavailable)</button>
-            </div>
-        </div>
-    </section>
-
     <section id="deposit-page" class="page" role="dialog" aria-modal="true" aria-labelledby="deposit-page-title" aria-hidden="true" inert>
         <div class="navbar">
             <button type="button" class="btn-back" onclick="closePage('deposit-page')" aria-label="Back to Denshitx Bank dashboard">&#8249;</button>
@@ -1285,9 +1238,6 @@
         let transferInstitutions = [];
         let activeInstitutionIndex = -1;
         let returnFocusElement = null;
-        let pendingKrwPhpQuote = null;
-        let krwQuoteExpiryTimer = null;
-
         function formatPhp(value) {
             const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
             return new Intl.NumberFormat('en-PH', {
@@ -1511,102 +1461,6 @@
         function getBalance() { post("get_balance"); }
         function startDepositWizard() { post("start_deposit_wizard"); }
         function generateLink() { const a = parseFloat(document.getElementById('link-amount').value) || 0; const d = document.getElementById('link-desc').value || "Payment Link"; post("create_payment_link", { currency: "PHP", description: d, amount: a }); }
-        function resetQrButton() {
-            const button = document.getElementById('qr-create-button');
-            button.disabled = false;
-            button.textContent = "Generate QR Ph code";
-        }
-        function clearKrwQuote() {
-            pendingKrwPhpQuote = null;
-            clearInterval(krwQuoteExpiryTimer);
-            document.getElementById('krw-quote-card').hidden = true;
-        }
-        function generateQr() {
-            const amount = Number(document.getElementById('qr-amount').value);
-            const currency = document.getElementById('qr-currency').value;
-            const minimum = currency === 'KRW' ? 1 : 0.01;
-            if (!Number.isFinite(amount) || amount < minimum || amount > 1000000 ||
-                (currency === 'KRW' && !Number.isInteger(amount))) {
-                showNotice(currency === 'KRW'
-                    ? 'Enter a whole KRW amount between ₩1 and ₩1,000,000.'
-                    : 'Enter a PHP amount between ₱0.01 and ₱1,000,000.00.', true);
-                return;
-            }
-
-            const button = document.getElementById('qr-create-button');
-            document.getElementById('qr-result').hidden = true;
-            clearKrwQuote();
-            button.disabled = true;
-            if (currency === 'KRW') {
-                button.textContent = "Getting live KRW/PHP quote...";
-                if (!post("quote_krw_php_qr", { amountKrw: amount })) resetQrButton();
-            } else {
-                button.textContent = "Generating PHP QR Ph code...";
-                if (!post("generate_dynamic_qr", { amount, currency: 'PHP' })) resetQrButton();
-            }
-        }
-        function updateQrCurrency() {
-            const isKrw = document.getElementById('qr-currency').value === 'KRW';
-            clearKrwQuote();
-            document.getElementById('qr-amount-label').textContent = isKrw ? 'Customer price (\u20A9)' : 'Amount (\u20B1)';
-            document.getElementById('qr-amount').step = isKrw ? '1' : '0.01';
-            document.getElementById('qr-amount').min = isKrw ? '1' : '0.01';
-            document.getElementById('qr-amount').placeholder = isKrw ? '0' : '0.00';
-            document.getElementById('qr-currency-help').textContent = isKrw
-                ? 'Enter the customer price in KRW. We’ll quote the PHP QR amount from a live FX rate; SwiftPay receives and settles PHP.'
-                : 'Generate a one-time PHP QR Ph payment code. The amount shown here is the PHP amount encoded in the QR.';
-        }
-        function generateQrFromKrwQuote() {
-            if (!pendingKrwPhpQuote || Date.parse(pendingKrwPhpQuote.expiresAt) <= Date.now()) {
-                clearKrwQuote();
-                showActionError(
-                    'qr-result', 'qr-result-title', 'qr-result-message', 'qr-result-reference',
-                    'Quote expired', 'Get a fresh KRW-to-PHP quote before creating the QR.'
-                );
-                return;
-            }
-            document.getElementById('krw-quote-confirm-button').disabled = true;
-            document.getElementById('krw-quote-confirm-button').textContent = 'Creating PHP QR...';
-            if (!post('generate_quoted_krw_php_qr', { quoteToken: pendingKrwPhpQuote.quoteToken })) {
-                document.getElementById('krw-quote-confirm-button').disabled = false;
-                document.getElementById('krw-quote-confirm-button').textContent = 'Create PHP QR';
-            }
-        }
-        function displayKrwPhpQuote(quote) {
-            if (!quote || quote.settlementCurrency !== 'PHP' || !quote.quoteToken ||
-                !Number.isInteger(quote.customerAmountKrw) ||
-                !Number.isFinite(Number(quote.settlementAmountPhp)) ||
-                !Number.isFinite(Number(quote.ratePhpPerKrw)) ||
-                !Number.isFinite(Date.parse(quote.expiresAt))) {
-                showActionError(
-                    'qr-result', 'qr-result-title', 'qr-result-message', 'qr-result-reference',
-                    'Invalid quote', 'The FX service returned an incomplete quote. Please request a fresh quote.'
-                );
-                return;
-            }
-            clearKrwQuote();
-            pendingKrwPhpQuote = quote;
-            document.getElementById('krw-quote-customer-amount').textContent =
-                `₩${Number(quote.customerAmountKrw).toLocaleString('en-US')}`;
-            document.getElementById('krw-quote-php-amount').textContent =
-                `₱${Number(quote.settlementAmountPhp).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PHP`;
-            document.getElementById('krw-quote-rate').textContent =
-                `₩1 = ₱${Number(quote.ratePhpPerKrw).toFixed(6)}`;
-            document.getElementById('krw-quote-confirm-button').disabled = false;
-            document.getElementById('krw-quote-confirm-button').textContent = 'Create PHP QR';
-            document.getElementById('krw-quote-card').hidden = false;
-            document.getElementById('krw-quote-expiry').textContent =
-                `FX rate updated ${new Date(quote.rateUpdatedAt).toLocaleString()}. This converted PHP amount is held for 5 minutes.`;
-            krwQuoteExpiryTimer = setInterval(() => {
-                const secondsLeft = Math.ceil((Date.parse(quote.expiresAt) - Date.now()) / 1000);
-                if (secondsLeft <= 0) {
-                    clearKrwQuote();
-                    return;
-                }
-                document.getElementById('krw-quote-expiry').textContent =
-                    `FX rate updated ${new Date(quote.rateUpdatedAt).toLocaleString()}. Quote expires in ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}.`;
-            }, 1000);
-        }
         function scanQrToSend() { post("scan_qr_to_send"); }
 
         function setTopUpPreset(a) {
@@ -1693,16 +1547,6 @@
 
         window.onSwiftPayResponse = window.onMayaResponse = function(json) {
             const res = JSON.parse(json);
-            if (res.action === 'open_qr_payments') {
-                openPage('qr-page');
-                return;
-            }
-            if (res.action === 'quote_krw_php_qr' && res.status === 'success' && res.data) {
-                resetQrButton();
-                document.getElementById('qr-result').hidden = true;
-                displayKrwPhpQuote(res.data);
-                return;
-            }
             if (res.action === 'get_transfer_institutions') {
                 clearTimeout(transferInstitutionsTimer);
                 if (res.status === 'error') {
@@ -1722,24 +1566,6 @@
                 transferButton.textContent = 'Confirm Transfer';
             }
             if (res.status === 'error') {
-                resetQrButton();
-                if (res.action === 'quote_krw_php_qr' || res.action === 'generate_quoted_krw_php_qr') {
-                    document.getElementById('krw-quote-confirm-button').disabled = false;
-                    document.getElementById('krw-quote-confirm-button').textContent = 'Create PHP QR';
-                    const expired = /quote expired/i.test(res.message || '');
-                    if (expired) clearKrwQuote();
-                    showActionError(
-                        'qr-result',
-                        'qr-result-title',
-                        'qr-result-message',
-                        'qr-result-reference',
-                        expired ? 'Quote expired' : 'KRW-to-PHP QR not created',
-                        expired
-                            ? 'The rate lock expired before the QR was created. Request a new quote.'
-                            : (res.message || 'Could not get a live FX quote or create the PHP QR. No QR was created.')
-                    );
-                    return;
-                }
                 if (res.action === 'send_disbursement') {
                     const message = res.message || 'The transfer was not accepted. Check the selected institution, recipient name, and account number before retrying.';
                     const isInvalidInput = /INVALID_INPUT|rejected the transfer details/i.test(message);
@@ -1751,22 +1577,6 @@
                         'Transfer not accepted',
                         isInvalidInput
                             ? 'SwiftPay returned INVALID_INPUT, so this transfer was not accepted. Confirm the selected InstaPay institution, account number, and recipient’s complete legal name exactly as registered. Use the support reference below if the details are correct.'
-                            : message,
-                        message
-                    );
-                    return;
-                }
-                if (res.action === 'generate_dynamic_qr') {
-                    const message = res.message || 'Could not create the QR code. Check the amount and try again.';
-                    const legacyCurrencyApi = /Unrecognized key:\s*["']currency["']/i.test(message);
-                    showActionError(
-                        'qr-result',
-                        'qr-result-title',
-                        'qr-result-message',
-                        'qr-result-reference',
-                        legacyCurrencyApi ? 'QR service needs an update' : 'QR code not created',
-                        legacyCurrencyApi
-                            ? 'This server version does not accept the selected currency. Ask your administrator to deploy the backend with PHP and KRW QR support. The amount and currency were not changed, and no payment was created.'
                             : message,
                         message
                     );
@@ -1814,13 +1624,7 @@
                 }
                 document.getElementById('disb-institutions-error').hidden = true;
             }
-            if (res.data && typeof res.data.qrCodeBody === 'string') {
-                clearKrwQuote();
-                resetQrButton();
-                showNotice('QR Ph code generated. Scan the code in the native dialog.');
-            }
             if (res.data && typeof res.data.checkoutUrl === 'string') {
-                resetQrButton();
                 showNotice('SwiftPay checkout opened. Choose QR Ph on the secure checkout page.');
             }
             if (typeof res.data === 'number') { document.getElementById('balance-display').innerText = '\u20B1 ' + res.data.toLocaleString(undefined, {minimumFractionDigits: 2}); return; }
@@ -1845,7 +1649,6 @@
         if (initialPage && document.getElementById(initialPage)) openPage(initialPage);
         setTimeout(() => { getBalance(); post('get_settings'); }, 800);
         document.getElementById('disb-amount').addEventListener('input', updateDisbursementSummary);
-        document.getElementById('qr-amount').addEventListener('input', clearKrwQuote);
         const institutionInput = document.getElementById('institution-search');
         const institutionToggle = document.getElementById('institution-picker-toggle');
         institutionInput.addEventListener('focus', () => {

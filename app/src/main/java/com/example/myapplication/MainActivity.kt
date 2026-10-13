@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PersonOutline
-import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -256,7 +255,6 @@ fun SwiftPayApp() {
                 navigationSuiteItems = {
                     val activeColor = FastPayBlue
                     val inactiveColor = Color.Gray.copy(alpha = 0.6f)
-                    val qrRouteSelected = currentRoute is Route.MiniApp && currentRoute.initialPath == "qr-page"
 
                     item(
                         selected = currentRoute == Route.Home,
@@ -274,25 +272,6 @@ fun SwiftPayApp() {
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = if (currentRoute == Route.Home) FontWeight.ExtraBold else FontWeight.Medium,
                                 color = if (currentRoute == Route.Home) activeColor else inactiveColor
-                            )
-                        },
-                    )
-                    item(
-                        selected = qrRouteSelected,
-                        onClick = { navController.navigate(Route.MiniApp("qr-page")) },
-                        icon = {
-                            Icon(
-                                Icons.Rounded.QrCode2,
-                                contentDescription = "QR payments",
-                                tint = if (qrRouteSelected) activeColor else inactiveColor
-                            )
-                        },
-                        label = {
-                            Text(
-                                "QR",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (qrRouteSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (qrRouteSelected) activeColor else inactiveColor
                             )
                         },
                     )

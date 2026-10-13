@@ -127,7 +127,6 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(24.dp))
             QuickActionsSection(
                 onCollect = { onLaunchMiniApp("topup-page") },
-                onQrClick = { onLaunchMiniApp("qr-page") },
                 onTransfer = { onLaunchMiniApp("disbursement-page") },
                 onPaymentLink = { onLaunchMiniApp("payment-link-page") },
                 onNavigateToWallet = onNavigateToWallet,
@@ -162,19 +161,44 @@ fun HomeGreeting(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            DrPayMarkBadge(size = 44.dp)
-            Spacer(modifier = Modifier.width(11.dp))
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White,
+                shadowElevation = 4.dp,
+                tonalElevation = 0.dp,
+                modifier = Modifier.size(46.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    DrPayMarkBadge(size = 28.dp)
+                }
+            }
+            Spacer(modifier = Modifier.width(12.dp))
             Column {
                 Text("Hello!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
-                Text("Your Denshitx Bank account", style = MaterialTheme.typography.labelMedium, color = FastPayTextSecondary)
+                Text("Premium account", style = MaterialTheme.typography.labelMedium, color = FastPayTextSecondary, fontWeight = FontWeight.SemiBold)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onHelpClick, modifier = Modifier.size(42.dp)) {
-                Icon(Icons.AutoMirrored.Rounded.HelpOutline, "Help", tint = FastPayTextPrimary, modifier = Modifier.size(23.dp))
+            Surface(
+                shape = CircleShape,
+                color = Color.White,
+                shadowElevation = 2.dp,
+                modifier = Modifier.size(42.dp)
+            ) {
+                IconButton(onClick = onHelpClick, modifier = Modifier.fillMaxSize()) {
+                    Icon(Icons.AutoMirrored.Rounded.HelpOutline, "Help", tint = FastPayTextPrimary, modifier = Modifier.size(21.dp))
+                }
             }
-            IconButton(onClick = onProfileClick, modifier = Modifier.size(42.dp)) {
-                Icon(Icons.Rounded.AccountCircle, "Profile", tint = FastPayTextPrimary, modifier = Modifier.size(26.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Surface(
+                shape = CircleShape,
+                color = Color.White,
+                shadowElevation = 2.dp,
+                modifier = Modifier.size(42.dp)
+            ) {
+                IconButton(onClick = onProfileClick, modifier = Modifier.fillMaxSize()) {
+                    Icon(Icons.Rounded.AccountCircle, "Profile", tint = FastPayTextPrimary, modifier = Modifier.size(24.dp))
+                }
             }
         }
     }
@@ -192,11 +216,11 @@ fun WalletBalanceCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(28.dp),
         color = Color.Transparent,
-        shadowElevation = 5.dp
+        shadowElevation = 10.dp
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .background(Brush.linearGradient(FastPayGradient))
                 .padding(horizontal = 20.dp, vertical = 18.dp)
@@ -207,54 +231,71 @@ fun WalletBalanceCard(
                     )
                 )
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "AVAILABLE BALANCE",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.76f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = onToggleBalance, modifier = Modifier.size(30.dp)) {
-                    Icon(
-                        if (isBalanceVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
-                        contentDescription = if (isBalanceVisible) "Hide balance" else "Show balance",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(3.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                when {
-                    isLoading -> Box(Modifier.width(168.dp).height(38.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.22f)))
-                    balance != null && isBalanceVisible -> Text(
-                        text = "₱${"%,.2f".format(balance)}",
-                        style = MaterialTheme.typography.headlineMedium,
+            Box(
+                modifier = Modifier
+                    .size(160.dp)
+                    .background(Color.White.copy(alpha = 0.08f), CircleShape)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 20.dp, y = (-18).dp)
+            )
+            Box(
+                modifier = Modifier
+                    .size(110.dp)
+                    .background(Color.White.copy(alpha = 0.06f), CircleShape)
+                    .align(Alignment.BottomStart)
+                    .offset(x = (-18).dp, y = 8.dp)
+            )
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "AVAILABLE BALANCE",
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        fontSize = 30.sp,
-                        maxLines = 1
+                        color = Color.White.copy(alpha = 0.76f)
                     )
-                    balance != null -> Text("₱ ••••••", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                    else -> Text("Unavailable", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(onClick = onToggleBalance, modifier = Modifier.size(30.dp)) {
+                        Icon(
+                            if (isBalanceVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+                            contentDescription = if (isBalanceVisible) "Hide balance" else "Show balance",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
-                Button(
-                    onClick = onDeposit,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = FastPayNavy),
-                    contentPadding = PaddingValues(horizontal = 14.dp),
-                    modifier = Modifier.height(42.dp)
-                ) {
-                    Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(19.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Cash in", fontWeight = FontWeight.Bold, maxLines = 1)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    when {
+                        isLoading -> Box(Modifier.width(168.dp).height(38.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.22f)))
+                        balance != null && isBalanceVisible -> Text(
+                            text = "₱${"%,.2f".format(balance)}",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = 30.sp,
+                            maxLines = 1
+                        )
+                        balance != null -> Text("₱ ••••••", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                        else -> Text("Unavailable", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    Button(
+                        onClick = onDeposit,
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = FastPayNavy),
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                        modifier = Modifier.height(42.dp)
+                    ) {
+                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(19.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Cash in", fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
                 }
-            }
-            if (!isLoading && balanceError != null) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                    Text(balanceError, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 2, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onBalanceRetry) { Text("Retry", color = Color.White, fontWeight = FontWeight.Bold) }
+                if (!isLoading && balanceError != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                        Text(balanceError, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 2, modifier = Modifier.weight(1f))
+                        TextButton(onClick = onBalanceRetry) { Text("Retry", color = Color.White, fontWeight = FontWeight.Bold) }
+                    }
                 }
             }
         }
@@ -264,7 +305,6 @@ fun WalletBalanceCard(
 @Composable
 fun QuickActionsSection(
     onCollect: () -> Unit,
-    onQrClick: () -> Unit,
     onTransfer: () -> Unit,
     onPaymentLink: () -> Unit,
     onNavigateToWallet: () -> Unit,
@@ -274,17 +314,16 @@ fun QuickActionsSection(
 ) {
     Column(modifier = Modifier.padding(horizontal = 18.dp)) {
         Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
-        Spacer(modifier = Modifier.height(13.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             QuickAction(Icons.Rounded.Payments, "Collect", FastPayMeshBlue, onCollect, Modifier.weight(1f))
             QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", FastPayMeshBlue, onTransfer, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Link, "Payment link", FastPayMeshBlue, onPaymentLink, Modifier.weight(1f))
             QuickAction(Icons.Rounded.AccountBalanceWallet, "Wallet", Color(0xFFF3EBDD), onNavigateToWallet, Modifier.weight(1f))
         }
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             QuickAction(Icons.Rounded.AccountBalance, "Cash in", FastPayMeshBlue, onDeposit, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.QrCode2, "QR", FastPayMeshBlue, onQrClick, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Terminal, "API docs", Color(0xFFF3EBDD), onDeveloperDocs, Modifier.weight(1f))
             QuickAction(Icons.Rounded.Person, "Profile", FastPayMeshBlue, onProfileClick, Modifier.weight(1f))
         }
@@ -295,14 +334,19 @@ fun QuickActionsSection(
 fun QuickAction(icon: ImageVector, label: String, background: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Surface(shape = RoundedCornerShape(17.dp), color = background, modifier = Modifier.size(56.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = FastPayActionIcon, modifier = Modifier.size(29.dp))
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = background,
+            shadowElevation = 1.dp,
+            modifier = Modifier.size(56.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(icon, null, tint = FastPayActionIcon, modifier = Modifier.size(28.dp))
             }
         }
         Spacer(modifier = Modifier.height(7.dp))
@@ -314,24 +358,38 @@ fun QuickAction(icon: ImageVector, label: String, background: Color, onClick: ()
 fun MerchantToolsBanner(onCreatePaymentLink: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = FastPayNavy
+        shape = RoundedCornerShape(24.dp),
+        color = Color.Transparent,
+        shadowElevation = 6.dp
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .background(Brush.linearGradient(listOf(FastPayNavy, FastPayBlue, Color(0xFF3A7AE8))))
+                .padding(horizontal = 18.dp, vertical = 18.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Denshitx Bank", style = MaterialTheme.typography.labelSmall, color = Color(0xFFD5B16D), fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(5.dp))
-                Text("Get paid your way", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
-                Text("QR collections, payment links and transfers.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.76f))
-                TextButton(onClick = onCreatePaymentLink, contentPadding = PaddingValues(horizontal = 0.dp)) {
-                    Text("Create a payment link", color = Color.White, fontWeight = FontWeight.Bold)
-                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = Color.White, modifier = Modifier.padding(start = 5.dp).size(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Denshitx Bank", style = MaterialTheme.typography.labelSmall, color = Color(0xFFD5B16D), fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Get paid your way", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Collections, payment links and transfers in one place.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.78f))
+                    TextButton(onClick = onCreatePaymentLink, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.padding(top = 6.dp)) {
+                        Text("Create a payment link", color = Color.White, fontWeight = FontWeight.Bold)
+                        Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = Color.White, modifier = Modifier.padding(start = 5.dp).size(16.dp))
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(18.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.CurrencyExchange, null, tint = Color(0xFFD5B16D), modifier = Modifier.size(28.dp))
                 }
             }
-            Icon(Icons.Rounded.CurrencyExchange, null, tint = Color(0xFFD5B16D), modifier = Modifier.size(48.dp))
         }
     }
 }

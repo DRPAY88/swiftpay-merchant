@@ -257,10 +257,6 @@ fun WalletListContent(
         }
     }
 
-    LaunchedEffect(selectedWallet) {
-        if (selectedWallet == "KRW") viewModel?.refreshKrwReceiptBalance()
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -271,15 +267,7 @@ fun WalletListContent(
         Spacer(Modifier.height(18.dp))
 
         when (selectedWallet) {
-            "CRYPTO" -> CryptoWalletContent(modifier = Modifier.weight(1f))
-            "KRW" -> KrwWalletContent(
-                balance = viewModel?.krwReceiptBalance,
-                paymentCount = viewModel?.krwReceiptPaymentCount ?: 0,
-                isLoading = viewModel?.isLoadingKrwReceiptBalance == true,
-                errorMessage = viewModel?.krwReceiptBalanceError,
-                onRetry = { viewModel?.refreshKrwReceiptBalance() },
-                modifier = Modifier.weight(1f)
-            )
+            "USDT" -> CryptoWalletContent(modifier = Modifier.weight(1f))
             else -> {
                 PremiumBalanceCard(
                     balance = balance,
@@ -333,7 +321,7 @@ fun WalletListContent(
 @Composable
 private fun WalletTypeSelector(selected: String, onSelect: (String) -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("PHP" to "Peso", "CRYPTO" to "Crypto", "KRW" to "KRW").forEach { (value, label) ->
+        listOf("PHP" to "PHP", "USDT" to "USDT").forEach { (value, label) ->
             FilterChip(
                 selected = selected == value,
                 onClick = { onSelect(value) },
@@ -386,66 +374,6 @@ private fun CryptoWalletContent(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
         )
-    }
-}
-
-@Composable
-private fun KrwWalletContent(
-    balance: Double?,
-    paymentCount: Int,
-    isLoading: Boolean,
-    errorMessage: String?,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(modifier = Modifier.padding(22.dp)) {
-                Surface(shape = RoundedCornerShape(12.dp), color = FastPayMeshBlue, modifier = Modifier.size(46.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("₩", style = MaterialTheme.typography.headlineSmall, color = FastPayBlue, fontWeight = FontWeight.Bold)
-                    }
-                }
-                Spacer(Modifier.height(18.dp))
-                Text("KRW wallet", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                Text("Korean won account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(18.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(Modifier.height(18.dp))
-                Text("KRW QR Ph receipts", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    text = when {
-                        isLoading -> "Loading..."
-                        balance != null -> "₩${"%,.0f".format(balance)}"
-                        else -> "Unavailable"
-                    },
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold
-                )
-                if (balance != null) {
-                    Text("$paymentCount executed QR Ph payment${if (paymentCount == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(
-                    "This total includes verified executed QR Ph payments marked KRW. It is not a provider-reported account balance and does not include withdrawals or manual adjustments.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                if (errorMessage != null) {
-                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
-                    TextButton(onClick = onRetry) { Text("Retry") }
-                }
-            }
-        }
     }
 }
 

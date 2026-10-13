@@ -64,8 +64,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Composable
 fun CameraQrScannerDialog(
     onQrDetected: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onGenerateQr: () -> Unit
+    onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -299,27 +298,15 @@ fun CameraQrScannerDialog(
                         )
                     }
                     Text("Scan QR", style = MaterialTheme.typography.titleLarge)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    OutlinedButton(
+                        onClick = {
+                            cameraError = null
+                            uploadQrLauncher.launch("image/*")
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedButton(
-                            onClick = {
-                                cameraError = null
-                                uploadQrLauncher.launch("image/*")
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Rounded.Upload, contentDescription = null)
-                            Text("Upload QR", modifier = Modifier.padding(start = 8.dp))
-                        }
-                        Button(
-                            onClick = onGenerateQr,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Rounded.QrCode2, contentDescription = null)
-                            Text("Generate QR", modifier = Modifier.padding(start = 8.dp))
-                        }
+                        Icon(Icons.Rounded.Upload, contentDescription = null)
+                        Text("Upload QR", modifier = Modifier.padding(start = 8.dp))
                     }
                     cameraError?.let {
                         Text(

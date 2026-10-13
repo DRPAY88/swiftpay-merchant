@@ -442,11 +442,6 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         uiState = MiniAppUiState.ScanQrToSend
     }
 
-    fun onOpenQrPayments() {
-        uiState = MiniAppUiState.Idle
-        bridge?.sendResponse(null, action = "open_qr_payments")
-    }
-
     fun onGetTransferInstitutions() {
         viewModelScope.launch {
                 try {

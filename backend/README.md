@@ -9,8 +9,18 @@ Use Node.js 20.6 or newer. Copy `.env.example` to `.env`, configure sandbox cred
 ```sh
 npm install
 npm test
+npm run db:migrate
 npm start
 ```
+
+`npm run db:migrate` applies versioned, additive PostgreSQL migrations using `DATABASE_URL`.
+The initial migration creates the multi-currency account, receiving, invoice, payment, payout,
+FX quote, provider-event, and double-entry ledger schema for PHP, USDT, and KRW. Run migrations
+explicitly before deploying code that uses these tables; the current backend continues to use its
+existing shared SwiftPay merchant account and does not yet create isolated customer balances.
+Bank account details are represented as ciphertext fields and must be encrypted before storage.
+Ledger batches can only be posted when debit and credit totals balance per currency; posted batches
+and their entries are immutable, so corrections must use a separate reversal batch.
 
 The API refuses to start without SwiftPay credentials, an allowlist, a session-signing key, and a Resend key/from address. Sign-in codes are sent only to addresses in `AUTH_ALLOWED_EMAILS` or the optional `AUTH_ADDITIONAL_ALLOWED_EMAILS`; non-allowlisted addresses receive the same accepted response without an email. Codes expire after ten minutes, are single-use, and allow five attempts. The server issues an eight-hour scoped JWT after successful verification.
 

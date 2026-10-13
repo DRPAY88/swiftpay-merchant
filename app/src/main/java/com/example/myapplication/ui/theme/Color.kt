@@ -24,17 +24,17 @@ val FastPayTextField = Color(0xFFF2F4F7)
 val FastPayLightGray = Color(0xFFEBEEF0)
 
 // SwiftPay Primary UI Palette
-val FastPayBackground = Color(0xFFF4F7FC)
-val FastPayMeshBlue = Color(0xFFE6EEF8)
-val FastPayMeshTeal = Color(0xFFDCE7F4)
-val FastPayTextPrimary = Color(0xFF13243A)
-val FastPayTextSecondary = Color(0xFF53657C)
+val FastPayBackground = Color(0xFFF5F8FD)
+val FastPayMeshBlue = Color(0xFFEAF3FF)
+val FastPayMeshTeal = Color(0xFFDCEBFA)
+val FastPayTextPrimary = Color(0xFF11223D)
+val FastPayTextSecondary = Color(0xFF64748B)
 val FastPayActionIcon = FastPayBlue
 
 // Brand Gradients
-val FastPayGradient = listOf(FastPayNavy, FastPayBlue)
+val FastPayGradient = listOf(FastPayNavy, FastPayBlue, Color(0xFF2F6DE6))
 val FastPayAccentGradient = listOf(FastPayBlue, FastPayAccent)
-val FastPayPremiumGradient = listOf(FastPayPurple, FastPayCyan)
+val FastPayPremiumGradient = listOf(FastPayPurple, FastPayCyan, FastPayBlue)
 val FastPayGreenGradient = listOf(FastPayGreen, FastPayCyan)
 val FastPayOrangeGradient = listOf(FastPayOrange, FastPayRed)
 val FastPaySoftGradient = listOf(Color(0xFFE6EEF8), Color(0xFFF4F7FC))
