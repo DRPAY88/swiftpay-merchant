@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.ui.theme.*
-import com.example.myapplication.ui.components.DrPayMarkBadge
+import com.example.myapplication.ui.components.DenshitxBankMarkBadge
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,7 +58,7 @@ fun ApiKeysScreen() {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        DrPayMarkBadge(size = 28.dp)
+                        DenshitxBankMarkBadge(size = 28.dp)
                         Text("Payment Service", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
                     }
                 },

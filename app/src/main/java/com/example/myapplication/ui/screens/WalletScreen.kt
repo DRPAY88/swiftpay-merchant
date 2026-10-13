@@ -58,8 +58,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import com.example.myapplication.ui.components.DrPayLogo
-import com.example.myapplication.ui.components.DrPayMarkBadge
+import com.example.myapplication.ui.components.DenshitxBankLogo
+import com.example.myapplication.ui.components.DenshitxBankMarkBadge
 import kotlin.math.abs
 
 import com.example.myapplication.LocalNavController
@@ -141,7 +141,7 @@ fun WalletScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        DrPayMarkBadge(size = 30.dp)
+                        DenshitxBankMarkBadge(size = 30.dp)
                         Text(
                             text = "Wallet",
                             style = MaterialTheme.typography.titleLarge,
@@ -985,7 +985,7 @@ fun TransactionDetailScreen(
                 modifier = Modifier.padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                DrPayLogo(size = 90.dp)
+                DenshitxBankLogo(size = 90.dp)
                 
                 Spacer(Modifier.height(32.dp))
                 

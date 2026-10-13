@@ -39,7 +39,7 @@ import com.example.myapplication.data.BackendAuthService
 import com.example.myapplication.data.DevicePinCheck
 import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.data.SettingsManager
-import com.example.myapplication.ui.components.DrPayMark
+import com.example.myapplication.ui.components.DenshitxBankMark
 import com.example.myapplication.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -473,7 +473,7 @@ fun LandingContent(
     horizontalAlignment = Alignment.CenterHorizontally
     ) {
     Spacer(modifier = Modifier.height(24.dp))
-    DrPayMark(size = 112.dp)
+    DenshitxBankMark(size = 112.dp)
     Spacer(modifier = Modifier.height(16.dp))
     Text(
         text = "Denshitx Bank",

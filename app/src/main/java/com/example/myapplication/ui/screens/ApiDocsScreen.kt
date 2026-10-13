@@ -23,7 +23,7 @@ import com.example.myapplication.ui.theme.FastPayBlue
 import com.example.myapplication.ui.theme.FastPayBlack
 import com.example.myapplication.ui.theme.FastPayBackground
 import com.example.myapplication.ui.theme.FastPayTextSecondary
-import com.example.myapplication.ui.components.DrPayMarkBadge
+import com.example.myapplication.ui.components.DenshitxBankMarkBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,7 +41,7 @@ fun ApiDocsScreen() {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        DrPayMarkBadge(size = 28.dp)
+                        DenshitxBankMarkBadge(size = 28.dp)
                         Text("Developer portal", color = textColor, fontWeight = FontWeight.Black)
                     }
                 },
