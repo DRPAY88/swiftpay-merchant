@@ -977,6 +977,119 @@
                 transition-duration: 0.01ms !important;
             }
         }
+
+        /* Keep embedded payment flows visually consistent with the native merchant app. */
+        .page {
+            background: var(--bg-gray);
+        }
+
+        .navbar {
+            min-height: 64px;
+            height: auto;
+            padding: max(8px, env(safe-area-inset-top)) 18px 8px;
+            background: rgba(255,255,255,0.96);
+            box-shadow: 0 4px 16px rgba(11,31,58,0.04);
+        }
+
+        .btn-back {
+            color: var(--fp-navy);
+            background: var(--fp-sky);
+            transition: background var(--motion-quick) var(--motion-easing),
+                transform var(--motion-quick) var(--motion-easing);
+        }
+
+        .btn-back:active {
+            transform: scale(0.94);
+            background: #D7E5F5;
+        }
+
+        .navbar-title {
+            font-size: 19px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .page-content {
+            width: 100%;
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 22px 20px max(32px, env(safe-area-inset-bottom));
+            scroll-padding-block: 24px;
+        }
+
+        .transfer-card,
+        .tap-pay-card,
+        .collect-amount-panel,
+        .summary-card,
+        .api-card {
+            border: 1px solid rgba(11,31,58,0.08);
+            border-radius: 22px;
+            box-shadow: 0 8px 24px rgba(11,31,58,0.055);
+        }
+
+        .transfer-hero {
+            padding: 22px 22px 16px;
+        }
+
+        .transfer-body {
+            padding: 22px;
+        }
+
+        .transfer-hero h2,
+        .collect-heading h1,
+        .collect-heading h2 {
+            letter-spacing: -0.025em;
+        }
+
+        .modern-input,
+        .institution-picker-control {
+            min-height: 52px;
+            border: 1px solid #D6E0EC;
+            border-radius: 14px;
+            background: #fff;
+            color: var(--text-main);
+            transition: border-color var(--motion-standard) var(--motion-easing),
+                box-shadow var(--motion-standard) var(--motion-easing);
+        }
+
+        .modern-input:focus,
+        .institution-picker-control:focus-within {
+            border-color: var(--fp-blue);
+            outline: 0;
+            box-shadow: 0 0 0 4px rgba(27,79,156,0.12);
+        }
+
+        .btn-action {
+            min-height: 54px;
+            border-radius: 16px;
+            letter-spacing: 0.01em;
+        }
+
+        .channel-card {
+            border-width: 1px;
+            border-radius: 18px;
+        }
+
+        .channel-card.selected {
+            background: #F0F6FF;
+        }
+
+        .section-title {
+            color: var(--fp-navy);
+            letter-spacing: -0.015em;
+        }
+
+        .action-card:focus-visible,
+        .btn-action:focus-visible,
+        .text-action:focus-visible {
+            outline-offset: 3px;
+        }
+
+        @media (max-width: 420px) {
+            .page-content { padding-inline: 16px; }
+            .transfer-body { padding: 18px; }
+            .transfer-hero { padding-inline: 18px; }
+        }
     </style>
 </head>
 <body>
