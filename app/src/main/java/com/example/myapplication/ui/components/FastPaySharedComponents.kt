@@ -25,7 +25,7 @@ fun DenshitxBankLogo(
     size: Dp = 120.dp
 ) {
     Image(
-        painter = painterResource(R.drawable.denshitx_bank_mark),
+        painter = painterResource(R.drawable.drpay_logo),
         contentDescription = "Denshitx Bank logo",
         contentScale = ContentScale.Fit,
         modifier = modifier.size(size)
@@ -38,7 +38,7 @@ fun DenshitxBankMark(
     size: Dp = 40.dp
 ) {
     Image(
-        painter = painterResource(R.drawable.denshitx_bank_mark),
+        painter = painterResource(R.drawable.drpay_mark),
         contentDescription = "Denshitx Bank",
         contentScale = ContentScale.Fit,
         modifier = modifier.size(size)

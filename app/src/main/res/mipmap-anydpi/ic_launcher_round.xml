@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/ic_launcher_legacy_round_background" />
+    <item android:drawable="@color/white" />
     <item
-        android:width="72dp"
-        android:height="72dp"
-        android:drawable="@drawable/ic_launcher_foreground"
+        android:width="84dp"
+        android:height="84dp"
+        android:drawable="@drawable/drpay_mark"
         android:gravity="center" />
 </layer-list>
