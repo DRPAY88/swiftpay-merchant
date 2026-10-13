@@ -9,22 +9,24 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.Login
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -38,7 +40,7 @@ import com.example.myapplication.data.BackendAuthService
 import com.example.myapplication.data.DevicePinCheck
 import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.data.SettingsManager
-import com.example.myapplication.ui.components.DrPayLogo
+import com.example.myapplication.ui.components.DrPayMark
 import com.example.myapplication.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -49,7 +51,6 @@ import android.util.Patterns
 
 sealed interface LoginState {
     object Landing : LoginState
-    object Credentials : LoginState
     object WaitingApproval : LoginState
     data class Otp(val email: String) : LoginState
     object MpinSetup : LoginState
@@ -79,12 +80,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 state = LoginState.MpinSetup
             }
         }
-    }
-
-    fun navigateToCredentials() {
-        isLoading = false
-        state = LoginState.Credentials
-        errorMessage = null
     }
 
     fun navigateToLanding() {
@@ -233,14 +228,10 @@ fun LoginScreen(
     Crossfade(targetState = state, label = "loginState") { currentState ->
         when (currentState) {
             LoginState.Landing -> LandingContent(
-                onLoginClick = { viewModel.navigateToCredentials() }
-            )
-            LoginState.Credentials -> CredentialsContent(
                 username = viewModel.username,
                 isLoading = viewModel.isLoading,
                 errorMessage = viewModel.errorMessage,
                 onUsernameChange = { viewModel.username = it },
-                onBack = { viewModel.navigateToLanding() },
                 onLoginClick = { viewModel.onLoginClick() }
             )
             LoginState.WaitingApproval -> WaitingApprovalContent(
@@ -252,7 +243,7 @@ fun LoginScreen(
                 errorMessage = viewModel.errorMessage,
                 resendTimer = viewModel.resendTimer,
                 onOtpChange = { viewModel.otpCode = it },
-                onBack = { viewModel.navigateToCredentials() },
+                onBack = { viewModel.navigateToLanding() },
                 onResendClick = { viewModel.onResendOtpClick() },
                 onVerifyClick = { viewModel.onVerifyOtpClick(onLoginSuccess) }
             )
@@ -440,7 +431,13 @@ fun WaitingApprovalContent(onCancel: () -> Unit) {
 }
 
 @Composable
-fun LandingContent(onLoginClick: () -> Unit) {
+fun LandingContent(
+    username: String,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onUsernameChange: (String) -> Unit,
+    onLoginClick: () -> Unit
+) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
 
@@ -452,192 +449,174 @@ fun LandingContent(onLoginClick: () -> Unit) {
     val contentOffset by animateFloatAsState(
         targetValue = if (visible) 0f else 20f,
         animationSpec = tween(FintechMotion.entranceMillis, easing = FintechMotion.standardEasing),
-        label = "contentOffset"
+    label = "contentOffset"
     )
 
     val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val bgColors = if (isDarkTheme) {
-        listOf(FastPayNavy, FastPayDarkNavy)
-    } else {
-        listOf(FastPayBackground, FastPayMeshBlue)
-    }
-    val headlineColor = if (isDarkTheme) Color.White else FastPayNavy
-    val supportingColor = if (isDarkTheme) Color.White.copy(alpha = 0.9f) else FastPayTextSecondary
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(bgColors))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 32.dp)
-                .graphicsLayer {
-                    alpha = contentAlpha
-                    translationY = contentOffset
-                },
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            DrPayLogo(size = 184.dp)
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Accept Payments\nAnywhere, Anytime.",
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 42.sp
-                    ),
-                    color = headlineColor,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Surface(
-                    color = if (isDarkTheme) Color.White.copy(alpha = 0.12f) else Color.White,
-                    shape = RoundedCornerShape(14.dp),
-                    shadowElevation = if (isDarkTheme) 0.dp else 2.dp
-                ) {
-                    Text(
-                        text = "Hosted Checkout · Payment Links · Transfers",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = supportingColor,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Button(
-                onClick = onLoginClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = FastPayBlue),
-                shape = RoundedCornerShape(16.dp),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.AutoMirrored.Rounded.Login, null, modifier = Modifier.size(20.dp), tint = Color.White)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Sign In", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CredentialsContent(
-    username: String,
-    isLoading: Boolean,
-    errorMessage: String?,
-    onUsernameChange: (String) -> Unit,
-    onBack: () -> Unit,
-    onLoginClick: () -> Unit
-) {
-    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val bgColor = MaterialTheme.colorScheme.background
-    val textColor = if (isDarkTheme) Color.White else FastPayNavy
-    val secondaryTextColor = if (isDarkTheme) Color.LightGray else FastPayTextSecondary
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val headlineColor = MaterialTheme.colorScheme.onBackground
+    val supportingColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f)
+    val fieldColor = if (isDarkTheme) FastPayDarkNavy else Color.White
+    val outlineColor = if (isDarkTheme) Color.White.copy(alpha = 0.28f) else Color(0xFFCACDD2)
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(bgColor)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 28.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    modifier = Modifier
+        .fillMaxSize()
+        .background(backgroundColor)
+        .statusBarsPadding()
+        .navigationBarsPadding()
+        .verticalScroll(rememberScrollState())
+        .padding(horizontal = 28.dp, vertical = 20.dp)
+        .graphicsLayer {
+            alpha = contentAlpha
+            translationY = contentOffset
+        },
+    horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = textColor)
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            Text("Help Center", color = textColor.copy(alpha = 0.6f), style = MaterialTheme.typography.labelLarge)
-        }
+    Spacer(modifier = Modifier.height(24.dp))
+    DrPayMark(size = 112.dp)
+    Spacer(modifier = Modifier.height(16.dp))
+    Text(
+        text = "Denshitx Bank",
+        style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp),
+        fontWeight = FontWeight.Bold,
+        color = headlineColor,
+        textAlign = TextAlign.Center
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(
+        text = "Banko ng mga tunay na amo",
+        style = MaterialTheme.typography.titleMedium.copy(
+            fontSize = 18.sp,
+            fontStyle = FontStyle.Italic
+        ),
+        color = supportingColor,
+        textAlign = TextAlign.Center
+    )
 
-        Spacer(modifier = Modifier.height(40.dp))
-        DrPayLogo(size = 136.dp)
-
-        Spacer(modifier = Modifier.height(28.dp))
-        Text(
-            text = "Merchant Sign In",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.ExtraBold,
-            color = textColor
-        )
-        Text(
-            text = "Sign in with an authorized merchant email",
-            style = MaterialTheme.typography.bodyMedium,
-            color = secondaryTextColor
-        )
-
-        Spacer(modifier = Modifier.height(52.dp))
-
-        CustomTextField(
-            value = username,
-            onValueChange = onUsernameChange,
-            placeholder = "Merchant email address",
-            leadingIcon = Icons.Rounded.AlternateEmail,
+    Spacer(modifier = Modifier.height(56.dp))
+    OutlinedTextField(
+        value = username,
+        onValueChange = onUsernameChange,
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text("Username or Email") },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Rounded.AlternateEmail,
+                contentDescription = "Email address",
+                tint = if (isDarkTheme) Color.LightGray else FastPayTextSecondary
+            )
+        },
+        keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Email,
-            isDarkTheme = isDarkTheme
+            imeAction = ImeAction.Go
+        ),
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = headlineColor,
+            unfocusedTextColor = headlineColor,
+            focusedContainerColor = fieldColor,
+            unfocusedContainerColor = fieldColor,
+            focusedBorderColor = FastPayBlue,
+            unfocusedBorderColor = outlineColor,
+            focusedLeadingIconColor = FastPayBlue,
+            unfocusedLeadingIconColor = supportingColor,
+            cursorColor = FastPayBlue
         )
-        Spacer(modifier = Modifier.height(20.dp))
+    )
+    Text(
+        text = "We'll email you a one-time sign-in code.",
+        style = MaterialTheme.typography.bodySmall,
+        color = supportingColor,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, top = 8.dp)
+    )
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        if (errorMessage != null) {
-            Surface(
-                color = Color(0xFFFFEBEE),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = errorMessage,
-                    color = Color(0xFFD32F2F),
-                    modifier = Modifier.padding(14.dp),
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        Button(
-            onClick = onLoginClick,
-            modifier = Modifier.fillMaxWidth().height(62.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = FastPayBlue,
-                disabledContainerColor = FastPayBlue.copy(alpha = 0.5f)
-            ),
-            shape = RoundedCornerShape(18.dp),
-            enabled = !isLoading
+    if (errorMessage != null) {
+        Spacer(modifier = Modifier.height(14.dp))
+        Surface(
+            color = if (isDarkTheme) Color(0xFF3A1C25) else Color(0xFFFFEBEE),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-            } else {
-                Text("Sign In", fontWeight = FontWeight.ExtraBold, color = Color.White, fontSize = 16.sp)
-            }
+            Text(
+                text = errorMessage,
+                color = if (isDarkTheme) Color(0xFFFFB4AB) else Color(0xFFD32F2F),
+                modifier = Modifier.padding(14.dp),
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.SemiBold
+            )
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(24.dp))
+    Button(
+        onClick = onLoginClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = FastPayNavy,
+            disabledContainerColor = FastPayNavy.copy(alpha = 0.55f)
+        ),
+        shape = RoundedCornerShape(14.dp),
+        enabled = !isLoading
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = Color.White,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Text(
+                text = "Log In",
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                fontSize = 18.sp
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+    Text(
+        text = "Merchant access is available to authorized accounts only.",
+        style = MaterialTheme.typography.bodySmall,
+        color = supportingColor,
+        textAlign = TextAlign.Center
+    )
+
+    Spacer(modifier = Modifier.height(44.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = if (isDarkTheme) Color.White.copy(alpha = 0.24f) else Color(0xFFD1D3D6)
+        )
+        Text(
+            text = "Secure Banking",
+            style = MaterialTheme.typography.bodyMedium,
+            color = supportingColor,
+            modifier = Modifier.padding(horizontal = 14.dp)
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = if (isDarkTheme) Color.White.copy(alpha = 0.24f) else Color(0xFFD1D3D6)
+        )
+    }
+    Spacer(modifier = Modifier.height(14.dp))
+    Text(
+        text = "Powered by: Boss Den Den",
+        style = MaterialTheme.typography.labelMedium,
+        color = supportingColor,
+        textAlign = TextAlign.Center
+    )
+    Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
