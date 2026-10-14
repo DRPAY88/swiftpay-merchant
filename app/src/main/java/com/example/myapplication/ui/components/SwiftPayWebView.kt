@@ -50,15 +50,16 @@ fun SwiftPayWebView(
     onGetSettings: () -> Unit,
     onScanNFCCard: (Double) -> Unit,
     onGenerateDynamicQr: (Double) -> Unit,
-    onStartDepositWizard: () -> Unit,
+    onStartDepositWizard: (Boolean) -> Unit,
     onScanQrToSend: () -> Unit,
     onGetTransferInstitutions: () -> Unit,
     onSendDisbursement: ((Double, String, String, String) -> Unit)? = null,
-    onGenerateDynamicQrWithCurrency: ((Double, String) -> Unit)? = null,
+    onGenerateDynamicQrWithCurrency: ((Double, String, String?) -> Unit)? = null,
     onQuoteKrwPhpQr: ((Int) -> Unit)? = null,
-    onGenerateQuotedKrwPhpQr: ((String) -> Unit)? = null,
+    onGenerateQuotedKrwPhpQr: ((String, String?) -> Unit)? = null,
     onQuoteFxPhpQr: ((Double, String) -> Unit)? = null,
-    onGenerateQuotedFxPhpQr: ((String) -> Unit)? = null,
+    onGenerateQuotedFxPhpQr: ((String, String?) -> Unit)? = null,
+    onNavigateHome: (() -> Unit)? = null,
     onBridgeReady: (SwiftPaySDKBridge) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -209,7 +210,8 @@ fun SwiftPayWebView(
                             onQuoteKrwPhpQr = onQuoteKrwPhpQr,
                             onGenerateQuotedKrwPhpQr = onGenerateQuotedKrwPhpQr,
                             onQuoteFxPhpQr = onQuoteFxPhpQr,
-                            onGenerateQuotedFxPhpQr = onGenerateQuotedFxPhpQr
+                            onGenerateQuotedFxPhpQr = onGenerateQuotedFxPhpQr,
+                            onNavigateHome = onNavigateHome
                         )
 
                         addJavascriptInterface(bridge, "SwiftPaySDK")

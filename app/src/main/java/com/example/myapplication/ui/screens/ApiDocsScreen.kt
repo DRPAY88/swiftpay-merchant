@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.ui.theme.FastPayBlue
 import com.example.myapplication.ui.theme.FastPayBlack
 import com.example.myapplication.ui.theme.FastPayBackground
-import com.example.myapplication.ui.theme.FastPayTextSecondary
 import com.example.myapplication.ui.components.DrPayMarkBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,7 +111,7 @@ fun ApiDocsScreen() {
             DocSection(
                 title = "6. QR Ph and verified callbacks",
                 icon = Icons.Rounded.Security,
-                content = "QR Ph settles in PHP. KRW, USD, and EUR customer prices use a short-lived signed FX quote to lock the PHP amount. Configure the SwiftPay callback URL in the Merchant Portal; verified terminal callbacks take precedence over polling.",
+                content = "QR Ph settles in PHP. KRW, USD, EUR, and CNY customer prices use a short-lived signed FX quote to lock the PHP amount. Configure the SwiftPay callback URL in the Merchant Portal; verified terminal callbacks take precedence over polling.",
                 code = "POST /v1/payments/qrph/quote\nPOST /v1/payments/qrph\nPOST /v1/webhooks/swiftpay",
                 cardColor = cardColor,
                 textColor = textColor
@@ -145,7 +144,7 @@ fun DocHeader(title: String, subtitle: String, textColor: Color) {
     Column {
         Text(title, fontSize = 24.sp, fontWeight = FontWeight.Black, color = textColor)
         Spacer(Modifier.height(8.dp))
-        Text(subtitle, fontSize = 14.sp, color = FastPayTextSecondary, lineHeight = 22.sp)
+        Text(subtitle, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 22.sp)
     }
 }
 
@@ -173,7 +172,7 @@ fun DocSection(
                 Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, color = textColor)
             }
             Spacer(Modifier.height(12.dp))
-            Text(content, fontSize = 13.sp, color = FastPayTextSecondary, lineHeight = 20.sp)
+            Text(content, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 20.sp)
             Spacer(Modifier.height(16.dp))
             Box(
                 modifier = Modifier

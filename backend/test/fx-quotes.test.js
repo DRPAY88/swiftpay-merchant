@@ -86,7 +86,7 @@ test("KRW/PHP quote is rounded to cents, bound to the merchant, and expires afte
   );
 });
 
-test("USD and EUR FX quotes convert the exact customer price into locked PHP", async () => {
+test("USD, EUR, and CNY FX quotes convert the exact customer price into locked PHP", async () => {
   let requestUrl;
   const rate = await getLatestPhpRate(
     "EUR",
@@ -114,6 +114,17 @@ test("USD and EUR FX quotes convert the exact customer price into locked PHP", a
   });
   assert.equal(quote.amountPhp, 651);
   assert.equal(verifyFxPhpQuote(quote.quoteToken, "merchant-a", signingKey, now).customerCurrency, "EUR");
+  const cnyQuote = createFxPhpQuote({
+    amount: 15,
+    currency: "CNY",
+    phpPerUnit: 7.8,
+    rateUpdatedAt: rate.updatedAt,
+    subject: "merchant-a",
+    signingKey,
+    now
+  });
+  assert.equal(cnyQuote.amountPhp, 117);
+  assert.equal(verifyFxPhpQuote(cnyQuote.quoteToken, "merchant-a", signingKey, now).customerCurrency, "CNY");
   assert.throws(
     () => verifyKrwPhpQuote(quote.quoteToken, "merchant-a", signingKey, now),
     (error) => error instanceof FxQuoteError && error.status === 400

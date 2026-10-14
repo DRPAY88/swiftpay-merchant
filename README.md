@@ -4,9 +4,9 @@ DRPAY is an Android merchant app backed by the SwiftPay API. It includes a PHP w
 
 ## Download
 
-[Download the latest Android APK](https://github.com/stden16/swiftpay-merchant/releases/latest/download/denshitx-bank-release-1.0.7.apk) or view the [GitHub Releases](https://github.com/stden16/swiftpay-merchant/releases).
+[Download the latest Android APK](https://github.com/stden16/swiftpay-merchant/releases/latest/download/denshitx-bank-release-1.0.10.apk) or view the [GitHub Releases](https://github.com/stden16/swiftpay-merchant/releases).
 
-> **Installation note:** Version 1.0.6 introduced a new Android signing certificate, so users upgrading directly from version 1.0.5 must uninstall the older app first; uninstalling may erase app-local data. Version 1.0.7 keeps the version 1.0.6 signing key, so it can update version 1.0.6 in place. Future releases must continue using this key.
+> **Installation note:** Version 1.0.6 introduced a new Android signing certificate, so users upgrading directly from version 1.0.5 must uninstall the older app first; uninstalling may erase app-local data. Versions 1.0.7, 1.0.8, and 1.0.9 keep the version 1.0.6 signing key and can update it in place. Future releases must continue using this key.
 
 ## Backend
 

@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
@@ -32,15 +33,16 @@ class SwiftPaySDKBridge(
     private val onGetSettings: () -> Unit,
     private val onScanNFCCard: (Double) -> Unit,
     private val onGenerateDynamicQr: (Double) -> Unit,
-    private val onStartDepositWizard: () -> Unit,
+    private val onStartDepositWizard: (Boolean) -> Unit,
     private val onScanQrToSend: () -> Unit,
     private val onGetTransferInstitutions: () -> Unit,
     private val onSendDisbursement: ((Double, String, String, String) -> Unit)? = null,
-    private val onGenerateDynamicQrWithCurrency: ((Double, String) -> Unit)? = null,
+    private val onGenerateDynamicQrWithCurrency: ((Double, String, String?) -> Unit)? = null,
     private val onQuoteKrwPhpQr: ((Int) -> Unit)? = null,
-    private val onGenerateQuotedKrwPhpQr: ((String) -> Unit)? = null,
+    private val onGenerateQuotedKrwPhpQr: ((String, String?) -> Unit)? = null,
     private val onQuoteFxPhpQr: ((Double, String) -> Unit)? = null,
-    private val onGenerateQuotedFxPhpQr: ((String) -> Unit)? = null
+    private val onGenerateQuotedFxPhpQr: ((String, String?) -> Unit)? = null,
+    private val onNavigateHome: (() -> Unit)? = null
 ) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -59,6 +61,13 @@ class SwiftPaySDKBridge(
 
     private fun handleRequest(request: BridgeRequest) {
         when (request.action) {
+            "navigate_home" -> {
+                if (onNavigateHome != null) {
+                    onNavigateHome.invoke()
+                } else {
+                    sendError("Home navigation is unavailable", action = "navigate_home")
+                }
+            }
             "get_balance" -> {
                 onBalanceRequest()
             }
@@ -113,7 +122,8 @@ class SwiftPaySDKBridge(
             "generate_dynamic_qr" -> {
                 val amount = request.data?.jsonObject?.get("amount")?.jsonPrimitive?.doubleOrNull ?: 0.0
                 val currency = request.data?.jsonObject?.get("currency")?.jsonPrimitive?.content ?: "PHP"
-                onGenerateDynamicQrWithCurrency?.invoke(amount, currency) ?: onGenerateDynamicQr(amount)
+                val paymentApp = request.data?.jsonObject?.get("paymentApp")?.jsonPrimitive?.contentOrNull
+                onGenerateDynamicQrWithCurrency?.invoke(amount, currency, paymentApp) ?: onGenerateDynamicQr(amount)
             }
             "quote_krw_php_qr" -> {
                 val amountKrw = request.data?.jsonObject?.get("amountKrw")?.jsonPrimitive?.content?.toIntOrNull()
@@ -130,26 +140,34 @@ class SwiftPaySDKBridge(
                 if (amount != null && !currency.isNullOrBlank() && onQuoteFxPhpQr != null) {
                     onQuoteFxPhpQr.invoke(amount, currency)
                 } else {
-                    sendError("Provide an amount and KRW, USD, or EUR currency for the PHP QR quote", action = "quote_fx_php_qr")
+                    sendError("Provide an amount and KRW, USD, EUR, or CNY currency for the PHP QR quote", action = "quote_fx_php_qr")
                 }
             }
             "generate_quoted_krw_php_qr" -> {
-                val quoteToken = request.data?.jsonObject?.get("quoteToken")?.jsonPrimitive?.content
+                val data = request.data?.jsonObject
+                val quoteToken = data?.get("quoteToken")?.jsonPrimitive?.content
+                val paymentApp = data?.get("paymentApp")?.jsonPrimitive?.contentOrNull
                 if (!quoteToken.isNullOrBlank() && onGenerateQuotedKrwPhpQr != null) {
-                    onGenerateQuotedKrwPhpQr.invoke(quoteToken)
+                    onGenerateQuotedKrwPhpQr.invoke(quoteToken, paymentApp)
                 } else {
                     sendError("Request a new KRW-to-PHP quote before creating this QR", action = "generate_quoted_krw_php_qr")
                 }
             }
             "generate_quoted_fx_php_qr" -> {
-                val quoteToken = request.data?.jsonObject?.get("quoteToken")?.jsonPrimitive?.content
+                val data = request.data?.jsonObject
+                val quoteToken = data?.get("quoteToken")?.jsonPrimitive?.content
+                val paymentApp = data?.get("paymentApp")?.jsonPrimitive?.contentOrNull
                 if (!quoteToken.isNullOrBlank() && onGenerateQuotedFxPhpQr != null) {
-                    onGenerateQuotedFxPhpQr.invoke(quoteToken)
+                    onGenerateQuotedFxPhpQr.invoke(quoteToken, paymentApp)
                 } else {
                     sendError("Request a new FX-to-PHP quote before creating this QR", action = "generate_quoted_fx_php_qr")
                 }
             }
-            "start_deposit_wizard" -> onStartDepositWizard()
+            "start_deposit_wizard" -> {
+                val showAccountNumberImmediately = request.data?.jsonObject
+                    ?.get("showAccountNumberImmediately")?.jsonPrimitive?.contentOrNull == "true"
+                onStartDepositWizard(showAccountNumberImmediately)
+            }
             "scan_qr_to_send" -> onScanQrToSend()
             "get_transfer_institutions" -> onGetTransferInstitutions()
             "send_disbursement" -> {

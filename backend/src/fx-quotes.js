@@ -2,7 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 export const FX_PHP_QUOTE_TTL_MS = 5 * 60 * 1000;
 export const KRW_PHP_QUOTE_TTL_MS = FX_PHP_QUOTE_TTL_MS;
-const FX_CURRENCIES = new Set(["KRW", "USD", "EUR"]);
+const FX_CURRENCIES = new Set(["KRW", "USD", "EUR", "CNY"]);
 
 export class FxQuoteError extends Error {
   constructor(status, message) {
@@ -13,7 +13,7 @@ export class FxQuoteError extends Error {
 
 export async function getLatestPhpRate(baseCurrency, apiKey, fetchImpl = fetch, now = Date.now()) {
   if (!FX_CURRENCIES.has(baseCurrency)) {
-    throw new FxQuoteError(400, "Only KRW, USD, and EUR customer prices can be quoted for PHP QR settlement");
+    throw new FxQuoteError(400, "Only KRW, USD, EUR, and CNY customer prices can be quoted for PHP QR settlement");
   }
   if (!apiKey) {
     throw new FxQuoteError(503, "FX-to-PHP quotes are not configured on this server");
@@ -81,7 +81,7 @@ export function createFxPhpQuote({
   now = Date.now()
 }) {
   if (!FX_CURRENCIES.has(currency) || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
-    throw new FxQuoteError(400, "Enter a valid KRW, USD, or EUR customer amount");
+    throw new FxQuoteError(400, "Enter a valid KRW, USD, EUR, or CNY customer amount");
   }
   if (currency === "KRW" && !Number.isInteger(amount)) {
     throw new FxQuoteError(400, "KRW customer amounts must be whole numbers");

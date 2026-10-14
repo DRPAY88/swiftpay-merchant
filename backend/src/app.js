@@ -19,7 +19,7 @@ import { TransakError } from "./transak.js";
 const amountSchema = z.number().finite().min(0.01).max(1_000_000);
 const referenceSchema = z.string().trim().min(1).max(50);
 const currencySchema = z.enum(["PHP", "USD", "EUR"]);
-const qrCurrencySchema = z.enum(["PHP", "KRW", "USD", "EUR"]);
+const qrCurrencySchema = z.enum(["PHP", "KRW", "USD", "EUR", "CNY"]);
 
 const orderSchema = z.object({
   amount: amountSchema,
@@ -47,7 +47,7 @@ const krwPhpQuoteRequestSchema = z.object({
 const fxPhpQuoteRequestSchema = z.union([
   z.object({
     amount: z.number().finite().min(0.01).max(1_000_000),
-    currency: z.enum(["KRW", "USD", "EUR"])
+    currency: z.enum(["KRW", "USD", "EUR", "CNY"])
   }).strict(),
   krwPhpQuoteRequestSchema
 ]);
@@ -62,6 +62,7 @@ const paymentLinkSchema = z.object({
   customerName: z.string().max(150).optional()
 }).strict();
 const paymentLinkCodeSchema = z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/);
+const checkoutPaymentAppSchema = z.enum(["gcash", "maya", "qrph", "alipay", "toss", "kakao", "kbank"]);
 const paymentInstitutionSchema = z.object({
   code: z.string().trim().min(1).max(128),
   name: z.string().trim().min(1).max(200),
@@ -206,6 +207,45 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
     : `<p class="institution-empty">${institutionLoadFailed
       ? "Bank and wallet options are available on SwiftPay’s secure payment page."
       : "More bank and wallet options are available on SwiftPay’s secure payment page."}</p>`;
+  const qrPaymentMethods = [
+    {
+      category: "PHP",
+      methods: [
+        { code: "gcash", name: "GCash", icon: "G", description: "Pay with QR Ph" },
+        { code: "maya", name: "Maya", icon: "M", description: "Pay with QR Ph" },
+        { code: "qrph", name: "QR Ph", icon: "QR", description: "Use a QR Ph-compatible app" },
+        { href: true, name: "Manual Bank Transfer", icon: "BK", description: "Continue to SwiftPay’s secure page for transfer options" }
+      ]
+    },
+    {
+      category: "Other Currencies",
+      methods: [
+        { code: "alipay", name: "Alipay", icon: "A", description: "Pay with QR Ph" },
+        { code: "toss", name: "Toss", icon: "T", description: "Pay with QR Ph" },
+        { code: "kakao", name: "Kakao", icon: "K", description: "Pay with QR Ph" },
+        { code: "kbank", name: "KBank", icon: "KB", description: "Pay with QR Ph" }
+      ]
+    }
+  ].map(({ category, methods }) => `
+      <section class="checkout-method-group" aria-label="${category} payment methods">
+        <h3>${category}</h3>
+        <div class="checkout-method-grid">
+          ${methods.map(({ code: methodCode, name, icon, description, href }) => href
+            ? `<a class="qr-button" href="${safePaymentUrl}" rel="noopener noreferrer">
+                <span class="qr-icon" aria-hidden="true">${icon}</span>
+                <span class="qr-copy"><strong>${name}</strong><small>${description}</small></span>
+                <span class="qr-arrow" aria-hidden="true">→</span>
+              </a>`
+            : `<form class="qr-form" action="/checkout/${encodeURIComponent(code)}/qrph" method="post">
+                <input type="hidden" name="paymentApp" value="${methodCode}">
+                <button class="qr-button" type="submit">
+                  <span class="qr-icon" aria-hidden="true">${icon}</span>
+                  <span class="qr-copy"><strong>${name}</strong><small>${description}</small></span>
+                  <span class="qr-arrow" aria-hidden="true">→</span>
+                </button>
+              </form>`).join("")}
+        </div>
+      </section>`).join("");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -246,15 +286,11 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
       </a>
       <p class="provider-note">You’ll see all supported banks and payment methods on SwiftPay’s secure page.</p>
     </section>
-    <div class="checkout-divider"><span>or</span></div>
-    <form class="qr-form" action="/checkout/${encodeURIComponent(code)}/qrph" method="post">
-      <input type="hidden" name="paymentApp" value="qrph">
-      <button class="qr-button" type="submit">
-        <span class="qr-icon" aria-hidden="true">QR</span>
-        <span class="qr-copy"><strong>Pay with QR Ph</strong><small>Use a banking or wallet app that supports QR Ph</small></span>
-        <span class="qr-arrow" aria-hidden="true">→</span>
-      </button>
-    </form>
+    <div class="checkout-divider"><span>or pay with QR Ph</span></div>
+    <section class="checkout-qr-methods" aria-label="QR Ph payment methods">
+      <p class="checkout-method-note">Choose your payment app. The payment link amount stays fixed and QR Ph settles in PHP.</p>
+      ${qrPaymentMethods}
+    </section>
     <footer class="checkout-footer">
       <span class="footer-lock" aria-hidden="true">●</span>
       Payment details are securely handled by SwiftPay.
@@ -539,8 +575,7 @@ export function createApp({
   app.post("/checkout/:code/qrph", checkoutPaymentLimiter, asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);
     const link = await loadPublicPaymentLink(code);
-    const paymentApp = z.literal("qrph").default("qrph")
-      .parse(req.body?.paymentApp || "qrph");
+    const paymentApp = parse(checkoutPaymentAppSchema.default("qrph"), req.body?.paymentApp || "qrph");
     const rate = link.currency === "PHP"
       ? { phpPerUnit: 1, updatedAt: new Date().toISOString() }
       : await getLatestPhpRate(link.currency, config.currencyApiKey, fxFetchImpl);
@@ -588,7 +623,14 @@ export function createApp({
       title,
       amount: link.amount,
       currency: link.currency,
-      paymentApp: paymentApp === "qrph" ? null : paymentApp,
+      paymentApp: paymentApp === "qrph" ? null : {
+        gcash: "GCash",
+        maya: "Maya",
+        alipay: "Alipay",
+        toss: "Toss",
+        kakao: "Kakao",
+        kbank: "KBank"
+      }[paymentApp],
       phpAmount,
       phpPerUnit: rate.phpPerUnit,
       imageBase64: image.data.toString("base64")
@@ -1003,7 +1045,7 @@ export function createApp({
   }));
 
   app.post("/v1/payments/qrph", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
-    if (["KRW", "USD", "EUR"].includes(req.body?.currency) && !req.body?.quoteToken) {
+    if (["KRW", "USD", "EUR", "CNY"].includes(req.body?.currency) && !req.body?.quoteToken) {
       throw new FxQuoteError(400, "Foreign-currency QR payments require a locked PHP quote; request a new quote first");
     }
     const request = parse(qrPaymentSchema, req.body);

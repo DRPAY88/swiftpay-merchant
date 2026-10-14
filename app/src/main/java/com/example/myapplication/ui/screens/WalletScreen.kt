@@ -774,7 +774,7 @@ fun QuickActionsRow() {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        QuickActionItem(Icons.Rounded.Payments, "Collect", "Accept a payment", FastPayBlue, Modifier.weight(1f)) {
+        QuickActionItem(Icons.Rounded.Payments, "Top up", "Add money to wallet", FastPayBlue, Modifier.weight(1f)) {
             navController.navigate(Route.MiniApp("topup-page"))
         }
         QuickActionItem(Icons.AutoMirrored.Rounded.Send, "Transfer", "Send money", FastPayAccent, Modifier.weight(1f)) {

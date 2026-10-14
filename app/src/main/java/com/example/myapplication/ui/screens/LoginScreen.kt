@@ -1396,68 +1396,140 @@ private fun RegistrationFormContent(
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
             }
-            Text("Merchant application", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "MERCHANT KYB · APPLICATION",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text("Business details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            }
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Text(
+                    "STEP 1 OF 2",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
+        Text(
+            "Tell us about your business and authorized representative, then securely upload the required review documents.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+        )
         if (viewModel.registrationReviewNote.isNotBlank()) {
-            Text(
-                "Admin review note: ${viewModel.registrationReviewNote}",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Reviewer note", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                    Text(
+                        viewModel.registrationReviewNote,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        }
+        RegistrationSection(
+            title = "Business information",
+            subtitle = "Use the details shown on your registration documents."
+        ) {
+            OutlinedTextField(
+                viewModel.businessName,
+                { viewModel.businessName = it },
+                Modifier.fillMaxWidth(),
+                label = { Text("Registered business name") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
+            )
+            OutlinedTextField(
+                viewModel.businessRegistrationNumber,
+                { viewModel.businessRegistrationNumber = it },
+                Modifier.fillMaxWidth(),
+                label = { Text("Business registration number") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
+            )
+            OutlinedTextField(
+                viewModel.businessType,
+                { viewModel.businessType = it },
+                Modifier.fillMaxWidth(),
+                label = { Text("Business type") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
+            )
+            OutlinedTextField(
+                viewModel.businessAddress,
+                { viewModel.businessAddress = it },
+                Modifier.fillMaxWidth(),
+                label = { Text("Business address") },
+                minLines = 2,
+                shape = RoundedCornerShape(14.dp)
             )
         }
-        Text(
-            "Business information",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
-        )
-        OutlinedTextField(viewModel.businessName, { viewModel.businessName = it }, Modifier.fillMaxWidth(), label = { Text("Registered business name") }, singleLine = true)
-        OutlinedTextField(viewModel.businessRegistrationNumber, { viewModel.businessRegistrationNumber = it }, Modifier.fillMaxWidth(), label = { Text("Business registration number") }, singleLine = true)
-        OutlinedTextField(viewModel.businessType, { viewModel.businessType = it }, Modifier.fillMaxWidth(), label = { Text("Business type") }, singleLine = true)
-        OutlinedTextField(viewModel.businessAddress, { viewModel.businessAddress = it }, Modifier.fillMaxWidth(), label = { Text("Business address") }, minLines = 2)
-        OutlinedTextField(viewModel.representativeFullName, { viewModel.representativeFullName = it }, Modifier.fillMaxWidth(), label = { Text("Authorized representative full name") }, singleLine = true)
-        OutlinedTextField(
-            viewModel.representativePhone,
-            { viewModel.representativePhone = it },
-            Modifier.fillMaxWidth(),
-            label = { Text("Representative phone") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-        )
-
-        Text(
-            "Required documents",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 18.dp, bottom = 4.dp)
-        )
-        RegistrationDocumentRow(
-            label = "Business registration certificate",
-            uploaded = "business_certificate" in viewModel.uploadedRegistrationDocuments,
-            enabled = !viewModel.isLoading && viewModel.registrationConsent,
-            onClick = {
-                documentKind = "business_certificate"
-                documentPicker.launch(arrayOf("application/pdf", "image/jpeg", "image/png"))
-            }
-        )
-        RegistrationDocumentRow(
-            label = "Representative government ID",
-            uploaded = "representative_id" in viewModel.uploadedRegistrationDocuments,
-            enabled = !viewModel.isLoading && viewModel.registrationConsent,
-            onClick = {
-                documentKind = "representative_id"
-                documentPicker.launch(arrayOf("application/pdf", "image/jpeg", "image/png"))
-            }
-        )
-        RegistrationDocumentRow(
-            label = "Selfie for manual review only",
-            uploaded = "selfie" in viewModel.uploadedRegistrationDocuments,
-            enabled = !viewModel.isLoading && viewModel.registrationConsent,
-            onClick = {
-                if (!viewModel.registrationConsent) {
-                    localError = "Accept the privacy notice before taking or uploading documents."
-                } else {
+        RegistrationSection(
+            title = "Authorized representative",
+            subtitle = "Provide a contact who can verify this application."
+        ) {
+            OutlinedTextField(
+                viewModel.representativeFullName,
+                { viewModel.representativeFullName = it },
+                Modifier.fillMaxWidth(),
+                label = { Text("Full legal name") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
+            )
+            OutlinedTextField(
+                viewModel.representativePhone,
+                { viewModel.representativePhone = it },
+                Modifier.fillMaxWidth(),
+                label = { Text("Phone number") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+            )
+        }
+        RegistrationSection(
+            title = "Review documents",
+            subtitle = "Upload all three items. Files must be 8 MB or smaller."
+        ) {
+            RegistrationDocumentRow(
+                label = "Business registration certificate",
+                supportingText = "PDF, JPEG or PNG",
+                uploaded = "business_certificate" in viewModel.uploadedRegistrationDocuments,
+                enabled = !viewModel.isLoading && viewModel.registrationConsent,
+                onClick = {
+                    documentKind = "business_certificate"
+                    documentPicker.launch(arrayOf("application/pdf", "image/jpeg", "image/png"))
+                }
+            )
+            RegistrationDocumentRow(
+                label = "Representative government ID",
+                supportingText = "PDF, JPEG or PNG",
+                uploaded = "representative_id" in viewModel.uploadedRegistrationDocuments,
+                enabled = !viewModel.isLoading && viewModel.registrationConsent,
+                onClick = {
+                    documentKind = "representative_id"
+                    documentPicker.launch(arrayOf("application/pdf", "image/jpeg", "image/png"))
+                }
+            )
+            RegistrationDocumentRow(
+                label = "Selfie for manual review",
+                supportingText = "Taken with your device camera",
+                uploaded = "selfie" in viewModel.uploadedRegistrationDocuments,
+                enabled = !viewModel.isLoading && viewModel.registrationConsent,
+                onClick = {
                     try {
                         val directory = File(context.cacheDir, "kyb-selfie").apply { mkdirs() }
                         val file = File.createTempFile("selfie_", ".jpg", directory)
@@ -1472,21 +1544,40 @@ private fun RegistrationFormContent(
                         localError = error.message ?: "Could not open the camera."
                     }
                 }
-            }
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-            verticalAlignment = Alignment.Top
+            )
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant
+            )
         ) {
-            Checkbox(
-                checked = viewModel.registrationConsent,
-                onCheckedChange = { viewModel.registrationConsent = it }
-            )
-            Text(
-                "I consent to submitting these business and identity documents. They are encrypted in storage, accessible to authorized super-admin reviewers, and retained while the application is pending and after a decision until an admin explicitly deletes them. The selfie is reviewed manually only; no automated face matching or liveness check is performed.",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 12.dp)
-            )
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Checkbox(
+                    checked = viewModel.registrationConsent,
+                    onCheckedChange = { viewModel.registrationConsent = it }
+                )
+                Column(modifier = Modifier.padding(start = 8.dp, top = 10.dp)) {
+                    Text(
+                        "Privacy and retention",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "I consent to submitting these documents for KYB review. They are encrypted in storage, available to authorized super-admin reviewers, and retained until an admin explicitly deletes the application. Your selfie is reviewed manually; no automated face matching or liveness check is performed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(top = 5.dp)
+                    )
+                }
+            }
         }
         (localError ?: viewModel.errorMessage)?.let {
             Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 8.dp))
@@ -1505,12 +1596,81 @@ private fun RegistrationFormContent(
 @Composable
 private fun RegistrationDocumentRow(
     label: String,
+    supportingText: String,
     uploaded: Boolean,
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(if (uploaded) "$label — uploaded (tap to replace)" else "Upload $label")
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (uploaded) Icons.Rounded.CheckCircle else Icons.Rounded.UploadFile,
+                contentDescription = null,
+                tint = if (uploaded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Column(
+                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    if (uploaded) "Uploaded · tap to replace" else supportingText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                if (uploaded) Icons.Rounded.Edit else Icons.Rounded.ChevronRight,
+                contentDescription = if (uploaded) "Replace $label" else "Add $label",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
+private fun RegistrationSection(
+    title: String,
+    subtitle: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            content()
+        }
     }
 }
 

@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -32,15 +33,24 @@ import com.example.myapplication.ui.theme.FintechMotion
 fun MiniAppScreen(
     initialPath: String? = null,
     openQrScanner: Boolean = false,
+    onNavigateHome: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: MiniAppViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val settings = remember { SettingsManager(context) }
+    val themeMode by settings.themeMode.collectAsState(initial = "SYSTEM")
+    val isDarkTheme = when (themeMode) {
+        "DARK" -> true
+        "LIGHT" -> false
+        else -> isSystemInDarkTheme()
+    }
 
-    val webViewUrl = remember(initialPath) {
+    val webViewUrl = remember(initialPath, isDarkTheme) {
         val baseUrl = "file:///android_asset/index.html"
-        if (!initialPath.isNullOrBlank()) "$baseUrl#$initialPath" else baseUrl
+        val themeUrl = "$baseUrl?theme=${if (isDarkTheme) "dark" else "light"}"
+        if (!initialPath.isNullOrBlank()) "$themeUrl#$initialPath" else themeUrl
     }
 
     val uiState = viewModel.uiState
@@ -69,12 +79,17 @@ fun MiniAppScreen(
                 onGetSettings = { viewModel.getSettings() },
                 onScanNFCCard = { viewModel.onScanNFCCard(it) },
                 onGenerateDynamicQr = { viewModel.onGenerateDynamicQr(it) },
-                onGenerateDynamicQrWithCurrency = { amount, currency -> viewModel.onGenerateDynamicQr(amount, currency) },
+                onGenerateDynamicQrWithCurrency = { amount, currency, paymentApp -> viewModel.onGenerateDynamicQr(amount, currency, paymentApp) },
                 onQuoteKrwPhpQr = viewModel::onQuoteKrwPhpQr,
-                onGenerateQuotedKrwPhpQr = viewModel::onGenerateQuotedKrwPhpQr,
+                onGenerateQuotedKrwPhpQr = { quoteToken, paymentApp ->
+                    viewModel.onGenerateQuotedKrwPhpQr(quoteToken, paymentApp)
+                },
                 onQuoteFxPhpQr = viewModel::onQuoteFxPhpQr,
-                onGenerateQuotedFxPhpQr = viewModel::onGenerateQuotedFxPhpQr,
-                onStartDepositWizard = viewModel::onStartDepositWizard,
+                onGenerateQuotedFxPhpQr = { quoteToken, paymentApp ->
+                    viewModel.onGenerateQuotedFxPhpQr(quoteToken, paymentApp)
+                },
+                onNavigateHome = onNavigateHome,
+                onStartDepositWizard = { showAccountNumber -> viewModel.onStartDepositWizard(showAccountNumber) },
                 onScanQrToSend = { viewModel.onScanQrToSend() },
                 onGetTransferInstitutions = viewModel::onGetTransferInstitutions,
                 onSendDisbursement = { amount, bank, acc, name -> viewModel.onSendDisbursement(amount, bank, acc, name) },
@@ -126,13 +141,15 @@ fun MiniAppScreen(
                             customerAmountFx = state.customerAmountFx,
                             customerCurrency = state.customerCurrency,
                             ratePhpPerUnit = state.ratePhpPerUnit,
-                            rateUpdatedAt = state.rateUpdatedAt
+                            rateUpdatedAt = state.rateUpdatedAt,
+                            paymentAppName = state.paymentAppName
                         )
                     }
                     is MiniAppUiState.DepositWizard -> {
                         DepositWizardDialog(
                             accountNumber = state.accountNumber,
                             balance = state.balance,
+                            showTransferInstructionsInitially = state.showTransferInstructionsInitially,
                             onCheckout = viewModel::startDepositCheckout,
                             onDismiss = { viewModel.dismissConsent() }
                         )
@@ -205,11 +222,11 @@ fun MiniAppScreen(
                         SwiftPayBaseDialog(
                             onDismissRequest = { viewModel.dismissConsent() },
                             icon = Icons.Rounded.Payment,
-                            title = "Confirm Payment",
-                            description = "Merchant: ${state.data.description}\nAmount: ${state.data.currency} ${state.data.amount}",
+                            title = "Confirm collection",
+                            description = "Create a ${state.data.currency} checkout for ${state.data.description}.\nAmount: ${state.data.amount}",
                             buttons = {
                                 SwiftPaySecondaryButton(text = "Cancel", onClick = { viewModel.dismissConsent() }, modifier = Modifier.weight(1f))
-                                SwiftPayPrimaryButton(text = "Pay Now", onClick = { viewModel.approvePayment(state.data) }, modifier = Modifier.weight(1f))
+                                SwiftPayPrimaryButton(text = "Create checkout", onClick = { viewModel.approvePayment(state.data) }, modifier = Modifier.weight(1f))
                             }
                         )
                     }

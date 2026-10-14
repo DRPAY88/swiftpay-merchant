@@ -240,7 +240,7 @@ class SwiftPayService(
         if (!hasApiKey) return missingSession()
         if (!amount.isFinite() || amount <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid QR Ph amount"))
         if (currency != "PHP") {
-            return Result.failure(IllegalArgumentException("SwiftPay QR Ph settles in PHP. Request a KRW, USD, or EUR-to-PHP quote first."))
+            return Result.failure(IllegalArgumentException("SwiftPay QR Ph settles in PHP. Request a KRW, USD, EUR, or CNY-to-PHP quote first."))
         }
         return try {
             val refNo = "QR-${UUID.randomUUID()}"
@@ -293,8 +293,8 @@ class SwiftPayService(
         if (!amount.isFinite() || amount <= 0.0 || amount > 1_000_000.0) {
             return Result.failure(IllegalArgumentException("Enter a valid customer amount."))
         }
-        if (currency !in setOf("KRW", "USD", "EUR")) {
-            return Result.failure(IllegalArgumentException("QR Ph quotes support KRW, USD, and EUR customer prices."))
+        if (currency !in setOf("KRW", "USD", "EUR", "CNY")) {
+            return Result.failure(IllegalArgumentException("QR Ph quotes support KRW, USD, EUR, and CNY customer prices."))
         }
         if (currency == "KRW" && amount % 1.0 != 0.0) {
             return Result.failure(IllegalArgumentException("KRW prices must be whole numbers."))
@@ -359,7 +359,7 @@ class SwiftPayService(
                 body.currency != "PHP" ||
                 body.settlementCurrency != "PHP" ||
                 body.customerAmount == null ||
-                body.customerCurrency?.let { it in setOf("KRW", "USD", "EUR") } != true
+                body.customerCurrency?.let { it in setOf("KRW", "USD", "EUR", "CNY") } != true
             ) {
                 return Result.failure(IllegalStateException("Backend returned a QR that does not match the FX-to-PHP quote"))
             }

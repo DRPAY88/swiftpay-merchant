@@ -64,7 +64,6 @@ import com.example.myapplication.ui.screens.MiniAppScreen
 import com.example.myapplication.ui.screens.MiniAppViewModel
 import com.example.myapplication.ui.screens.ProfileScreen
 import com.example.myapplication.ui.screens.WalletScreen
-import com.example.myapplication.ui.theme.FastPayBlue
 import com.example.myapplication.ui.theme.FintechMotion
 import com.example.myapplication.ui.theme.FastPayTheme
 import com.example.myapplication.util.DebugLogger
@@ -278,12 +277,11 @@ fun SwiftPayApp() {
                 }
             }
         } else {
+            val activeColor = MaterialTheme.colorScheme.primary
+            val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
             NavigationSuiteScaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 navigationSuiteItems = {
-                    val activeColor = FastPayBlue
-                    val inactiveColor = Color.Gray.copy(alpha = 0.6f)
-
                     item(
                         selected = currentRoute == Route.Home,
                         onClick = { navController.navigate(Route.Home) },
@@ -402,14 +400,16 @@ fun SwiftPayApp() {
                             HomeScreen(
                                 onLaunchMiniApp = { path -> navController.navigate(Route.MiniApp(path)) },
                                 onNavigateToWallet = { navController.navigate(Route.Wallet) },
-                                onProfileClick = { navController.navigate(Route.Profile) }
+                                onProfileClick = { navController.navigate(Route.Profile) },
+                                onHelpClick = { navController.navigate(Route.ApiDocs) }
                             )
                         }
                         is Route.MiniApp -> NavEntry(key) {
                             val launchScanner = key.initialPath == "scan-qr-page"
                             MiniAppScreen(
                                 initialPath = key.initialPath,
-                                openQrScanner = launchScanner
+                                openQrScanner = launchScanner,
+                                onNavigateHome = { navController.navigate(Route.Home) }
                             )
                         }
                         Route.Profile -> NavEntry(key) {

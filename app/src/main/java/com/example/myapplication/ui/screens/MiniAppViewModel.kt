@@ -53,11 +53,13 @@ sealed interface MiniAppUiState {
         val customerAmountFx: Double? = null,
         val customerCurrency: String? = null,
         val ratePhpPerUnit: Double? = null,
-        val rateUpdatedAt: String? = null
+        val rateUpdatedAt: String? = null,
+        val paymentAppName: String? = null
     ) : MiniAppUiState
     data class DepositWizard(
         val accountNumber: String,
-        val balance: Double
+        val balance: Double,
+        val showTransferInstructionsInitially: Boolean = false
     ) : MiniAppUiState
     data class DepositCheckoutReady(
         val url: String,
@@ -356,10 +358,14 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun onGenerateDynamicQr(amount: Double, currency: String = "PHP") {
+    fun onGenerateDynamicQr(amount: Double, currency: String = "PHP", paymentAppName: String? = null) {
+        if (paymentAppName != null && paymentAppName !in setOf("Alipay", "Toss", "Kakao", "KBank", "GCash", "Maya", "QR Ph")) {
+            bridge?.sendError("Unsupported QR Ph payment app", action = "generate_dynamic_qr")
+            return
+        }
         if (currency != "PHP") {
             bridge?.sendError(
-                "SwiftPay QR Ph settles in PHP. Request a KRW, USD, or EUR-to-PHP quote first.",
+                "SwiftPay QR Ph settles in PHP. Request a KRW, USD, EUR, or CNY-to-PHP quote first.",
                 action = "generate_dynamic_qr"
             )
             return
@@ -369,7 +375,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                 result = getService().createDynamicQr(amount, currency),
                 amount = amount,
                 currency = currency,
-                bridgeAction = "generate_dynamic_qr"
+                bridgeAction = "generate_dynamic_qr",
+                paymentAppName = paymentAppName
             )
         }
     }
@@ -431,24 +438,34 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun onGenerateQuotedKrwPhpQr(quoteToken: String) {
+    fun onGenerateQuotedKrwPhpQr(quoteToken: String, paymentAppName: String? = null) {
+        if (paymentAppName != null && paymentAppName !in setOf("Alipay", "Toss", "Kakao", "KBank", "GCash", "Maya", "QR Ph")) {
+            bridge?.sendError("Unsupported QR Ph payment app", action = "generate_quoted_krw_php_qr")
+            return
+        }
         launchProcessingAction("Creating PHP QR from the KRW price quote...", bridgeAction = "generate_quoted_krw_php_qr") {
             handleQrGenerationResult(
                 result = getService().createKrwPhpQuotedQr(quoteToken),
                 amount = 0.0,
                 currency = "PHP",
-                bridgeAction = "generate_quoted_krw_php_qr"
+                bridgeAction = "generate_quoted_krw_php_qr",
+                paymentAppName = paymentAppName
             )
         }
     }
 
-    fun onGenerateQuotedFxPhpQr(quoteToken: String) {
+    fun onGenerateQuotedFxPhpQr(quoteToken: String, paymentAppName: String? = null) {
+        if (paymentAppName != null && paymentAppName !in setOf("Alipay", "Toss", "Kakao", "KBank", "GCash", "Maya", "QR Ph")) {
+            bridge?.sendError("Unsupported QR Ph payment app", action = "generate_quoted_fx_php_qr")
+            return
+        }
         launchProcessingAction("Creating PHP QR from the currency price quote...", bridgeAction = "generate_quoted_fx_php_qr") {
             handleQrGenerationResult(
                 result = getService().createFxPhpQuotedQr(quoteToken),
                 amount = 0.0,
                 currency = "PHP",
-                bridgeAction = "generate_quoted_fx_php_qr"
+                bridgeAction = "generate_quoted_fx_php_qr",
+                paymentAppName = paymentAppName
             )
         }
     }
@@ -457,7 +474,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         result: Result<com.example.myapplication.data.api.SwiftPayQrResponse>,
         amount: Double,
         currency: String,
-        bridgeAction: String
+        bridgeAction: String,
+        paymentAppName: String? = null
     ) {
         result.onSuccess { response ->
             val qrCode = response.qrCodeBody ?: response.qrCode
@@ -494,7 +512,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                     customerAmountFx = response.customerAmount,
                     customerCurrency = response.customerCurrency,
                     ratePhpPerUnit = response.ratePhpPerUnit,
-                    rateUpdatedAt = response.rateUpdatedAt
+                    rateUpdatedAt = response.rateUpdatedAt,
+                    paymentAppName = paymentAppName
                 )
                 bridge?.sendResponse(mapOf("qrCodeBody" to qrCode), action = bridgeAction)
             } else {
@@ -507,13 +526,14 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun onStartDepositWizard() {
+    fun onStartDepositWizard(showAccountNumberImmediately: Boolean = false) {
         launchProcessingAction("Loading deposit instructions...") {
             val service = getService()
             val account = service.getWalletDepositAccount().getOrElse { throw it }
             uiState = MiniAppUiState.DepositWizard(
                 accountNumber = account.accountNumber,
-                balance = account.balance
+                balance = account.balance,
+                showTransferInstructionsInitially = showAccountNumberImmediately
             )
         }
     }

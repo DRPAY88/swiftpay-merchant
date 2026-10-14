@@ -52,7 +52,7 @@ before(async () => {
       const baseCurrency = new URL(url).searchParams.get("base_currency");
       return new Response(JSON.stringify({
         meta: { base_currency: baseCurrency, last_updated_at: new Date().toISOString() },
-        data: { PHP: { code: "PHP", value: ({ KRW: 0.0425, USD: 57, EUR: 62 })[baseCurrency] } }
+        data: { PHP: { code: "PHP", value: ({ KRW: 0.0425, USD: 57, EUR: 62, CNY: 7.8 })[baseCurrency] } }
       }), {
         status: 200,
         headers: { "content-type": "application/json" }
@@ -449,8 +449,12 @@ test("KRW customer price is quoted and QR bootstrap charges the locked PHP amoun
   });
 });
 
-test("USD and EUR QR quotes use the customer currency and lock PHP settlement", async () => {
-  for (const [currency, amount, rate, expectedPhp] of [["USD", 20, 57, 1140], ["EUR", 10.5, 62, 651]]) {
+test("USD, EUR, and CNY QR quotes use the customer currency and lock PHP settlement", async () => {
+  for (const [currency, amount, rate, expectedPhp] of [
+    ["USD", 20, 57, 1140],
+    ["EUR", 10.5, 62, 651],
+    ["CNY", 15, 7.8, 117]
+  ]) {
     const response = await fetch(`${baseUrl}/v1/payments/qrph/quote`, {
       method: "POST",
       headers: {
@@ -780,8 +784,18 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   assert.doesNotMatch(checkoutPage, /logos\.example|disabled\.png|method-logo-fallback/);
   assert.doesNotMatch(checkoutPage, /Continue with SwiftPay QR Ph|Other payment methods/);
   assert.match(checkoutPage, /action="\/checkout\/PL-1\/qrph"/);
+  assert.match(checkoutPage, /Choose your payment app/);
+  assert.match(checkoutPage, /link amount stays fixed and QR Ph settles in PHP/);
+  assert.match(checkoutPage, /Other Currencies/);
+  assert.match(checkoutPage, /Manual Bank Transfer/);
   assert.match(checkoutPage, /Continue to secure payment/);
   assert.match(checkoutPage, /Pay with QR Ph/);
+  const methodOrder = ["gcash", "maya", "qrph", "alipay", "toss", "kakao", "kbank"]
+    .map((method) => checkoutPage.indexOf(`name="paymentApp" value="${method}"`));
+  assert.ok(methodOrder.every((index) => index >= 0));
+  assert.deepEqual(methodOrder, [...methodOrder].sort((left, right) => left - right));
+  const manualTransferIndex = checkoutPage.indexOf("Manual Bank Transfer");
+  assert.ok(manualTransferIndex > methodOrder[2] && manualTransferIndex < methodOrder[3]);
 
   const checkoutCss = await fetch(`${baseUrl}/checkout-assets/checkout.css`);
   assert.equal(checkoutCss.status, 200);
@@ -815,6 +829,33 @@ test("self-hosted QR Ph checkout presents a valid generic scan flow", async () =
   const qrRequest = JSON.parse(requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).options.body);
   assert.equal(qrRequest.x_currency, "PHP");
   assert.equal(qrRequest.x_amount, 125.5);
+});
+
+test("payment-link QR checkout labels the selected app and rejects unsupported apps", async () => {
+  const response = await fetch(`${baseUrl}/checkout/PL-1/qrph`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "paymentApp=alipay"
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Scan with Alipay/);
+  assert.match(html, /settles in PHP at <strong>₱125\.50<\/strong>/);
+  const qrRequest = JSON.parse(requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).options.body);
+  assert.equal(qrRequest.x_currency, "PHP");
+  assert.equal(qrRequest.x_amount, 125.5);
+
+  const bootstrapCount = requests.filter(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).length;
+  const invalidResponse = await fetch(`${baseUrl}/checkout/PL-1/qrph`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "paymentApp=unsupported"
+  });
+  assert.equal(invalidResponse.status, 400);
+  assert.equal(
+    requests.filter(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).length,
+    bootstrapCount
+  );
 });
 
 test("self-hosted checkout QR Ph converts USD link prices to a PHP settlement QR", async () => {

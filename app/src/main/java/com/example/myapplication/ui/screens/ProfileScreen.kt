@@ -90,8 +90,10 @@ fun ProfileScreen() {
     val textColor = MaterialTheme.colorScheme.onSurface
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
     val borderColor = MaterialTheme.colorScheme.outlineVariant
-    val accountName = merchantAlias?.takeIf { it.isNotBlank() }
-        ?: signedInEmail?.takeIf { it.isNotBlank() }
+    val accountName = signedInEmail?.takeIf { it.isNotBlank() }
+        ?.substringBefore('@')
+        ?.replace('.', ' ')
+        ?.replaceFirstChar { it.uppercase() }
         ?: "Merchant account"
     val canEnableBiometrics = hasDevicePin && biometricAuthenticator?.isAvailable() == true
 
@@ -174,11 +176,20 @@ fun ProfileScreen() {
                         }
                         Spacer(Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(accountName, style = MaterialTheme.typography.titleMedium, color = textColor, fontWeight = FontWeight.Bold)
                             Text(
-                                signedInEmail ?: "No signed-in account",
+                                accountName,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = textColor,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                            Text(
+                                signedInEmail?.takeIf { it.isNotBlank() } ?: "No signed-in account",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = secondaryTextColor
+                                color = secondaryTextColor,
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         }
                         val isSignedIn = !signedInEmail.isNullOrBlank()
@@ -188,7 +199,7 @@ fun ProfileScreen() {
                             else secondaryTextColor.copy(alpha = 0.12f)
                         ) {
                             Text(
-                                text = if (isSignedIn) "ACTIVE" else "SIGNED OUT",
+                                text = if (isSignedIn) "SIGNED IN" else "SIGNED OUT",
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isSignedIn) FastPayGreen else secondaryTextColor,
@@ -199,7 +210,7 @@ fun ProfileScreen() {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 18.dp), color = borderColor)
                     ProfileDetailRow("Merchant email", signedInEmail?.takeIf { it.isNotBlank() } ?: "Not signed in", textColor, secondaryTextColor)
                     Spacer(Modifier.height(14.dp))
-                    ProfileDetailRow("Business name", merchantAlias?.takeIf { it.isNotBlank() } ?: "Not set", textColor, secondaryTextColor)
+                    ProfileDetailRow("Payment link alias", merchantAlias?.takeIf { it.isNotBlank() } ?: "Not set", textColor, secondaryTextColor)
                     Spacer(Modifier.height(14.dp))
                     ProfileDetailRow("App version", "${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})", textColor, secondaryTextColor)
                 }
@@ -398,9 +409,19 @@ private fun ProfileDetailRow(
     textColor: Color,
     secondaryTextColor: Color
 ) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = secondaryTextColor)
-        Text(value, style = MaterialTheme.typography.bodySmall, color = textColor, fontWeight = FontWeight.SemiBold)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = secondaryTextColor)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = textColor,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 3,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
     }
 }
 

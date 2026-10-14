@@ -39,14 +39,9 @@ import com.example.myapplication.data.createSwiftPayService
 import com.example.myapplication.data.mergeTransactions
 import com.example.myapplication.data.api.InternalTransaction
 import com.example.myapplication.ui.components.DrPayMarkBadge
-import com.example.myapplication.ui.theme.FastPayActionIcon
-import com.example.myapplication.ui.theme.FastPayBackground
 import com.example.myapplication.ui.theme.FastPayBlue
 import com.example.myapplication.ui.theme.FastPayGradient
-import com.example.myapplication.ui.theme.FastPayMeshBlue
 import com.example.myapplication.ui.theme.FastPayNavy
-import com.example.myapplication.ui.theme.FastPayTextPrimary
-import com.example.myapplication.ui.theme.FastPayTextSecondary
 import com.example.myapplication.ui.theme.FintechMotion
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -108,7 +103,7 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(FastPayBackground)) {
+    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
             modifier = Modifier
                 .widthIn(max = 560.dp)
@@ -177,11 +172,11 @@ fun HomeGreeting(
                 DrPayMarkBadge(size = 42.dp)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                Text("Welcome back", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
+                Text("Welcome back", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                 Text(
                     merchantName,
                     style = MaterialTheme.typography.labelMedium,
-                    color = FastPayTextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -191,23 +186,23 @@ fun HomeGreeting(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Surface(
                 shape = CircleShape,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 2.dp,
                 modifier = Modifier.size(42.dp)
             ) {
                 IconButton(onClick = onHelpClick, modifier = Modifier.fillMaxSize()) {
-                    Icon(Icons.AutoMirrored.Rounded.HelpOutline, "Help", tint = FastPayTextPrimary, modifier = Modifier.size(21.dp))
+                    Icon(Icons.AutoMirrored.Rounded.HelpOutline, "Help and API documentation", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(21.dp))
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
             Surface(
                 shape = CircleShape,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 2.dp,
                 modifier = Modifier.size(42.dp)
             ) {
                 IconButton(onClick = onProfileClick, modifier = Modifier.fillMaxSize()) {
-                    Icon(Icons.Rounded.AccountCircle, "Profile", tint = FastPayTextPrimary, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Rounded.AccountCircle, "Profile", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                 }
             }
         }
@@ -310,20 +305,22 @@ fun QuickActionsSection(
     onProfileClick: () -> Unit,
     onTransactionsClick: () -> Unit
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val actionSurface = scheme.primaryContainer
     Column(modifier = Modifier.padding(horizontal = 18.dp)) {
-        Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
+        Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = scheme.onBackground)
         Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            QuickAction(Icons.Rounded.Payments, "Collect", FastPayMeshBlue, onCollect, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", FastPayMeshBlue, onTransfer, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.Link, "Payment link", FastPayMeshBlue, onPaymentLink, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.QrCodeScanner, "QR Scanner", Color(0xFFF3EBDD), onScanQr, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Payments, "Collect", actionSurface, onCollect, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", actionSurface, onTransfer, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Link, "Payment link", actionSurface, onPaymentLink, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.QrCodeScanner, "QR Scanner", scheme.secondaryContainer, onScanQr, Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            QuickAction(Icons.Rounded.Terminal, "API docs", Color(0xFFF3EBDD), onDeveloperDocs, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Transactions", FastPayMeshBlue, onTransactionsClick, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.Person, "Profile", FastPayMeshBlue, onProfileClick, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Terminal, "API docs", scheme.secondaryContainer, onDeveloperDocs, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Transactions", actionSurface, onTransactionsClick, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.Person, "Profile", actionSurface, onProfileClick, Modifier.weight(1f))
         }
     }
 }
@@ -344,11 +341,11 @@ fun QuickAction(icon: ImageVector, label: String, background: Color, onClick: ()
             modifier = Modifier.size(56.dp)
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Icon(icon, null, tint = FastPayActionIcon, modifier = Modifier.size(28.dp))
+                Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(28.dp))
             }
         }
         Spacer(modifier = Modifier.height(7.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = FastPayTextPrimary, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1, fontSize = 12.sp)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1, fontSize = 12.sp)
     }
 }
 
@@ -408,7 +405,7 @@ fun TransactionHistorySection(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = FastPayTextPrimary)
+            Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("See all", style = MaterialTheme.typography.labelMedium, color = FastPayBlue, fontWeight = FontWeight.SemiBold)
                 Icon(Icons.Rounded.ChevronRight, null, tint = FastPayBlue, modifier = Modifier.size(18.dp))
@@ -422,7 +419,7 @@ fun TransactionHistorySection(
             transactions.isEmpty() -> Text(
                 text = if (hasError) "Transaction history unavailable" else "No transactions yet",
                 style = MaterialTheme.typography.bodyMedium,
-                color = FastPayTextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 20.dp)
             )
             else -> transactions.forEachIndexed { index, transaction ->
@@ -450,8 +447,8 @@ fun TransactionListItem(transaction: InternalTransaction) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Surface(
             shape = CircleShape,
-            color = Color.White,
-            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             modifier = Modifier.size(32.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -463,15 +460,15 @@ fun TransactionListItem(transaction: InternalTransaction) {
                         else -> Icons.Rounded.SouthWest
                     },
                     null,
-                    tint = if (isFailed) Color(0xFFEF4444) else FastPayTextSecondary,
+                    tint = if (isFailed) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )
             }
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = label, style = MaterialTheme.typography.bodyMedium, color = FastPayTextPrimary, fontWeight = FontWeight.Medium)
-            Text(text = transaction.date, style = MaterialTheme.typography.labelSmall, color = FastPayTextSecondary, maxLines = 1)
+            Text(text = label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+            Text(text = transaction.date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
         Text(
             text = "${if (isOutflow) "-" else if (isFailed) "" else "+"}₱${"%,.2f".format(kotlin.math.abs(transaction.amount))}",
@@ -479,7 +476,7 @@ fun TransactionListItem(transaction: InternalTransaction) {
             fontWeight = FontWeight.Bold,
             color = when {
                 isFailed -> Color(0xFFEF4444)
-                isOutflow -> FastPayTextPrimary
+                isOutflow -> MaterialTheme.colorScheme.onSurface
                 else -> Color(0xFF16835D)
             }
         )
