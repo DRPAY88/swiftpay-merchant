@@ -14,14 +14,14 @@ import {
 const signingKey = "test-session-signing-key-at-least-32-bytes";
 const now = Date.parse("2026-10-13T00:00:00.000Z");
 
-test("CurrencyAPI fetches KRW/PHP rate with header auth and rejects stale quotes", async () => {
+test("CurrencyAPI accepts daily KRW/PHP rates but rejects data older than 26 hours", async () => {
   let request;
   const rate = await getLatestKrwPhpRate(
     "test-key",
     async (url, options) => {
       request = { url: url.toString(), options };
       return Response.json({
-        meta: { last_updated_at: new Date(now - 60_000).toISOString() },
+        meta: { last_updated_at: new Date(now - 24 * 60 * 60_000).toISOString() },
         data: { PHP: { code: "PHP", value: 0.0425 } }
       });
     },
@@ -29,7 +29,7 @@ test("CurrencyAPI fetches KRW/PHP rate with header auth and rejects stale quotes
   );
   assert.deepEqual(rate, {
     phpPerKrw: 0.0425,
-    updatedAt: new Date(now - 60_000).toISOString()
+    updatedAt: new Date(now - 24 * 60 * 60_000).toISOString()
   });
   assert.equal(request.url, "https://api.currencyapi.com/v3/latest?base_currency=KRW&currencies=PHP");
   assert.equal(request.options.headers.apikey, "test-key");
@@ -37,7 +37,7 @@ test("CurrencyAPI fetches KRW/PHP rate with header auth and rejects stale quotes
 
   await assert.rejects(
     getLatestKrwPhpRate("test-key", async () => Response.json({
-      meta: { last_updated_at: new Date(now - 3 * 60 * 60_000).toISOString() },
+      meta: { last_updated_at: new Date(now - 27 * 60 * 60_000).toISOString() },
       data: { PHP: { code: "PHP", value: 0.0425 } }
     }), now),
     (error) => error instanceof FxQuoteError && error.status === 502

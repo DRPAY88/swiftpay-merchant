@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 export const FX_PHP_QUOTE_TTL_MS = 5 * 60 * 1000;
 export const KRW_PHP_QUOTE_TTL_MS = FX_PHP_QUOTE_TTL_MS;
+const MAX_FX_RATE_AGE_MS = 26 * 60 * 60 * 1000;
 const FX_CURRENCIES = new Set(["KRW", "USD", "EUR", "CNY"]);
 
 export class FxQuoteError extends Error {
@@ -57,7 +58,7 @@ export async function getLatestPhpRate(baseCurrency, apiKey, fetchImpl = fetch, 
     rate <= 0 ||
     !Number.isFinite(updatedAt) ||
     updatedAt > now + 60_000 ||
-    now - updatedAt > 2 * 60 * 60 * 1000
+    now - updatedAt > MAX_FX_RATE_AGE_MS
   ) {
     throw new FxQuoteError(502, `The FX rate service returned a missing or stale ${baseCurrency}/PHP rate`);
   }

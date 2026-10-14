@@ -492,7 +492,7 @@ test("USD, EUR, and CNY QR quotes use the customer currency and lock PHP settlem
 
 test("stale FX provider rates return a 502 instead of an internal server error", async () => {
   fxResponseOverride = {
-    meta: { last_updated_at: new Date(Date.now() - 3 * 60 * 60_000).toISOString() },
+    meta: { last_updated_at: new Date(Date.now() - 27 * 60 * 60_000).toISOString() },
     data: { PHP: { code: "PHP", value: 7.8 } }
   };
   try {
