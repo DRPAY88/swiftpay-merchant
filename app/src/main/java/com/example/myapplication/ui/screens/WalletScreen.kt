@@ -73,6 +73,7 @@ import com.example.myapplication.ui.theme.*
 
 import com.example.myapplication.ui.components.TransactionStatusIndicator
 import com.example.myapplication.ui.components.FastPayStatusBadge
+import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3AdaptiveApi::class, ExperimentalAnimationApi::class)
 @Composable
@@ -84,6 +85,7 @@ fun WalletScreen(
     val adjustedBalance = viewModel.walletAdjustedBalance
     var transactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
     var transactionHistoryError by remember { mutableStateOf<String?>(null) }
+    var isHistoryLoading by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("All") }
     val scope = rememberCoroutineScope()
@@ -120,9 +122,14 @@ fun WalletScreen(
                         history.transactions
                     )
                     transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
+                    isHistoryLoading = false
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("WalletScreen", "Error loading transactions", e)
+                transactionHistoryError = e.message ?: "Transaction history could not be loaded. Refresh to try again."
+            } finally {
+                isHistoryLoading = false
             }
         }
     }
@@ -183,7 +190,9 @@ fun WalletScreen(
                                     transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
                                     delay(800L)
                                 } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
                                     Log.e("WalletScreen", "Refresh Error", e)
+                                    transactionHistoryError = e.message ?: "Transaction history could not be refreshed."
                                 } finally {
                                     isLoading = false
                                 }
@@ -211,6 +220,7 @@ fun WalletScreen(
                     transactions = filteredTransactions,
                     selectedFilter = selectedFilter,
                     transactionHistoryError = transactionHistoryError,
+                    isHistoryLoading = isHistoryLoading,
                     onFilterSelected = { selectedFilter = it },
                     onTransactionClick = { tx ->
                         scope.launch {
@@ -247,6 +257,7 @@ fun WalletListContent(
     transactions: List<InternalTransaction>,
     selectedFilter: String,
     transactionHistoryError: String? = null,
+    isHistoryLoading: Boolean = false,
     onFilterSelected: (String) -> Unit,
     onTransactionClick: (InternalTransaction) -> Unit,
     viewModel: MiniAppViewModel? = null
@@ -347,7 +358,11 @@ fun WalletListContent(
             transactionHistoryError?.let { error ->
                 item {
                     Text(
-                        text = "Some transaction history could not be loaded. $error",
+                        text = if (transactions.isEmpty()) {
+                            "Transaction history could not be loaded. $error"
+                        } else {
+                            "Some transaction history could not be loaded. $error"
+                        },
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier
@@ -358,7 +373,37 @@ fun WalletListContent(
                     )
                 }
             }
-            if (transactions.isEmpty() && selectedFilter == "All") {
+            if (transactions.isEmpty() && selectedFilter == "All" && isHistoryLoading) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "Loading transaction history…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else if (transactions.isEmpty() && selectedFilter == "All" && transactionHistoryError != null) {
+                item {
+                    Text(
+                        text = "Refresh to try loading your transaction history again.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else if (transactions.isEmpty() && selectedFilter == "All") {
                 item { EmptyHistoryState() }
             } else if (transactions.isEmpty()) {
                 item { EmptyFilteredHistoryState(selectedFilter) }

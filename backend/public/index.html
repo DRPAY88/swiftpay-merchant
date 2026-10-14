@@ -39,7 +39,18 @@
         Shared account data supports reconciliation, user management, and transfer review.
       </section>
 
-      <section class="grid">
+      <nav class="dashboard-nav" aria-label="Dashboard sections">
+        <a href="#overview">Overview</a>
+        <a href="#merchant-users">Users</a>
+        <a href="#onboarding">Onboarding</a>
+        <a href="#applications">Applications</a>
+        <a href="#reconciliation">Reconciliation</a>
+        <a href="#transfers">Transfers</a>
+        <a href="#provider-data">Provider data</a>
+        <a href="#audit-trail">Audit trail</a>
+      </nav>
+
+      <section id="overview" class="grid dashboard-section">
         <article class="panel">
           <div class="section-heading">
             <div><h2>Shared wallet balance</h2></div>
@@ -54,7 +65,7 @@
         </article>
       </section>
 
-      <section class="panel">
+      <section id="merchant-users" class="panel dashboard-section">
         <div class="section-heading"><div><p class="eyebrow">ACCESS</p><h2>Merchant users</h2></div></div>
         <form id="add-user-form" class="inline-form">
           <label for="new-user-email">Add or reactivate merchant email</label>
@@ -64,7 +75,7 @@
         <div class="table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody id="users-table"></tbody></table></div>
       </section>
 
-      <section class="panel">
+      <section id="onboarding" class="panel dashboard-section">
         <div class="section-heading">
           <div><p class="eyebrow">NEW MERCHANTS</p><h2>App onboarding</h2></div>
           <label class="setting-toggle" for="onboarding-enabled">
@@ -76,7 +87,7 @@
         <p class="muted">Procedure: a super admin adds the merchant account; the merchant signs in; eligible new accounts complete the guide, set up an MPIN, optionally enable biometrics, then enter the app. Existing and bootstrap accounts are excluded. Completion is account-wide and is not reset when this setting changes.</p>
       </section>
 
-      <section class="panel">
+      <section id="applications" class="panel dashboard-section">
         <div class="section-heading">
           <div><p class="eyebrow">MERCHANT APPLICATIONS</p><h2>Registration and KYB review</h2></div>
           <label class="setting-toggle" for="registration-enabled">
@@ -90,7 +101,7 @@
         <section id="registration-detail" class="review-detail hidden" aria-live="polite"></section>
       </section>
 
-      <section class="grid">
+      <section id="reconciliation" class="grid dashboard-section">
         <article class="panel">
           <p class="eyebrow">BALANCE ADJUSTMENT</p>
           <h2>Record balance adjustment</h2>
@@ -121,7 +132,7 @@
           </form>
           <div class="table-wrap"><table><thead><tr><th>Amount</th><th>Bank</th><th>Reference</th><th>Date</th></tr></thead><tbody id="manual-deposits-table"></tbody></table></div>
         </article>
-        <article class="panel">
+        <article id="transfers" class="panel dashboard-section">
           <p class="eyebrow">LIVE PAYMENT RAIL</p>
           <h2>Submit transfer</h2>
           <p class="warning">Submits a real transfer from the shared SwiftPay account. Verify details before confirming.</p>
@@ -141,12 +152,12 @@
         </article>
       </section>
 
-      <section class="grid">
-        <article class="panel">
+      <section class="grid dashboard-section">
+        <article id="provider-data" class="panel dashboard-section">
           <div class="section-heading"><div><p class="eyebrow">PROVIDER DATA</p><h2>Shared disbursements</h2></div><button id="refresh-transfers" class="button secondary" type="button">Refresh</button></div>
           <pre id="transfer-data" class="data-box">Loading…</pre>
         </article>
-        <article class="panel">
+        <article id="audit-trail" class="panel dashboard-section">
           <p class="eyebrow">ACCOUNTABILITY</p><h2>Admin audit trail</h2>
           <div class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Actor</th><th>Date</th></tr></thead><tbody id="audit-table"></tbody></table></div>
         </article>
