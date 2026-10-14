@@ -1,4 +1,5 @@
 import pg from "pg";
+import { decryptKyb, encryptKyb } from "./kyb-crypto.js";
 
 const { Pool } = pg;
 
@@ -9,7 +10,11 @@ export class AdminStoreError extends Error {
   }
 }
 
-export function createAdminStore(databaseUrl, pool = new Pool({ connectionString: databaseUrl, max: 5 })) {
+export function createAdminStore(
+  databaseUrl,
+  pool = new Pool({ connectionString: databaseUrl, max: 5 }),
+  { kybEncryptionKey = null } = {}
+) {
   async function initialize(merchantEmails, superAdminEmails) {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS merchant_users (
@@ -18,8 +23,54 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
         status TEXT NOT NULL CHECK (status IN ('active', 'suspended', 'removed')),
         created_by TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        onboarding_eligible BOOLEAN NOT NULL DEFAULT FALSE,
+        onboarding_completed_at TIMESTAMPTZ
+      );
+      ALTER TABLE merchant_users ADD COLUMN IF NOT EXISTS onboarding_eligible BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE merchant_users ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ;
+      CREATE TABLE IF NOT EXISTS app_feature_settings (
+        id SMALLINT PRIMARY KEY CHECK (id = 1),
+        onboarding_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        registration_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        onboarding_eligible_since TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_by TEXT,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE app_feature_settings ADD COLUMN IF NOT EXISTS registration_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+      INSERT INTO app_feature_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+      CREATE TABLE IF NOT EXISTS merchant_registrations (
+        email TEXT PRIMARY KEY,
+        status TEXT NOT NULL CHECK (status IN ('draft', 'submitted', 'approved', 'rejected')),
+        encrypted_profile TEXT NOT NULL,
+        encrypted_review_note TEXT NOT NULL DEFAULT '',
+        generation INTEGER NOT NULL DEFAULT 1,
+        reviewed_by TEXT,
+        reviewed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS merchant_registration_documents (
+        email TEXT NOT NULL REFERENCES merchant_registrations(email) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('business_certificate', 'representative_id', 'selfie')),
+        content_type TEXT NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'application/pdf')),
+        encrypted_data TEXT NOT NULL,
+        generation INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (email, kind)
+      );
+      ALTER TABLE merchant_registrations
+        ADD COLUMN IF NOT EXISTS generation INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE merchant_registrations
+        ADD COLUMN IF NOT EXISTS encrypted_review_note TEXT NOT NULL DEFAULT '';
+      ALTER TABLE merchant_registration_documents
+        ADD COLUMN IF NOT EXISTS generation INTEGER NOT NULL DEFAULT 1;
+      UPDATE merchant_users
+      SET onboarding_eligible = TRUE
+      WHERE onboarding_eligible = FALSE
+        AND role = 'merchant'
+        AND created_by <> 'bootstrap'
+        AND created_at >= (SELECT onboarding_eligible_since FROM app_feature_settings WHERE id = 1);
       CREATE TABLE IF NOT EXISTS admin_audit (
         id BIGSERIAL PRIMARY KEY,
         actor_email TEXT NOT NULL,
@@ -90,6 +141,9 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
         ON admin_audit ((details->>'referenceNo'))
         WHERE action LIKE 'transfer.%';
     `);
+    if (!Buffer.isBuffer(kybEncryptionKey) || kybEncryptionKey.length !== 32) {
+      await pool.query("UPDATE app_feature_settings SET registration_enabled = FALSE WHERE id = 1");
+    }
 
     for (const email of new Set(merchantEmails)) {
       await pool.query(
@@ -147,8 +201,8 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
   async function createMerchant(email, actor) {
     return withAudit(actor, "merchant.created", email, {}, async (client) => {
       const result = await client.query(
-        `INSERT INTO merchant_users (email, role, status, created_by)
-         VALUES ($1, 'merchant', 'active', $2)
+        `INSERT INTO merchant_users (email, role, status, created_by, onboarding_eligible)
+         VALUES ($1, 'merchant', 'active', $2, TRUE)
          ON CONFLICT (email) DO UPDATE
          SET status = 'active', updated_at = NOW()
          WHERE merchant_users.role = 'merchant'
@@ -171,6 +225,357 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
       );
       if (!result.rowCount) throw new AdminStoreError(404, "Merchant user not found");
       return result.rows[0];
+    });
+  }
+
+  async function getOnboardingSettings() {
+    const result = await pool.query(
+      "SELECT onboarding_enabled AS enabled FROM app_feature_settings WHERE id = 1"
+    );
+    if (!result.rows[0]) throw new Error("Onboarding settings are not initialized");
+    return result.rows[0];
+  }
+
+  async function setOnboardingEnabled(enabled, actor) {
+    const action = enabled ? "onboarding.enabled" : "onboarding.disabled";
+    return withAudit(actor, action, "all-merchants", { enabled }, async (client) => {
+      const result = await client.query(
+        `UPDATE app_feature_settings
+         SET onboarding_enabled = $1, updated_by = $2, updated_at = NOW()
+         WHERE id = 1
+         RETURNING onboarding_enabled AS enabled`,
+        [enabled, actor]
+      );
+      if (!result.rowCount) throw new Error("Onboarding settings are not initialized");
+      return result.rows[0];
+    });
+  }
+
+  async function getMerchantOnboardingState(email) {
+    const result = await pool.query(
+      `SELECT (
+                settings.onboarding_enabled
+                AND
+                users.role = 'merchant'
+                AND users.onboarding_eligible
+                AND users.onboarding_completed_at IS NULL
+              ) AS required
+       FROM app_feature_settings settings
+       JOIN merchant_users users ON users.email = $1
+       WHERE settings.id = 1`,
+      [email.toLowerCase()]
+    );
+    if (!result.rows[0]) throw new Error("Merchant onboarding state is unavailable");
+    return result.rows[0];
+  }
+
+  async function completeMerchantOnboarding(email) {
+    const result = await pool.query(
+      `UPDATE merchant_users
+       SET onboarding_completed_at = NOW()
+       WHERE email = $1
+         AND role = 'merchant'
+         AND onboarding_eligible = TRUE
+         AND onboarding_completed_at IS NULL`,
+      [email.toLowerCase()]
+    );
+    if (result.rowCount) return true;
+
+    const existing = await pool.query(
+      `SELECT onboarding_eligible AND onboarding_completed_at IS NOT NULL AS completed
+       FROM merchant_users
+       WHERE email = $1 AND role = 'merchant'`,
+      [email.toLowerCase()]
+    );
+    return existing.rows[0]?.completed === true;
+  }
+
+  function requireKybKey() {
+    if (!Buffer.isBuffer(kybEncryptionKey) || kybEncryptionKey.length !== 32) {
+      throw new AdminStoreError(503, "Merchant registration is not configured for secure document storage");
+    }
+  }
+
+  async function getRegistrationSettings() {
+    const result = await pool.query(
+      "SELECT registration_enabled AS enabled FROM app_feature_settings WHERE id = 1"
+    );
+    if (!result.rows[0]) throw new Error("Registration settings are not initialized");
+    return { ...result.rows[0], secureStorageAvailable: Buffer.isBuffer(kybEncryptionKey) && kybEncryptionKey.length === 32 };
+  }
+
+  async function setRegistrationEnabled(enabled, actor) {
+    if (enabled) requireKybKey();
+    const action = enabled ? "registration.enabled" : "registration.disabled";
+    return withAudit(actor, action, "public-registration", { enabled }, async (client) => {
+      const result = await client.query(
+        `UPDATE app_feature_settings
+         SET registration_enabled = $1, updated_by = $2, updated_at = NOW()
+         WHERE id = 1
+         RETURNING registration_enabled AS enabled`,
+        [enabled, actor]
+      );
+      if (!result.rowCount) throw new Error("Registration settings are not initialized");
+      return result.rows[0];
+    });
+  }
+
+  async function getRegistration(email) {
+    const result = await pool.query(
+      "SELECT email, status FROM merchant_registrations WHERE email = $1",
+      [email.toLowerCase()]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function createRegistrationDraft(email) {
+    requireKybKey();
+    const normalizedEmail = email.toLowerCase();
+    const merchant = await getUser(normalizedEmail);
+    if (merchant) throw new AdminStoreError(409, "This email already has a merchant account");
+    const result = await pool.query(
+      `INSERT INTO merchant_registrations (email, status, encrypted_profile)
+       VALUES ($1, 'draft', $2)
+       ON CONFLICT (email) DO UPDATE
+         SET status = 'draft', generation = merchant_registrations.generation + 1,
+             reviewed_by = NULL, reviewed_at = NULL, updated_at = NOW()
+         WHERE merchant_registrations.status = 'rejected'
+       RETURNING email, status`,
+      [
+        normalizedEmail,
+        encryptKyb(Buffer.from("{}", "utf8"), kybEncryptionKey, `profile:${normalizedEmail}`).toString("base64")
+      ]
+    );
+    if (result.rowCount) return result.rows[0];
+    const existing = await getRegistration(normalizedEmail);
+    if (existing) return existing;
+    throw new AdminStoreError(409, "This email already has a merchant account");
+  }
+
+  async function getRegistrationStatus(email) {
+    const result = await pool.query(
+      `SELECT email, status, updated_at AS "updatedAt"
+       FROM merchant_registrations WHERE email = $1`,
+      [email.toLowerCase()]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function getRegistrationApplication(email) {
+    requireKybKey();
+    const normalizedEmail = email.toLowerCase();
+    const result = await pool.query(
+      `SELECT email, status, encrypted_profile, encrypted_review_note, updated_at AS "updatedAt",
+              generation
+       FROM merchant_registrations WHERE email = $1`,
+      [normalizedEmail]
+    );
+    const registration = result.rows[0];
+    if (!registration) return null;
+    const documents = await pool.query(
+      `SELECT kind FROM merchant_registration_documents
+       WHERE email = $1 AND generation = $2 ORDER BY kind`,
+      [normalizedEmail, registration.generation]
+    );
+    const profile = JSON.parse(decryptKyb(
+      Buffer.from(registration.encrypted_profile, "base64"),
+      kybEncryptionKey,
+      `profile:${normalizedEmail}`
+    ).toString("utf8"));
+    const reviewNote = registration.encrypted_review_note
+      ? decryptKyb(
+        Buffer.from(registration.encrypted_review_note, "base64"),
+        kybEncryptionKey,
+        `review:${normalizedEmail}`
+      ).toString("utf8")
+      : "";
+    delete registration.encrypted_profile;
+    delete registration.encrypted_review_note;
+    delete registration.generation;
+    return { ...registration, reviewNote, profile, documents: documents.rows.map((document) => document.kind) };
+  }
+
+  async function saveRegistrationProfile(email, profile) {
+    requireKybKey();
+    const result = await pool.query(
+      `UPDATE merchant_registrations
+       SET encrypted_profile = $2, updated_at = NOW()
+       WHERE email = $1 AND status IN ('draft', 'rejected')
+       RETURNING status`,
+      [
+        email.toLowerCase(),
+        encryptKyb(
+          Buffer.from(JSON.stringify(profile), "utf8"),
+          kybEncryptionKey,
+          `profile:${email.toLowerCase()}`
+        ).toString("base64")
+      ]
+    );
+    if (!result.rowCount) throw new AdminStoreError(409, "The application is not editable");
+    return result.rows[0];
+  }
+
+  async function saveRegistrationDocument(email, kind, contentType, data) {
+    requireKybKey();
+    const result = await pool.query(
+      `INSERT INTO merchant_registration_documents (email, kind, content_type, encrypted_data, generation)
+       SELECT email, $2, $3, $4, generation FROM merchant_registrations
+       WHERE email = $1 AND status IN ('draft', 'rejected')
+       ON CONFLICT (email, kind) DO UPDATE
+         SET content_type = EXCLUDED.content_type, encrypted_data = EXCLUDED.encrypted_data,
+             generation = EXCLUDED.generation, created_at = NOW()
+       RETURNING kind`,
+      [
+        email.toLowerCase(),
+        kind,
+        contentType,
+        encryptKyb(data, kybEncryptionKey, `document:${email.toLowerCase()}:${kind}`).toString("base64")
+      ]
+    );
+    if (!result.rowCount) throw new AdminStoreError(409, "The application is not editable");
+    return result.rows[0];
+  }
+
+  async function submitRegistration(email) {
+    requireKybKey();
+    const normalizedEmail = email.toLowerCase();
+    const count = await pool.query(
+      `SELECT COUNT(*)::integer AS count
+       FROM merchant_registration_documents documents
+       JOIN merchant_registrations registrations ON registrations.email = documents.email
+       WHERE documents.email = $1
+         AND documents.kind IN ('business_certificate', 'representative_id', 'selfie')
+         AND documents.generation = registrations.generation`,
+      [normalizedEmail]
+    );
+    if (count.rows[0]?.count !== 3) {
+      throw new AdminStoreError(400, "Upload the business certificate, representative ID, and selfie before submitting");
+    }
+    const result = await pool.query(
+      `UPDATE merchant_registrations
+       SET status = 'submitted', encrypted_review_note = $2, updated_at = NOW()
+       WHERE email = $1 AND status IN ('draft', 'rejected')
+       RETURNING email, status, updated_at AS "updatedAt"`,
+      [
+        normalizedEmail,
+        encryptKyb(Buffer.from("", "utf8"), kybEncryptionKey, `review:${normalizedEmail}`).toString("base64")
+      ]
+    );
+    if (!result.rowCount) throw new AdminStoreError(409, "The application cannot be submitted in its current state");
+    return result.rows[0];
+  }
+
+  async function listRegistrations() {
+    const result = await pool.query(
+      `SELECT email, status, created_at AS "createdAt",
+              updated_at AS "updatedAt", reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt"
+       FROM merchant_registrations ORDER BY created_at DESC LIMIT 200`
+    );
+    return result.rows;
+  }
+
+  async function getRegistrationDetails(email) {
+    requireKybKey();
+    const result = await pool.query(
+      `SELECT email, status, encrypted_profile, encrypted_review_note, created_at AS "createdAt",
+              updated_at AS "updatedAt", reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt"
+       FROM merchant_registrations WHERE email = $1`,
+      [email.toLowerCase()]
+    );
+    const registration = result.rows[0];
+    if (!registration) throw new AdminStoreError(404, "Registration not found");
+    const documents = await pool.query(
+      `SELECT kind, content_type AS "contentType", created_at AS "uploadedAt"
+       FROM merchant_registration_documents WHERE email = $1 ORDER BY kind`,
+      [email.toLowerCase()]
+    );
+    const profile = JSON.parse(decryptKyb(
+      Buffer.from(registration.encrypted_profile, "base64"),
+      kybEncryptionKey,
+      `profile:${email.toLowerCase()}`
+    ).toString("utf8"));
+    const reviewNote = registration.encrypted_review_note
+      ? decryptKyb(
+        Buffer.from(registration.encrypted_review_note, "base64"),
+        kybEncryptionKey,
+        `review:${email.toLowerCase()}`
+      ).toString("utf8")
+      : "";
+    delete registration.encrypted_profile;
+    delete registration.encrypted_review_note;
+    return { ...registration, reviewNote, profile, documents: documents.rows };
+  }
+
+  async function getRegistrationDocument(email, kind) {
+    requireKybKey();
+    const result = await pool.query(
+      `SELECT content_type AS "contentType", encrypted_data
+       FROM merchant_registration_documents WHERE email = $1 AND kind = $2`,
+      [email.toLowerCase(), kind]
+    );
+    if (!result.rows[0]) throw new AdminStoreError(404, "Document not found");
+    return {
+      contentType: result.rows[0].contentType,
+      data: decryptKyb(
+        Buffer.from(result.rows[0].encrypted_data, "base64"),
+        kybEncryptionKey,
+        `document:${email.toLowerCase()}:${kind}`
+      )
+    };
+  }
+
+  async function reviewRegistration(email, status, note, actor) {
+    const normalizedEmail = email.toLowerCase();
+    return withAudit(actor, `registration.${status}`, normalizedEmail, {}, async (client) => {
+      const registration = await client.query(
+        `SELECT status FROM merchant_registrations WHERE email = $1 FOR UPDATE`,
+        [normalizedEmail]
+      );
+      if (!registration.rowCount) throw new AdminStoreError(404, "Registration not found");
+      if (registration.rows[0].status !== "submitted") {
+        throw new AdminStoreError(409, "Only submitted applications can be reviewed");
+      }
+      if (status === "approved") {
+        await client.query(
+          `INSERT INTO merchant_users (email, role, status, created_by, onboarding_eligible)
+           VALUES ($1, 'merchant', 'active', $2, TRUE)
+           ON CONFLICT (email) DO UPDATE SET status = 'active', updated_at = NOW()
+           WHERE merchant_users.role = 'merchant'`,
+          [normalizedEmail, actor]
+        );
+        const merchant = await client.query(
+          "SELECT role FROM merchant_users WHERE email = $1",
+          [normalizedEmail]
+        );
+        if (merchant.rows[0]?.role !== "merchant") {
+          throw new AdminStoreError(409, "A super-admin account cannot be approved as a merchant");
+        }
+      }
+      const updated = await client.query(
+        `UPDATE merchant_registrations
+         SET status = $2, encrypted_review_note = $3, reviewed_by = $4, reviewed_at = NOW(), updated_at = NOW()
+         WHERE email = $1
+         RETURNING email, status, updated_at AS "updatedAt"`,
+        [
+          normalizedEmail,
+          status,
+          encryptKyb(Buffer.from(note, "utf8"), kybEncryptionKey, `review:${normalizedEmail}`).toString("base64"),
+          actor
+        ]
+      );
+      return { ...updated.rows[0], reviewNote: note };
+    });
+  }
+
+  async function deleteRegistration(email, actor) {
+    const normalizedEmail = email.toLowerCase();
+    return withAudit(actor, "registration.deleted", normalizedEmail, {}, async (client) => {
+      const result = await client.query(
+        "DELETE FROM merchant_registrations WHERE email = $1 AND status IN ('approved', 'rejected') RETURNING email",
+        [normalizedEmail]
+      );
+      if (!result.rowCount) throw new AdminStoreError(409, "Reject or approve the application before permanently deleting its documents");
+      return { deleted: true };
     });
   }
 
@@ -477,6 +882,24 @@ export function createAdminStore(databaseUrl, pool = new Pool({ connectionString
     listUsers,
     createMerchant,
     setMerchantStatus,
+    getOnboardingSettings,
+    setOnboardingEnabled,
+    getRegistrationSettings,
+    setRegistrationEnabled,
+    getMerchantOnboardingState,
+    completeMerchantOnboarding,
+    getRegistration,
+    createRegistrationDraft,
+    getRegistrationStatus,
+    getRegistrationApplication,
+    saveRegistrationProfile,
+    saveRegistrationDocument,
+    submitRegistration,
+    listRegistrations,
+    getRegistrationDetails,
+    getRegistrationDocument,
+    reviewRegistration,
+    deleteRegistration,
     listAudit,
     createAdjustment,
     createManualBankDeposit,

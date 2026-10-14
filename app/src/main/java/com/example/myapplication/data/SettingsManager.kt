@@ -130,6 +130,10 @@ class SettingsManager(val context: Context) {
 
     fun verifyDevicePin(pin: String): DevicePinCheck = devicePinManager.verifyPin(pin)
 
+    fun isBiometricUnlockEnabled(): Boolean = devicePinManager.isBiometricUnlockEnabled()
+
+    fun setBiometricUnlockEnabled(enabled: Boolean) = devicePinManager.setBiometricUnlockEnabled(enabled)
+
     private fun clearLegacySwiftPayKeys(preferences: androidx.datastore.preferences.core.MutablePreferences) {
         preferences.remove(SWIFTPAY_ACCESS_KEY)
         preferences.remove(SWIFTPAY_SECRET_KEY)

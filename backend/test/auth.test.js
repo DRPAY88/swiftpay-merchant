@@ -83,6 +83,38 @@ test("OTP sessions receive roles from the active persistent merchant record", as
   assert.equal(await auth.verifyOtp("support@swiftpay.site", "864209"), null);
 });
 
+test("registration OTP issues only an applicant-scoped token after email verification", async () => {
+  const sent = [];
+  const config = {
+    allowedEmails: [],
+    sessionSigningKey: "session-signing-key-that-is-at-least-32-bytes"
+  };
+  const userStore = {
+    getRegistrationSettings: async () => ({ enabled: true, secureStorageAvailable: true }),
+    getUser: async () => null,
+    createRegistrationDraft: async (email) => ({ email, status: "draft" })
+  };
+  const auth = createOtpAuth(config, {
+    userStore,
+    codeGenerator: () => "314159",
+    sendEmail: async (email, code, purpose) => sent.push({ email, code, purpose })
+  });
+
+  await auth.requestRegistrationOtp("Applicant@example.com");
+  assert.deepEqual(sent, [{
+    email: "applicant@example.com",
+    code: "314159",
+    purpose: "registration"
+  }]);
+  assert.equal(await auth.verifyRegistrationOtp("applicant@example.com", "000000"), null);
+  const session = await auth.verifyRegistrationOtp("applicant@example.com", "314159");
+  assert.equal(session.role, "registration_applicant");
+  const principal = await createJwtVerifier(config)(session.accessToken);
+  assert.equal(principal.role, "registration_applicant");
+  assert.equal(principal.scope, "kyb:submit");
+  assert.equal(await auth.verifyOtp("applicant@example.com", "314159"), null);
+});
+
 test("failed OTP delivery clears the challenge and allows an immediate retry", async () => {
   let shouldFail = true;
   const deliveredCodes = [];

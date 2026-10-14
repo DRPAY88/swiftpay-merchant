@@ -44,6 +44,14 @@ The backoffice supports the existing single shared SwiftPay account: balance and
 
 The Render blueprint provisions a PostgreSQL database (`swiftpay-merchant-db`, `basic-256mb`) and binds `DATABASE_URL` to the backend. Sync the blueprint in Render to create and attach the database before using `/admin/`. Until `DATABASE_URL` is configured, the backend remains available but disables persistent admin access. PostgreSQL stores merchant status, adjustments, and the audit log. Do not use this shared-account deployment as if it provided isolated merchant balances or credentials.
 
+### Merchant registration and KYB
+
+Public registration is disabled automatically unless the backend has a stable `KYB_ENCRYPTION_KEY`. Generate a dedicated 32-byte key (for example, `openssl rand -base64 32`) and configure it as a Render secret; never commit the generated value or reuse `SESSION_SIGNING_KEY`. The super-admin dashboard can enable or disable new applications after secure storage is available.
+
+Applicant profiles and uploaded KYB documents are encrypted with AES-256-GCM before PostgreSQL storage. The app accepts a business registration certificate, representative government ID, and a selfie for manual review only. The selfie is not used for automated face matching or liveness detection. Files are limited to 8 MiB each and validated against their declared PDF/JPEG/PNG type. Only super admins can review or download them. Pending applications cannot be deleted; an admin must reject or approve the application before the dashboard enables permanent deletion. Files for approved or rejected applications remain until an admin explicitly deletes the application. Approved merchant access is activated only after admin approval.
+
+Keep the encryption key stable and backed up in the deployment secret manager: losing or changing it without re-encrypting stored applications makes existing KYB files unreadable. Key rotation requires a deliberate migration of encrypted records. Keep HTTPS enabled for every deployed client/backend connection.
+
 Set Android `PAYMENT_BACKEND_URL` to this service’s HTTPS base URL. Android debug builds default to the emulator host `http://10.0.2.2:3000/` when `PAYMENT_BACKEND_URL` is unset; release builds default to `https://swiftpay-merchant.onrender.com/` and can be overridden with a Gradle property, environment variable, or `local.properties` value.
 
 - `swiftpay:payments:read`

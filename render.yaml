@@ -20,6 +20,8 @@ services:
         sync: false
       - key: SESSION_SIGNING_KEY
         sync: false
+      - key: KYB_ENCRYPTION_KEY
+        sync: false
       - key: AUTH_ALLOWED_EMAILS
         sync: false
       - key: AUTH_ADDITIONAL_ALLOWED_EMAILS

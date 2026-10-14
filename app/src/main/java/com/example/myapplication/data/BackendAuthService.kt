@@ -2,7 +2,12 @@ package com.example.myapplication.data
 
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.data.api.BackendAuthApi
+import com.example.myapplication.data.api.BackendOnboardingCompleteResponse
+import com.example.myapplication.data.api.BackendOnboardingStateResponse
+import com.example.myapplication.data.api.BackendRegistrationConfigResponse
+import com.example.myapplication.data.api.BackendRegistrationStatusResponse
 import com.example.myapplication.data.api.BackendSessionResponse
+import com.example.myapplication.data.api.RegistrationProfileBody
 import com.example.myapplication.data.api.RequestOtpBody
 import com.example.myapplication.data.api.VerifyOtpBody
 import kotlinx.serialization.json.Json
@@ -11,6 +16,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.net.URI
@@ -33,7 +39,7 @@ class BackendAuthService {
     private val baseUrl = resolveBackendBaseUrl(BuildConfig.PAYMENT_BACKEND_URL)
 
     private val httpClient = OkHttpClient.Builder()
-        .callTimeout(20, TimeUnit.SECONDS)
+        .callTimeout(120, TimeUnit.SECONDS)
         .build()
 
     private val api = Retrofit.Builder()
@@ -63,6 +69,127 @@ class BackendAuthService {
             } else {
                 throw authError(response.code(), response.errorBody()?.string())
             }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun getRegistrationConfig(): Result<BackendRegistrationConfigResponse> {
+        return try {
+            val response = api.getRegistrationConfig()
+            if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
+            Result.success(response.body() ?: throw IllegalStateException("Empty registration settings response"))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun requestRegistrationOtp(email: String): Result<Unit> {
+        return try {
+            val response = api.requestRegistrationOtp(RequestOtpBody(email))
+            if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun verifyRegistrationOtp(email: String, code: String): Result<BackendSessionResponse> {
+        return try {
+            val response = api.verifyRegistrationOtp(VerifyOtpBody(email, code))
+            if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
+            Result.success(response.body() ?: throw IllegalStateException("Empty registration verification response"))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun saveRegistrationProfile(
+        accessToken: String,
+        profile: RegistrationProfileBody
+    ): Result<Unit> {
+        return try {
+            val response = api.saveRegistrationProfile("Bearer $accessToken", profile)
+            if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun uploadRegistrationDocument(
+        accessToken: String,
+        kind: String,
+        contentType: String,
+        bytes: ByteArray
+    ): Result<Unit> {
+        return try {
+            val response = api.uploadRegistrationDocument(
+                "Bearer $accessToken",
+                kind,
+                contentType,
+                bytes.toRequestBody(contentType.toMediaType())
+            )
+            if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
+            Result.success(Unit)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun submitRegistration(accessToken: String): Result<BackendRegistrationStatusResponse> {
+        return try {
+            val response = api.submitRegistration("Bearer $accessToken")
+            if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
+            Result.success(response.body() ?: throw IllegalStateException("Empty registration status response"))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun getRegistrationStatus(accessToken: String): Result<BackendRegistrationStatusResponse> {
+        return try {
+            val response = api.getRegistrationStatus("Bearer $accessToken")
+            if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
+            Result.success(response.body() ?: throw IllegalStateException("Empty registration status response"))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun getOnboardingState(accessToken: String): Result<BackendOnboardingStateResponse> {
+        return try {
+            val response = api.getOnboardingState("Bearer $accessToken")
+            if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
+            Result.success(response.body() ?: throw IllegalStateException("Empty onboarding status response"))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun completeOnboarding(accessToken: String): Result<BackendOnboardingCompleteResponse> {
+        return try {
+            val response = api.completeOnboarding("Bearer $accessToken")
+            if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
+            Result.success(response.body() ?: throw IllegalStateException("Empty onboarding completion response"))
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {

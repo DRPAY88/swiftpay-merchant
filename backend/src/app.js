@@ -94,6 +94,33 @@ const merchantEmailSchema = z.string().trim().email().max(255).transform((email)
 const merchantStatusSchema = z.object({
   status: z.enum(["active", "suspended", "removed"])
 }).strict();
+const onboardingSettingSchema = z.object({
+  enabled: z.boolean()
+}).strict();
+const registrationProfileSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  businessRegistrationNumber: z.string().trim().min(2).max(80),
+  businessAddress: z.string().trim().min(5).max(300),
+  businessType: z.string().trim().min(2).max(100),
+  representativeFullName: z.string().trim().min(3).max(160),
+  representativePhone: z.string().trim().min(5).max(35)
+}).strict();
+const registrationReviewSchema = z.object({
+  status: z.enum(["approved", "rejected"]),
+  note: z.string().trim().max(500).default("")
+}).strict();
+const registrationEmailSchema = z.string().trim().email().max(255).transform((email) => email.toLowerCase());
+const registrationDocumentKinds = new Set(["business_certificate", "representative_id", "selfie"]);
+const registrationDocumentLimit = 8 * 1024 * 1024;
+
+function validRegistrationDocument(data, contentType, kind) {
+  if (!Buffer.isBuffer(data) || data.length === 0 || data.length > registrationDocumentLimit) return false;
+  if (kind === "selfie" && !["image/jpeg", "image/png"].includes(contentType)) return false;
+  if (contentType === "application/pdf") return data.subarray(0, 5).toString("ascii") === "%PDF-";
+  if (contentType === "image/png") return data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  if (contentType === "image/jpeg") return data[0] === 0xff && data[1] === 0xd8 && data.at(-2) === 0xff && data.at(-1) === 0xd9;
+  return false;
+}
 const adjustmentSchema = z.object({
   amount: z.number().finite().min(-1_000_000).max(1_000_000).refine((amount) => amount !== 0),
   reason: z.string().trim().min(3).max(500)
@@ -323,8 +350,18 @@ function createAuthMiddleware(verifyAccessToken, userStore) {
     }
     if (userStore) {
       const user = await userStore.getUser(req.principal.sub.toLowerCase());
-      if (!user || user.status !== "active") return res.status(401).json({ error: "unauthorized" });
-      req.principal.role = user.role;
+      if (user?.status === "active") {
+        req.principal.role = user.role;
+      } else {
+        if (req.principal.role !== "registration_applicant" || !principalHasScope(req.principal, "kyb:submit")) {
+          return res.status(401).json({ error: "unauthorized" });
+        }
+        const registration = await userStore.getRegistrationStatus?.(req.principal.sub);
+        if (!registration || registration.status === "approved") {
+          return res.status(401).json({ error: "unauthorized" });
+        }
+        req.principal.role = "registration_applicant";
+      }
     }
     next();
   });
@@ -344,6 +381,8 @@ export function createApp({
   verifyAccessToken,
   requestOtp,
   verifyOtp,
+  requestRegistrationOtp,
+  verifyRegistrationOtp,
   cryptoWidgetService,
   pushNotificationService,
   userStore,
@@ -556,6 +595,33 @@ export function createApp({
     }));
   }));
   const authLimiter = rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: "draft-8", legacyHeaders: false });
+  app.get("/v1/registration/config", asyncRoute(async (_req, res) => {
+    if (!userStore?.getRegistrationSettings) {
+      return res.json({ enabled: false, secureStorageAvailable: false });
+    }
+    res.set("Cache-Control", "no-store").json(await userStore.getRegistrationSettings());
+  }));
+  app.post("/v1/registration/request-otp", authLimiter, asyncRoute(async (req, res) => {
+    const input = parse(z.object({ email: z.string().trim().email().max(255) }).strict(), req.body);
+    if (!requestRegistrationOtp) throw new SwiftPayError(503, "Registration email verification is unavailable");
+    try {
+      await requestRegistrationOtp(input.email);
+    } catch (error) {
+      console.error("Registration verification email delivery failed:", error.message);
+      return res.status(503).json({ error: "Verification email could not be sent; try again later" });
+    }
+    res.status(202).json({ status: "accepted" });
+  }));
+  app.post("/v1/registration/verify-otp", authLimiter, asyncRoute(async (req, res) => {
+    const input = parse(z.object({
+      email: z.string().trim().email().max(255),
+      code: z.string().regex(/^\d{6}$/)
+    }).strict(), req.body);
+    if (!verifyRegistrationOtp) throw new SwiftPayError(503, "Registration email verification is unavailable");
+    const session = await verifyRegistrationOtp(input.email, input.code);
+    if (!session) return res.status(401).json({ error: "invalid_or_expired_code" });
+    res.set("Cache-Control", "no-store").json(session);
+  }));
   app.post("/v1/auth/request-otp", authLimiter, asyncRoute(async (req, res) => {
     const input = parse(z.object({ email: z.string().trim().email().max(255) }).strict(), req.body);
     try {
@@ -668,6 +734,45 @@ export function createApp({
   }));
 
   app.use("/v1", createAuthMiddleware(verifyAccessToken, userStore));
+  const registrationUploadLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 12,
+    standardHeaders: "draft-8",
+    legacyHeaders: false
+  });
+  const requireRegistrationApplicant = (req, res, next) => {
+    if (req.principal?.role !== "registration_applicant" || !principalHasScope(req.principal, "kyb:submit")) {
+      return res.status(403).json({ error: "registration_applicant_required" });
+    }
+    next();
+  };
+  app.get("/v1/registration/status", requireRegistrationApplicant, asyncRoute(async (req, res) => {
+    const status = await userStore.getRegistrationApplication(req.principal.sub);
+    if (!status) return res.status(404).json({ error: "registration_not_found" });
+    res.set("Cache-Control", "no-store").json(status);
+  }));
+  app.put("/v1/registration/profile", requireRegistrationApplicant, asyncRoute(async (req, res) => {
+    const input = parse(registrationProfileSchema, req.body);
+    res.json(await userStore.saveRegistrationProfile(req.principal.sub, input));
+  }));
+  app.put(
+    "/v1/registration/documents/:kind",
+    registrationUploadLimiter,
+    requireRegistrationApplicant,
+    express.raw({ type: ["image/jpeg", "image/png", "application/pdf"], limit: registrationDocumentLimit }),
+    asyncRoute(async (req, res) => {
+      const kind = req.params.kind;
+      const contentType = req.get("content-type")?.split(";")[0].trim().toLowerCase();
+      if (!registrationDocumentKinds.has(kind) || !validRegistrationDocument(req.body, contentType, kind)) {
+        throw new SwiftPayError(400, "Unsupported, empty, malformed, or oversized KYB document");
+      }
+      res.json(await userStore.saveRegistrationDocument(req.principal.sub, kind, contentType, req.body));
+    })
+  );
+  app.post("/v1/registration/submit", requireRegistrationApplicant, asyncRoute(async (req, res) => {
+    if (Object.keys(req.body || {}).length) throw new SwiftPayError(400, "Submission does not accept a request body");
+    res.status(202).json(await userStore.submitRegistration(req.principal.sub));
+  }));
 
   app.post("/v1/crypto/widget-url", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
     if (!cryptoWidgetService) throw new SwiftPayError(503, "USDT checkout is not configured for this service");
@@ -691,6 +796,70 @@ export function createApp({
   app.get("/v1/admin/me", requireSuperAdmin, (req, res) => {
     res.json({ email: req.principal.sub, role: req.principal.role });
   });
+
+  app.get("/v1/admin/onboarding", requireSuperAdmin, asyncRoute(async (_req, res) => {
+    res.json(await userStore.getOnboardingSettings());
+  }));
+
+  app.patch("/v1/admin/onboarding", requireSuperAdmin, asyncRoute(async (req, res) => {
+    const input = parse(onboardingSettingSchema, req.body);
+    res.json(await userStore.setOnboardingEnabled(input.enabled, req.principal.sub));
+  }));
+
+  app.get("/v1/admin/registration-settings", requireSuperAdmin, asyncRoute(async (_req, res) => {
+    res.json(await userStore.getRegistrationSettings());
+  }));
+
+  app.patch("/v1/admin/registration-settings", requireSuperAdmin, asyncRoute(async (req, res) => {
+    const input = parse(onboardingSettingSchema, req.body);
+    res.json(await userStore.setRegistrationEnabled(input.enabled, req.principal.sub));
+  }));
+
+  app.get("/v1/admin/registrations", requireSuperAdmin, asyncRoute(async (_req, res) => {
+    res.set("Cache-Control", "no-store").json(await userStore.listRegistrations());
+  }));
+
+  app.get("/v1/admin/registrations/:email", requireSuperAdmin, asyncRoute(async (req, res) => {
+    const email = parse(registrationEmailSchema, req.params.email);
+    const details = await userStore.getRegistrationDetails(email);
+    await userStore.recordAudit(req.principal.sub, "registration.viewed", email, {});
+    res.set("Cache-Control", "no-store").json(details);
+  }));
+
+  app.get("/v1/admin/registrations/:email/documents/:kind", requireSuperAdmin, asyncRoute(async (req, res) => {
+    const email = parse(registrationEmailSchema, req.params.email);
+    const kind = req.params.kind;
+    if (!registrationDocumentKinds.has(kind)) throw new SwiftPayError(404, "Document not found");
+    const document = await userStore.getRegistrationDocument(email, kind);
+    await userStore.recordAudit(req.principal.sub, "registration.document.downloaded", email, { kind });
+    res.set({
+      "Cache-Control": "no-store, private",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": `attachment; filename="${kind}.${document.contentType === "application/pdf" ? "pdf" : document.contentType === "image/png" ? "png" : "jpg"}"`
+    });
+    res.type(document.contentType).send(document.data);
+  }));
+
+  app.patch("/v1/admin/registrations/:email", requireSuperAdmin, asyncRoute(async (req, res) => {
+    const email = parse(registrationEmailSchema, req.params.email);
+    const input = parse(registrationReviewSchema, req.body);
+    res.json(await userStore.reviewRegistration(email, input.status, input.note, req.principal.sub));
+  }));
+
+  app.delete("/v1/admin/registrations/:email", requireSuperAdmin, asyncRoute(async (req, res) => {
+    const email = parse(registrationEmailSchema, req.params.email);
+    res.json(await userStore.deleteRegistration(email, req.principal.sub));
+  }));
+
+  app.get("/v1/onboarding/state", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
+    res.json(await userStore.getMerchantOnboardingState(req.principal.sub));
+  }));
+
+  app.post("/v1/onboarding/complete", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
+    const completed = await userStore.completeMerchantOnboarding(req.principal.sub);
+    if (!completed) throw new SwiftPayError(409, "This merchant account has no pending onboarding");
+    res.json({ completed: true });
+  }));
 
   app.get("/v1/wallet/manual-deposits", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
     const limit = z.coerce.number().int().min(1).max(200).catch(100).parse(req.query.limit);

@@ -79,6 +79,17 @@ export function loadConfig(env = process.env) {
       throw new Error("FCM_SERVICE_ACCOUNT_JSON must contain project_id, client_email, and private_key");
     }
   }
+  const kybEncryptionKeyValue = env.KYB_ENCRYPTION_KEY?.trim() || null;
+  let kybEncryptionKey = null;
+  if (kybEncryptionKeyValue) {
+    kybEncryptionKey = Buffer.from(kybEncryptionKeyValue, "base64");
+    if (
+      kybEncryptionKey.length !== 32 ||
+      kybEncryptionKey.toString("base64").replace(/=+$/, "") !== kybEncryptionKeyValue.replace(/=+$/, "")
+    ) {
+      throw new Error("KYB_ENCRYPTION_KEY must be a base64-encoded 32-byte key");
+    }
+  }
 
   return {
     port: Number(env.PORT || 3000),
@@ -90,6 +101,7 @@ export function loadConfig(env = process.env) {
     allowedEmails: [...new Set(allowedEmails)],
     superAdminEmails,
     databaseUrl: env.DATABASE_URL?.trim() || null,
+    kybEncryptionKey,
     resendApiKey: env.RESEND_API_KEY,
     otpFromEmail: env.OTP_FROM_EMAIL,
     currencyApiKey: env.CURRENCYAPI_KEY?.trim() || null,

@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,8 +36,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.platform.LocalContext
 import com.example.myapplication.data.SettingsManager
+import com.example.myapplication.data.DeviceBiometricAuthenticator
+import com.example.myapplication.data.DevicePinManager
 import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Popup
+import androidx.fragment.app.FragmentActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,9 +50,40 @@ fun ProfileScreen() {
     val themeMode by settingsManager.themeMode.collectAsState(initial = "SYSTEM")
     val signedInEmail by settingsManager.loggedInEmail.collectAsState(initial = null)
     val merchantAlias by settingsManager.merchantAlias.collectAsState(initial = null)
+    val hasDevicePin = remember(context) { DevicePinManager(context).hasPin() }
+    var biometricEnabled by remember(context) {
+        mutableStateOf(settingsManager.isBiometricUnlockEnabled())
+    }
     var showThemeDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val navController = LocalNavController.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val activity = context as? FragmentActivity
+
+    val handleBiometricAuthenticated by rememberUpdatedState<() -> Unit> {
+        try {
+            settingsManager.setBiometricUnlockEnabled(true)
+            biometricEnabled = true
+        } catch (error: Exception) {
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    error.message ?: "Could not enable biometric unlock."
+                )
+            }
+        }
+    }
+    val handleBiometricError by rememberUpdatedState<(String) -> Unit> { message ->
+        scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+    val biometricAuthenticator = remember(activity) {
+        activity?.let {
+            DeviceBiometricAuthenticator(
+                activity = it,
+                onAuthenticated = { handleBiometricAuthenticated() },
+                onError = { handleBiometricError(it) }
+            )
+        }
+    }
 
     val bgColor = MaterialTheme.colorScheme.background
     val surfaceColor = MaterialTheme.colorScheme.surface
@@ -55,8 +91,34 @@ fun ProfileScreen() {
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
     val borderColor = MaterialTheme.colorScheme.outlineVariant
     val accountName = merchantAlias?.takeIf { it.isNotBlank() }
-        ?: signedInEmail?.substringBefore('@')?.replace('.', ' ')?.replaceFirstChar { it.uppercase() }
-        ?: "DRPAY merchant"
+        ?: signedInEmail?.takeIf { it.isNotBlank() }
+        ?: "Merchant account"
+    val canEnableBiometrics = hasDevicePin && biometricAuthenticator?.isAvailable() == true
+
+    fun onBiometricToggle(enabled: Boolean) {
+        if (enabled) {
+            when {
+                !hasDevicePin -> scope.launch {
+                    snackbarHostState.showSnackbar("Set up an MPIN before enabling biometric unlock.")
+                }
+                biometricAuthenticator == null -> scope.launch {
+                    snackbarHostState.showSnackbar("Biometric unlock is unavailable in this app session.")
+                }
+                else -> biometricAuthenticator.authenticate()
+            }
+        } else {
+            try {
+                settingsManager.setBiometricUnlockEnabled(false)
+                biometricEnabled = false
+            } catch (error: Exception) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        error.message ?: "Could not disable biometric unlock."
+                    )
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -77,6 +139,7 @@ fun ProfileScreen() {
                 )
             )
         },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         containerColor = bgColor
     ) { innerPadding ->
         Column(
@@ -118,24 +181,76 @@ fun ProfileScreen() {
                                 color = secondaryTextColor
                             )
                         }
+                        val isSignedIn = !signedInEmail.isNullOrBlank()
                         Surface(
                             shape = RoundedCornerShape(50),
-                            color = if (signedInEmail != null) FastPayGreen.copy(alpha = 0.12f)
+                            color = if (isSignedIn) FastPayGreen.copy(alpha = 0.12f)
                             else secondaryTextColor.copy(alpha = 0.12f)
                         ) {
                             Text(
-                                text = if (signedInEmail != null) "ACTIVE" else "SIGNED OUT",
+                                text = if (isSignedIn) "ACTIVE" else "SIGNED OUT",
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (signedInEmail != null) FastPayGreen else secondaryTextColor,
+                                color = if (isSignedIn) FastPayGreen else secondaryTextColor,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 18.dp), color = borderColor)
-                    ProfileDetailRow("Account", if (signedInEmail == null) "Signed out" else "Merchant account", textColor, secondaryTextColor)
+                    ProfileDetailRow("Merchant email", signedInEmail?.takeIf { it.isNotBlank() } ?: "Not signed in", textColor, secondaryTextColor)
+                    Spacer(Modifier.height(14.dp))
+                    ProfileDetailRow("Business name", merchantAlias?.takeIf { it.isNotBlank() } ?: "Not set", textColor, secondaryTextColor)
                     Spacer(Modifier.height(14.dp))
                     ProfileDetailRow("App version", "${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})", textColor, secondaryTextColor)
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("SECURITY", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = surfaceColor,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = biometricEnabled,
+                                enabled = biometricEnabled || canEnableBiometrics,
+                                role = Role.Switch,
+                                onValueChange = ::onBiometricToggle
+                            )
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.Fingerprint,
+                            contentDescription = null,
+                            tint = FastPayBlue,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Biometric unlock", color = textColor, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = when {
+                                    biometricEnabled -> "Enabled for this device"
+                                    !hasDevicePin -> "Set up an MPIN before enabling biometric unlock"
+                                    biometricAuthenticator == null -> "Unavailable in this app session"
+                                    biometricAuthenticator.isAvailable() -> "Use an enrolled biometric to unlock"
+                                    else -> biometricAuthenticator.availabilityMessage()
+                                },
+                                color = secondaryTextColor,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Switch(
+                            checked = biometricEnabled,
+                            onCheckedChange = null
+                        )
+                    }
                 }
             }
 

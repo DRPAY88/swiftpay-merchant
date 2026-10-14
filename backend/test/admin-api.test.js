@@ -17,7 +17,7 @@ let baseUrl;
 before(async () => {
   const database = newDb();
   const { Pool } = database.adapters.createPg();
-  store = createAdminStore("postgresql://test", new Pool());
+  store = createAdminStore("postgresql://test", new Pool(), { kybEncryptionKey: Buffer.alloc(32, 7) });
   await store.initialize(["merchant@example.com", "support@swiftpay.site"], ["support@swiftpay.site"]);
 
   const app = createApp({
@@ -28,6 +28,10 @@ before(async () => {
     verifyAccessToken: async (token) => {
       if (token === "admin-token") return { sub: "support@swiftpay.site", scope };
       if (token === "merchant-token") return { sub: "merchant@example.com", scope };
+      if (token === "onboarding-merchant-token") return { sub: "onboarding@example.com", scope };
+      if (token === "registration-token") {
+        return { sub: "applicant@example.com", role: "registration_applicant", scope: "kyb:submit" };
+      }
       throw new Error("invalid token");
     },
     fetchImpl: async (url) => {
@@ -101,6 +105,208 @@ test("admin merchant lifecycle suspends, removes, and reactivates sign-in access
     body: JSON.stringify({ status: "removed" })
   });
   assert.equal((await removed.json()).status, "removed");
+});
+
+test("super admins control onboarding and merchants can complete it once", async () => {
+  await store.createMerchant("onboarding@example.com", "support@swiftpay.site");
+  const adminHeaders = {
+    authorization: "Bearer admin-token",
+    "content-type": "application/json"
+  };
+  const merchantHeaders = { authorization: "Bearer onboarding-merchant-token" };
+
+  const anonymousState = await fetch(`${baseUrl}/v1/onboarding/state`);
+  assert.equal(anonymousState.status, 401);
+
+  const forbiddenSetting = await fetch(`${baseUrl}/v1/admin/onboarding`, {
+    method: "PATCH",
+    headers: {
+      ...merchantHeaders,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ enabled: false })
+  });
+
+  test("registration applicants can submit encrypted KYB, only admins can review, and approval activates merchant access", async () => {
+    await store.createRegistrationDraft("applicant@example.com");
+    const pendingDelete = await fetch(`${baseUrl}/v1/admin/registrations/applicant%40example.com`, {
+      method: "DELETE",
+      headers: { authorization: "Bearer admin-token" }
+    });
+    assert.equal(pendingDelete.status, 409);
+    const applicantHeaders = {
+      authorization: "Bearer registration-token",
+      "content-type": "application/json"
+    };
+    const adminHeaders = {
+      authorization: "Bearer admin-token",
+      "content-type": "application/json"
+    };
+    const profile = {
+      businessName: "Example Trading",
+      businessRegistrationNumber: "BRN-2026-100",
+      businessAddress: "100 Sample Street, Manila",
+      businessType: "Retail",
+      representativeFullName: "Sample Representative",
+      representativePhone: "+639171234567"
+    };
+    const profileResponse = await fetch(`${baseUrl}/v1/registration/profile`, {
+      method: "PUT",
+      headers: applicantHeaders,
+      body: JSON.stringify(profile)
+    });
+    assert.equal(profileResponse.status, 200);
+
+    for (const [kind, contentType, bytes] of [
+      ["business_certificate", "application/pdf", Buffer.from("%PDF-1.4\nexample")],
+      ["representative_id", "image/png", Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
+      ["selfie", "image/jpeg", Buffer.from([0xff, 0xd8, 1, 2, 0xff, 0xd9])]
+    ]) {
+      const response = await fetch(`${baseUrl}/v1/registration/documents/${kind}`, {
+        method: "PUT",
+        headers: { authorization: applicantHeaders.authorization, "content-type": contentType },
+        body: bytes
+      });
+      assert.equal(response.status, 200);
+    }
+
+    const forbidden = await fetch(`${baseUrl}/v1/wallet/balance`, {
+      headers: { authorization: applicantHeaders.authorization }
+    });
+    assert.equal(forbidden.status, 403);
+
+    const submitted = await fetch(`${baseUrl}/v1/registration/submit`, {
+      method: "POST",
+      headers: applicantHeaders
+    });
+    assert.equal(submitted.status, 202);
+    assert.equal((await submitted.json()).status, "submitted");
+    const applicantStatus = await fetch(`${baseUrl}/v1/registration/status`, {
+      headers: { authorization: applicantHeaders.authorization }
+    });
+    assert.equal(applicantStatus.status, 200);
+    const applicantApplication = await applicantStatus.json();
+    assert.equal(applicantApplication.profile.businessName, profile.businessName);
+    assert.deepEqual(applicantApplication.documents.sort(), ["business_certificate", "representative_id", "selfie"]);
+
+    const detail = await fetch(`${baseUrl}/v1/admin/registrations/applicant%40example.com`, {
+      headers: { authorization: adminHeaders.authorization }
+    });
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json()).profile.businessName, profile.businessName);
+
+    const documentResponse = await fetch(
+      `${baseUrl}/v1/admin/registrations/applicant%40example.com/documents/selfie`,
+      { headers: { authorization: adminHeaders.authorization } }
+    );
+    assert.equal(documentResponse.status, 200);
+    assert.equal(documentResponse.headers.get("content-type"), "image/jpeg");
+    assert.deepEqual(Buffer.from(await documentResponse.arrayBuffer()), Buffer.from([0xff, 0xd8, 1, 2, 0xff, 0xd9]));
+
+    const rejected = await fetch(`${baseUrl}/v1/admin/registrations/applicant%40example.com`, {
+      method: "PATCH",
+      headers: adminHeaders,
+      body: JSON.stringify({ status: "rejected", note: "Please provide current documents." })
+    });
+    assert.equal((await rejected.json()).status, "rejected");
+    await store.createRegistrationDraft("applicant@example.com");
+    const rejectedApplication = await fetch(`${baseUrl}/v1/registration/status`, {
+      headers: { authorization: applicantHeaders.authorization }
+    });
+    assert.equal((await rejectedApplication.json()).reviewNote, "Please provide current documents.");
+    await assert.rejects(store.submitRegistration("applicant@example.com"), (error) => error.status === 400);
+    for (const [kind, contentType, bytes] of [
+      ["business_certificate", "application/pdf", Buffer.from("%PDF-1.4\nupdated")],
+      ["representative_id", "image/png", Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
+      ["selfie", "image/jpeg", Buffer.from([0xff, 0xd8, 3, 4, 0xff, 0xd9])]
+    ]) {
+      const response = await fetch(`${baseUrl}/v1/registration/documents/${kind}`, {
+        method: "PUT",
+        headers: { authorization: applicantHeaders.authorization, "content-type": contentType },
+        body: bytes
+      });
+      assert.equal(response.status, 200);
+    }
+    const resubmitted = await fetch(`${baseUrl}/v1/registration/submit`, {
+      method: "POST",
+      headers: applicantHeaders
+    });
+    assert.equal((await resubmitted.json()).status, "submitted");
+
+    const reviewed = await fetch(`${baseUrl}/v1/admin/registrations/applicant%40example.com`, {
+      method: "PATCH",
+      headers: adminHeaders,
+      body: JSON.stringify({ status: "approved", note: "Verified by admin" })
+    });
+    assert.equal((await reviewed.json()).status, "approved");
+    assert.equal((await store.getUser("applicant@example.com")).status, "active");
+
+    const deleted = await fetch(`${baseUrl}/v1/admin/registrations/applicant%40example.com`, {
+      method: "DELETE",
+      headers: { authorization: adminHeaders.authorization }
+    });
+    assert.deepEqual(await deleted.json(), { deleted: true });
+    assert.equal(await store.getRegistration("applicant@example.com"), null);
+    assert.equal((await store.getUser("applicant@example.com")).status, "active");
+  });
+  assert.equal(forbiddenSetting.status, 403);
+
+  const initialSetting = await fetch(`${baseUrl}/v1/admin/onboarding`, {
+    headers: merchantHeaders
+  });
+  assert.equal(initialSetting.status, 403);
+  const adminSetting = await fetch(`${baseUrl}/v1/admin/onboarding`, {
+    headers: adminHeaders
+  });
+  assert.equal(adminSetting.status, 200);
+  assert.deepEqual(await adminSetting.json(), { enabled: true });
+
+  const state = await fetch(`${baseUrl}/v1/onboarding/state`, {
+    headers: merchantHeaders
+  });
+  assert.equal(state.status, 200);
+  assert.deepEqual(await state.json(), { required: true });
+
+  const disabled = await fetch(`${baseUrl}/v1/admin/onboarding`, {
+    method: "PATCH",
+    headers: adminHeaders,
+    body: JSON.stringify({ enabled: false })
+  });
+  assert.equal(disabled.status, 200);
+  assert.deepEqual(await disabled.json(), { enabled: false });
+
+  const completed = await fetch(`${baseUrl}/v1/onboarding/complete`, {
+    method: "POST",
+    headers: merchantHeaders
+  });
+  assert.equal(completed.status, 200);
+  assert.deepEqual(await completed.json(), { completed: true });
+  const completedState = await fetch(`${baseUrl}/v1/onboarding/state`, {
+    headers: merchantHeaders
+  });
+  assert.deepEqual(await completedState.json(), { required: false });
+
+  const reenabled = await fetch(`${baseUrl}/v1/admin/onboarding`, {
+    method: "PATCH",
+    headers: adminHeaders,
+    body: JSON.stringify({ enabled: true })
+  });
+  assert.equal(reenabled.status, 200);
+  assert.deepEqual(await reenabled.json(), { enabled: true });
+
+  const duplicateCompletion = await fetch(`${baseUrl}/v1/onboarding/complete`, {
+    method: "POST",
+    headers: merchantHeaders
+  });
+  assert.equal(duplicateCompletion.status, 200);
+  assert.deepEqual(await duplicateCompletion.json(), { completed: true });
+
+  await store.createMerchant("merchant@example.com", "support@swiftpay.site");
+  const ineligibleCompletion = await fetch(`${baseUrl}/v1/onboarding/complete`, {
+    method: "POST",
+    headers: { authorization: "Bearer merchant-token" }
+  });
+  assert.equal(ineligibleCompletion.status, 409);
 });
 
 test("internal adjustments are audited but do not affect the provider balance; admin transfers are audited", async () => {

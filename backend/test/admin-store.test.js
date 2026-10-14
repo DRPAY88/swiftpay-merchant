@@ -149,3 +149,69 @@ test("admin store persists merchant status, internal adjustments, and atomic aud
     await store.close();
   }
 });
+
+test("onboarding is enabled for new merchant accounts and completion is account-wide", async () => {
+  const database = newDb();
+  const { Pool } = database.adapters.createPg();
+  const store = createAdminStore("postgresql://test", new Pool());
+  try {
+    await store.initialize(["existing@example.com"], []);
+    assert.deepEqual(await store.getOnboardingSettings(), { enabled: true });
+    assert.deepEqual(await store.getMerchantOnboardingState("existing@example.com"), {
+      required: false
+    });
+
+    await store.createMerchant("new@example.com", "support@swiftpay.site");
+    assert.deepEqual(await store.getMerchantOnboardingState("new@example.com"), {
+      required: true
+    });
+    await store.setMerchantStatus("new@example.com", "removed", "support@swiftpay.site");
+    await store.createMerchant("new@example.com", "support@swiftpay.site");
+    assert.deepEqual(await store.getMerchantOnboardingState("new@example.com"), {
+      required: true
+    });
+
+    await store.setOnboardingEnabled(false, "support@swiftpay.site");
+    assert.deepEqual(await store.getOnboardingSettings(), { enabled: false });
+    assert.deepEqual(await store.getMerchantOnboardingState("new@example.com"), {
+      required: false
+    });
+
+    await store.setOnboardingEnabled(true, "support@swiftpay.site");
+    await store.completeMerchantOnboarding("new@example.com");
+    assert.deepEqual(await store.getMerchantOnboardingState("new@example.com"), {
+      required: false
+    });
+    await store.setMerchantStatus("new@example.com", "removed", "support@swiftpay.site");
+    await store.createMerchant("new@example.com", "support@swiftpay.site");
+    await store.setOnboardingEnabled(false, "support@swiftpay.site");
+    assert.deepEqual(await store.getMerchantOnboardingState("new@example.com"), {
+      required: false
+    });
+    await store.setOnboardingEnabled(true, "support@swiftpay.site");
+    assert.deepEqual(await store.getMerchantOnboardingState("new@example.com"), {
+      required: false
+    });
+  } finally {
+    await store.close();
+  }
+});
+
+test("registration fails closed without encryption and defaults off", async () => {
+  const database = newDb();
+  const { Pool } = database.adapters.createPg();
+  const store = createAdminStore("postgresql://test", new Pool());
+  try {
+    await store.initialize([], []);
+    assert.deepEqual(await store.getRegistrationSettings(), {
+      enabled: false,
+      secureStorageAvailable: false
+    });
+    await assert.rejects(
+      store.setRegistrationEnabled(true, "support@swiftpay.site"),
+      (error) => error.status === 503
+    );
+  } finally {
+    await store.close();
+  }
+});
