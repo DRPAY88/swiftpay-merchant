@@ -775,6 +775,14 @@
             border: 1px solid #E2E8F0;
         }
 
+        .channel-icon img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            padding: 5px;
+            object-fit: contain;
+        }
+
         .channel-info {
             flex: 1;
             text-align: left;
@@ -854,6 +862,7 @@
             gap: 8px;
             margin-top: 16px;
         }
+        .collect-presets[hidden] { display: none; }
         .collect-preset {
             min-height: 40px;
             border: 1px solid #D9E2EF;
@@ -905,6 +914,52 @@
             font-size: 12px;
             line-height: 1.45;
         }
+        .collect-institution-list {
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            margin-top: 18px;
+        }
+        .collect-method-category {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .collect-method-category-title {
+            grid-column: 1 / -1;
+            margin: 0 0 2px;
+            color: var(--fp-navy);
+            font-size: 14px;
+            font-weight: 750;
+        }
+        .collect-institution-option {
+            width: 100%;
+            min-height: 76px;
+            border: 1px solid #D9E2EF;
+            font: inherit;
+            justify-content: flex-start;
+            text-align: left;
+        }
+        .collect-institution-option:disabled {
+            cursor: progress;
+            opacity: 0.65;
+        }
+        .collect-institution-option .channel-icon { color: var(--fp-blue); }
+        .collect-institution-status {
+            margin: 12px 0;
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .collect-institution-status.is-error { color: #9F2D35; }
+        .collect-institution-summary {
+            margin-top: 18px;
+            padding: 14px 16px;
+            border: 1px solid #D9E2EF;
+            border-radius: 14px;
+            background: white;
+        }
+        .collect-institution-summary .summary-row { margin: 0; }
 
         .summary-card {
             background: white;
@@ -1147,6 +1202,7 @@
         :root[data-theme="dark"] .transfer-card,
         :root[data-theme="dark"] .tap-pay-card,
         :root[data-theme="dark"] .collect-amount-panel,
+        :root[data-theme="dark"] .collect-institution-summary,
         :root[data-theme="dark"] .summary-card,
         :root[data-theme="dark"] .api-card,
         :root[data-theme="dark"] .channel-card {
@@ -1167,6 +1223,20 @@
         :root[data-theme="dark"] .channel-desc,
         :root[data-theme="dark"] .collect-heading p {
             color: var(--text-muted);
+        }
+        :root[data-theme="dark"] .collect-institution-option {
+            border-color: rgba(255,255,255,0.12);
+        }
+        :root[data-theme="dark"] .collect-heading h2,
+        :root[data-theme="dark"] .collect-institution-summary .summary-row strong,
+        :root[data-theme="dark"] .collect-institution-option .channel-title {
+            color: var(--text-main);
+        }
+        :root[data-theme="dark"] .collect-institution-option .channel-desc {
+            color: var(--text-muted);
+        }
+        :root[data-theme="dark"] .collect-institution-status.is-error {
+            color: #FFB8B8;
         }
 
         :root[data-theme="dark"] .transfer-summary {
@@ -1248,21 +1318,21 @@
         </section>
     </main>
 
-    <!-- Hosted payment collection page -->
+    <!-- Top-up payment collection page -->
     <section id="topup-page" class="page" role="dialog" aria-modal="true" aria-labelledby="topup-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <button type="button" class="btn-back" onclick="closePage('topup-page')" aria-label="Back to DRPAY dashboard">&#8249;</button>
-            <h1 id="topup-page-title" class="navbar-title" tabindex="-1">Collect</h1>
+            <button type="button" class="btn-back" onclick="backToHome()" aria-label="Back to home">&#8249;</button>
+            <h1 id="topup-page-title" class="navbar-title" tabindex="-1">Enter payment amount</h1>
         </div>
         <div class="page-content collect-content">
             <header class="collect-heading">
-                <p class="collect-eyebrow">PAYMENT COLLECTION</p>
-                <h2>Collect a payment</h2>
-                <p>Set the amount and a short description. Your customer will complete payment on SwiftPay checkout.</p>
+                <p class="collect-eyebrow">PAYMENT AMOUNT</p>
+                <h2 id="collect-amount-heading">Enter an amount</h2>
+                <p id="collect-amount-copy">Enter the amount to collect through your selected payment app.</p>
             </header>
 
             <section class="collect-amount-panel" aria-label="Payment amount">
-                <label class="input-label" for="topup-amount">Amount to collect</label>
+                <label class="input-label" id="collect-amount-label" for="topup-amount">Amount to collect (PHP)</label>
                 <div class="collect-amount-control">
                     <span class="collect-currency" aria-hidden="true">&#8369;</span>
                     <input type="number" id="topup-amount" class="collect-amount-input" min="0.01" max="1000000" step="0.01" inputmode="decimal" placeholder="0.00" oninput="updateTopUpSummary()">
@@ -1283,19 +1353,100 @@
             <div class="collect-checkout">
                 <div class="collect-checkout-mark" aria-hidden="true">&#8599;</div>
                 <div>
-                    <div class="collect-checkout-title">SwiftPay hosted checkout</div>
-                    <div class="collect-checkout-copy">Your customer chooses an available payment method on SwiftPay.</div>
+                    <div class="collect-checkout-title">SwiftPay QR Ph</div>
+                    <div class="collect-checkout-copy">Foreign-currency payments require a live quote and confirmation before QR generation.</div>
                 </div>
             </div>
 
             <div class="collect-summary">
-                <span>Amount to collect</span>
+                <span id="collect-summary-label">Amount to collect</span>
                 <strong id="sum-amount">&#8369;0.00</strong>
             </div>
-            <p class="collect-note">Any applicable fees are shown to the customer before they pay.</p>
-            <button class="btn-action" id="topup-submit-btn" onclick="executeTopUp()" style="margin-top:18px">
-                <span id="topup-btn-label">Continue to Checkout</span>
+            <p class="collect-note" id="collect-amount-note">Foreign-currency payments require a live quote and confirmation before QR generation.</p>
+            <button class="btn-action" id="topup-submit-btn" onclick="continueCollectPayment()" style="margin-top:18px">
+                <span id="topup-btn-label">Continue</span>
             </button>
+        </div>
+    </section>
+
+    <section id="collect-institution-page" class="page" role="dialog" aria-modal="true" aria-labelledby="collect-institution-page-title" aria-hidden="true" inert>
+        <div class="navbar">
+            <button type="button" class="btn-back" onclick="backToHome()" aria-label="Back to home">&#8249;</button>
+            <h1 id="collect-institution-page-title" class="navbar-title" tabindex="-1">Choose Payment App</h1>
+        </div>
+        <div class="page-content collect-content">
+            <header class="collect-heading">
+                <p class="collect-eyebrow">PAYMENT METHOD</p>
+                <h2>Choose a top-up method</h2>
+                <p>All QR payments generate a SwiftPay QR Ph code and settle in PHP. Alipay uses CNY; Toss, Kakao, and KBank use KRW, with a conversion quote shown before QR generation.</p>
+            </header>
+            <div id="collect-institution-list" class="collect-institution-list" aria-label="Payment methods">
+                <section class="collect-method-category" role="group" aria-labelledby="collect-php-category-title">
+                    <h3 id="collect-php-category-title" class="collect-method-category-title">PHP</h3>
+                    <button type="button" class="channel-card collect-institution-option" data-payment-app="GCash" aria-pressed="false" onclick="selectCollectPaymentApp('GCash')">
+                        <span class="channel-icon" aria-hidden="true"><img src="collect_gcash.png" alt=""></span>
+                        <span class="channel-info"><span class="channel-title">GCash</span></span>
+                    </button>
+                    <button type="button" class="channel-card collect-institution-option" data-payment-app="Maya" aria-pressed="false" onclick="selectCollectPaymentApp('Maya')">
+                        <span class="channel-icon" aria-hidden="true"><img src="collect_maya.png" alt=""></span>
+                        <span class="channel-info"><span class="channel-title">Maya</span></span>
+                    </button>
+                    <button type="button" class="channel-card collect-institution-option" data-payment-app="QR Ph" aria-pressed="false" onclick="selectCollectPaymentApp('QR Ph')">
+                        <span class="channel-icon" aria-hidden="true"><img src="qr_ph_logo.svg" alt=""></span>
+                        <span class="channel-info"><span class="channel-title">QR Ph</span></span>
+                    </button>
+                    <button type="button" class="channel-card" onclick="showCollectTransferAccount()" aria-label="Manual Bank Transfer">
+                        <span class="channel-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 9h18L12 4 3 9Zm2 2v7m5-7v7m4-7v7m5-7v7M3 21h18M2 18h20"/>
+                            </svg>
+                        </span>
+                        <span class="channel-info"><span class="channel-title">Manual Bank Transfer</span></span>
+                    </button>
+                </section>
+                <section class="collect-method-category" role="group" aria-labelledby="collect-other-category-title">
+                    <h3 id="collect-other-category-title" class="collect-method-category-title">Other Currencies</h3>
+                    <button type="button" class="channel-card collect-institution-option" data-payment-app="Alipay" aria-pressed="false" onclick="selectCollectPaymentApp('Alipay')">
+                        <span class="channel-icon" aria-hidden="true"><img src="collect_alipay.svg" alt=""></span>
+                        <span class="channel-info"><span class="channel-title">Alipay</span></span>
+                    </button>
+                    <button type="button" class="channel-card collect-institution-option" data-payment-app="Toss" aria-pressed="false" onclick="selectCollectPaymentApp('Toss')">
+                        <span class="channel-icon" aria-hidden="true"><img src="collect_toss.ico" alt=""></span>
+                        <span class="channel-info"><span class="channel-title">Toss</span></span>
+                    </button>
+                    <button type="button" class="channel-card collect-institution-option" data-payment-app="Kakao" aria-pressed="false" onclick="selectCollectPaymentApp('Kakao')">
+                        <span class="channel-icon" aria-hidden="true"><img src="collect_kakao.svg" alt=""></span>
+                        <span class="channel-info"><span class="channel-title">Kakao</span></span>
+                    </button>
+                    <button type="button" class="channel-card collect-institution-option" data-payment-app="KBank" aria-pressed="false" onclick="selectCollectPaymentApp('KBank')">
+                        <span class="channel-icon" aria-hidden="true"><img src="collect_kbank.png" alt=""></span>
+                        <span class="channel-info"><span class="channel-title">KBank</span></span>
+                    </button>
+                </section>
+            </div>
+        </div>
+    </section>
+
+    <section id="collect-quote-confirm-page" class="page" role="dialog" aria-modal="true" aria-labelledby="collect-quote-confirm-title" aria-hidden="true" inert>
+        <div class="navbar">
+            <button type="button" class="btn-back" onclick="backToCollectAmount()" aria-label="Back to amount">&#8249;</button>
+            <h1 id="collect-quote-confirm-title" class="navbar-title" tabindex="-1">Confirm payment</h1>
+        </div>
+        <div class="page-content collect-content">
+            <header class="collect-heading">
+                <p class="collect-eyebrow">REVIEW PAYMENT</p>
+                <h2>Confirm your Top up</h2>
+                <p>Review the customer amount and PHP settlement quote before generating the QR.</p>
+            </header>
+            <div class="collect-institution-summary">
+                <div class="summary-row"><span>Payment app</span><strong id="collect-confirm-app">—</strong></div>
+                <div class="summary-row"><span id="collect-confirm-customer-label">Customer pays</span><strong id="collect-confirm-krw">—</strong></div>
+                <div class="summary-row"><span>QR Ph settlement</span><strong id="collect-confirm-php">—</strong></div>
+                <div class="summary-row"><span>Exchange rate</span><strong id="collect-confirm-rate">—</strong></div>
+                <div class="summary-row"><span>Rate updated</span><strong id="collect-confirm-updated">—</strong></div>
+            </div>
+            <p class="collect-note">Confirming will generate a PHP-settled SwiftPay QR Ph code using this quote.</p>
+            <button type="button" class="btn-action" id="collect-confirm-button" onclick="confirmCollectKrwQuote()">Pay Now</button>
         </div>
     </section>
 
@@ -1451,6 +1602,9 @@
         let transferInstitutionsTimer;
         let transferInstitutions = [];
         let activeInstitutionIndex = -1;
+        let pendingCollectPayment = null;
+        let selectedCollectPaymentApp = null;
+        let pendingCollectQuote = null;
         let returnFocusElement = null;
         function formatPhp(value) {
             const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -1460,6 +1614,37 @@
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             }).format(numeric);
+        }
+        function formatKrw(value) {
+            const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
+            return new Intl.NumberFormat('ko-KR', {
+                style: 'currency',
+                currency: 'KRW',
+                maximumFractionDigits: 0
+            }).format(numeric);
+        }
+        function formatCny(value) {
+            const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
+            return new Intl.NumberFormat('zh-CN', {
+                style: 'currency',
+                currency: 'CNY',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(numeric);
+        }
+        function isKrwCollectApp(paymentApp = selectedCollectPaymentApp) {
+            return ['Kakao', 'Toss', 'KBank'].includes(paymentApp);
+        }
+        function isCnyCollectApp(paymentApp = selectedCollectPaymentApp) {
+            return paymentApp === 'Alipay';
+        }
+        function isQuotedCollectApp(paymentApp = selectedCollectPaymentApp) {
+            return isKrwCollectApp(paymentApp) || isCnyCollectApp(paymentApp);
+        }
+        function formatCollectAmount(value, paymentApp = selectedCollectPaymentApp) {
+            if (isKrwCollectApp(paymentApp)) return formatKrw(value);
+            if (isCnyCollectApp(paymentApp)) return formatCny(value);
+            return formatPhp(value);
         }
 
         function updateDisbursementSummary() {
@@ -1688,34 +1873,144 @@
         }
         function updateTopUpSummary() {
             const a = parseFloat(document.getElementById('topup-amount').value) || 0;
-            const formatted = "\u20B1" + a.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            const formatted = formatCollectAmount(a);
             document.getElementById('sum-amount').innerText = formatted;
-            document.getElementById('topup-btn-label').innerText = a > 0 ? `Continue with ${formatted}` : "Continue to Checkout";
+            document.getElementById('topup-btn-label').innerText = a > 0 ? `Continue with ${formatted}` : "Continue";
             document.querySelectorAll('.collect-preset').forEach(button => {
                 const selected = Number(button.dataset.amount) === a;
                 button.classList.toggle('is-selected', selected);
                 button.setAttribute('aria-pressed', String(selected));
             });
         }
-        function executeTopUp() {
-            const a = Number(document.getElementById('topup-amount').value);
-            if (!Number.isFinite(a) || a < 0.01 || a > 1000000) {
-                showNotice("Enter an amount between \u20B10.01 and \u20B11,000,000.00.", true);
+        function backToHome() {
+            pendingCollectPayment = null;
+            pendingCollectQuote = null;
+            selectedCollectPaymentApp = null;
+            if (!post('navigate_home')) {
+                const activePage = document.querySelector('.page.active');
+                if (activePage) closePage(activePage.id);
+            }
+        }
+        function backToCollectAmount() {
+            pendingCollectQuote = null;
+            openPage('topup-page');
+        }
+        function configureCollectAmountPage(paymentApp) {
+            selectedCollectPaymentApp = paymentApp;
+            pendingCollectPayment = null;
+            pendingCollectQuote = null;
+            const isKrw = isKrwCollectApp(paymentApp);
+            const isCny = isCnyCollectApp(paymentApp);
+            const currency = isKrw ? 'KRW' : (isCny ? 'CNY' : 'PHP');
+            const input = document.getElementById('topup-amount');
+            input.value = '';
+            input.min = isKrw ? '1' : '0.01';
+            input.max = '1000000';
+            input.step = isKrw ? '1' : '0.01';
+            input.placeholder = isKrw ? '0' : '0.00';
+            document.querySelector('.collect-currency').textContent = isKrw ? '\u20A9' : (isCny ? '\u00A5' : '\u20B1');
+            document.getElementById('collect-amount-label').textContent = `Amount to collect (${currency})`;
+            document.getElementById('collect-amount-heading').textContent = `Enter ${currency} amount`;
+            document.getElementById('collect-amount-copy').textContent = `${paymentApp} selected. Enter the amount the customer will pay.`;
+            document.getElementById('collect-summary-label').textContent = `Amount (${currency})`;
+            document.getElementById('collect-amount-note').textContent = isQuotedCollectApp(paymentApp)
+                ? `A live ${currency}-to-PHP exchange quote will show the PHP settlement amount for confirmation before the QR Ph code is generated.`
+                : 'This generates a PHP-denominated SwiftPay QR Ph code. Make sure the selected app supports QR Ph.';
+            document.querySelector('.collect-presets').hidden = isKrw || isCny;
+            document.getElementById('topup-submit-btn').disabled = false;
+            document.getElementById('topup-btn-label').textContent = 'Continue';
+            updateTopUpSummary();
+        }
+        function continueCollectPayment() {
+            if (!selectedCollectPaymentApp) {
+                showNotice("Choose a payment app first.", true);
                 return;
             }
-            const description = document.getElementById('topup-description').value.trim() || "Payment collection";
+            const a = Number(document.getElementById('topup-amount').value);
+            const isKrw = isKrwCollectApp();
+            const isCny = isCnyCollectApp();
+            const currency = isKrw ? 'KRW' : (isCny ? 'CNY' : 'PHP');
+            if (!Number.isFinite(a) || (isKrw ? (!Number.isInteger(a) || a < 1) : a < 0.01) || a > 1000000) {
+                showNotice(isKrw ? "Enter a whole KRW amount between \u20A91 and \u20A91,000,000." : `Enter a ${currency} amount between 0.01 and 1,000,000.00.`, true);
+                return;
+            }
+            pendingCollectPayment = {
+                amount: a,
+                currency,
+                paymentApp: selectedCollectPaymentApp,
+                description: document.getElementById('topup-description').value.trim() || "Wallet top-up"
+            };
             const button = document.getElementById('topup-submit-btn');
             button.disabled = true;
-            document.getElementById('topup-btn-label').innerText = "Opening SwiftPay checkout...";
-            if (!post("request_payment", { amount: a, currency: "PHP", description })) {
-                button.disabled = false;
-                updateTopUpSummary();
+            if (isKrw) {
+                if (!post('quote_krw_php_qr', { amountKrw: a })) button.disabled = false;
                 return;
             }
-            setTimeout(() => {
+            if (isCny) {
+                if (!post('quote_fx_php_qr', { amount: a, currency: 'CNY' })) button.disabled = false;
+                return;
+            }
+            if (!post('generate_dynamic_qr', {
+                amount: a,
+                currency: 'PHP',
+                paymentApp: selectedCollectPaymentApp
+            })) button.disabled = false;
+        }
+        function setCollectPaymentAppsDisabled(disabled) {
+            document.querySelectorAll('.collect-institution-option').forEach(option => {
+                option.disabled = disabled;
+            });
+        }
+        function selectCollectPaymentApp(paymentApp) {
+            if (!['Alipay', 'Toss', 'Kakao', 'KBank', 'GCash', 'Maya', 'QR Ph'].includes(paymentApp)) {
+                showNotice("Choose a supported payment app.", true);
+                return;
+            }
+            document.querySelectorAll('.collect-institution-option').forEach(option => {
+                const selected = option.dataset.paymentApp === paymentApp;
+                option.classList.toggle('selected', selected);
+                option.setAttribute('aria-pressed', String(selected));
+            });
+            configureCollectAmountPage(paymentApp);
+            openPage('topup-page');
+        }
+        function confirmCollectKrwQuote() {
+            if (!pendingCollectQuote?.quoteToken || !pendingCollectPayment || !isQuotedCollectApp()) {
+                showNotice("Request a new currency quote before generating the QR Ph code.", true);
+                return;
+            }
+            const button = document.getElementById('collect-confirm-button');
+            button.disabled = true;
+            const action = isKrwCollectApp() ? 'generate_quoted_krw_php_qr' : 'generate_quoted_fx_php_qr';
+            if (!post(action, { quoteToken: pendingCollectQuote.quoteToken, paymentApp: selectedCollectPaymentApp })) {
                 button.disabled = false;
-                updateTopUpSummary();
-            }, 3000);
+            }
+        }
+        function showCollectFxQuote(quote, currency) {
+            if (!quote || typeof quote.quoteToken !== 'string' ||
+                !Number.isFinite(Number(quote.customerAmount)) ||
+                Number(quote.customerAmount) !== pendingCollectPayment?.amount ||
+                quote.customerCurrency !== currency ||
+                !Number.isFinite(Number(quote.settlementAmountPhp)) ||
+                !Number.isFinite(Number(quote.ratePhpPerUnit))) {
+                showNotice(`The ${currency}-to-PHP quote response was incomplete. Please try again.`, true);
+                return;
+            }
+            pendingCollectQuote = quote;
+            document.getElementById('collect-quote-confirm-title').textContent = 'Confirm payment';
+            document.getElementById('collect-confirm-app').textContent = selectedCollectPaymentApp;
+            document.getElementById('collect-confirm-customer-label').textContent = `Customer pays (${currency})`;
+            document.getElementById('collect-confirm-krw').textContent = formatCollectAmount(quote.customerAmount);
+            document.getElementById('collect-confirm-php').textContent = formatPhp(quote.settlementAmountPhp);
+            document.getElementById('collect-confirm-rate').textContent =
+                `1 ${currency} = ₱${Number(quote.ratePhpPerUnit).toFixed(6)} PHP`;
+            document.getElementById('collect-confirm-updated').textContent =
+                quote.rateUpdatedAt ? new Date(quote.rateUpdatedAt).toLocaleString() : 'Current quote';
+            document.getElementById('collect-confirm-button').disabled = false;
+            openPage('collect-quote-confirm-page');
+        }
+        function showCollectTransferAccount() {
+            post('start_deposit_wizard', { showAccountNumberImmediately: true });
         }
 
         function sendDisbursement() {
@@ -1761,6 +2056,59 @@
 
         window.onSwiftPayResponse = window.onMayaResponse = function(json) {
             const res = JSON.parse(json);
+            if (res.action === 'quote_krw_php_qr') {
+                const amountButton = document.getElementById('topup-submit-btn');
+                amountButton.disabled = false;
+                if (!pendingCollectPayment || !isKrwCollectApp()) return;
+                if (res.status === 'error') {
+                    showNotice(res.message || 'Could not get the KRW-to-PHP quote. Please try again.', true);
+                    return;
+                }
+                const quote = res.data;
+                if (!quote || typeof quote.quoteToken !== 'string' ||
+                    !Number.isFinite(Number(quote.customerAmountKrw)) ||
+                    Number(quote.customerAmountKrw) !== pendingCollectPayment.amount ||
+                    !Number.isFinite(Number(quote.settlementAmountPhp)) ||
+                    !Number.isFinite(Number(quote.ratePhpPerKrw))) {
+                    showNotice('The KRW-to-PHP quote response was incomplete. Please try again.', true);
+                    return;
+                }
+                pendingCollectQuote = quote;
+                document.getElementById('collect-confirm-app').textContent = selectedCollectPaymentApp;
+                document.getElementById('collect-confirm-customer-label').textContent = 'Customer pays (KRW)';
+                document.getElementById('collect-confirm-krw').textContent = formatKrw(quote.customerAmountKrw);
+                document.getElementById('collect-confirm-php').textContent = formatPhp(quote.settlementAmountPhp);
+                document.getElementById('collect-confirm-rate').textContent =
+                    `₩1 = ₱${Number(quote.ratePhpPerKrw).toFixed(6)} PHP`;
+                document.getElementById('collect-confirm-updated').textContent =
+                    quote.rateUpdatedAt ? new Date(quote.rateUpdatedAt).toLocaleString() : 'Current quote';
+                document.getElementById('collect-confirm-button').disabled = false;
+                openPage('collect-quote-confirm-page');
+                return;
+            }
+            if (res.action === 'quote_fx_php_qr') {
+                document.getElementById('topup-submit-btn').disabled = false;
+                if (!pendingCollectPayment || !isCnyCollectApp() || pendingCollectPayment.currency !== 'CNY') return;
+                if (res.status === 'error') {
+                    showNotice(res.message || 'Could not get the CNY-to-PHP quote. Please try again.', true);
+                    return;
+                }
+                showCollectFxQuote(res.data, 'CNY');
+                return;
+            }
+            if (res.action === 'generate_dynamic_qr') {
+                setCollectPaymentAppsDisabled(false);
+                document.getElementById('topup-submit-btn').disabled = false;
+                return;
+            }
+            if (res.action === 'generate_quoted_krw_php_qr') {
+                document.getElementById('collect-confirm-button').disabled = false;
+                return;
+            }
+            if (res.action === 'generate_quoted_fx_php_qr') {
+                document.getElementById('collect-confirm-button').disabled = false;
+                return;
+            }
             if (res.action === 'get_transfer_institutions') {
                 clearTimeout(transferInstitutionsTimer);
                 if (res.status === 'error') {
@@ -1860,7 +2208,14 @@
             document.getElementById(panelId).hidden = false;
         }
         const initialPage = decodeURIComponent(window.location.hash.slice(1));
-        if (initialPage && document.getElementById(initialPage)) openPage(initialPage);
+        if (initialPage === 'topup-page') {
+            selectedCollectPaymentApp = null;
+            pendingCollectPayment = null;
+            pendingCollectQuote = null;
+            openPage('collect-institution-page');
+        } else if (initialPage && document.getElementById(initialPage)) {
+            openPage(initialPage);
+        }
         setTimeout(() => { getBalance(); post('get_settings'); }, 800);
         document.getElementById('disb-amount').addEventListener('input', updateDisbursementSummary);
         const institutionInput = document.getElementById('institution-search');

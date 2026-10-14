@@ -270,7 +270,8 @@ fun SwiftPayQrDialog(
     rateUpdatedAt: String? = null,
     customerAmountFx: Double? = null,
     customerCurrency: String? = null,
-    ratePhpPerUnit: Double? = null
+    ratePhpPerUnit: Double? = null,
+    paymentAppName: String? = null
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -278,7 +279,19 @@ fun SwiftPayQrDialog(
     SwiftPayBaseDialog(
         onDismissRequest = onDismiss,
         title = "SwiftPay QR Ph Payment",
-        description = "Pay the ${(customerCurrency ?: currency).uppercase()} amount using a supported QR Ph banking app.",
+        description = buildString {
+            append("Scan this SwiftPay QR Ph code with a QR Ph-enabled payment app. Settlement is in PHP.")
+            if (!paymentAppName.isNullOrBlank()) {
+                append("\nSelected payment method: ")
+                append(paymentAppName)
+                append(".")
+            }
+            if (customerCurrency != null && customerCurrency != "PHP") {
+                append("\nThe ")
+                append(customerCurrency)
+                append(" price is shown for reference; the QR charges the confirmed PHP amount. The payer's institution may apply its own conversion.")
+            }
+        },
         content = {
             val qrImage = remember(qrImageBase64) {
                 runCatching {

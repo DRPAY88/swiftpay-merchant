@@ -52,6 +52,7 @@ import java.util.Locale
 fun DepositWizardDialog(
     accountNumber: String,
     balance: Double,
+    showTransferInstructionsInitially: Boolean = false,
     onCheckout: (Double) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -61,7 +62,9 @@ fun DepositWizardDialog(
     var selectedMethod by remember { mutableStateOf("apps") }
     var expandedMethod by remember { mutableStateOf("apps") }
     var selectedCard by remember { mutableStateOf("Mastercard") }
-    var page by remember { mutableStateOf("methods") }
+    var page by remember(showTransferInstructionsInitially) {
+        mutableStateOf(if (showTransferInstructionsInitially) "transfer" else "methods")
+    }
     val context = LocalContext.current
     val background = Color(0xFF171719)
     val foreground = Color(0xFFF3F3F5)

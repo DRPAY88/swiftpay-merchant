@@ -19,7 +19,7 @@ import { TransakError } from "./transak.js";
 const amountSchema = z.number().finite().min(0.01).max(1_000_000);
 const referenceSchema = z.string().trim().min(1).max(50);
 const currencySchema = z.enum(["PHP", "USD", "EUR"]);
-const qrCurrencySchema = z.enum(["PHP", "KRW", "USD", "EUR"]);
+const qrCurrencySchema = z.enum(["PHP", "KRW", "USD", "EUR", "CNY"]);
 
 const orderSchema = z.object({
   amount: amountSchema,
@@ -47,7 +47,7 @@ const krwPhpQuoteRequestSchema = z.object({
 const fxPhpQuoteRequestSchema = z.union([
   z.object({
     amount: z.number().finite().min(0.01).max(1_000_000),
-    currency: z.enum(["KRW", "USD", "EUR"])
+    currency: z.enum(["KRW", "USD", "EUR", "CNY"])
   }).strict(),
   krwPhpQuoteRequestSchema
 ]);
@@ -62,6 +62,7 @@ const paymentLinkSchema = z.object({
   customerName: z.string().max(150).optional()
 }).strict();
 const paymentLinkCodeSchema = z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/);
+const checkoutPaymentAppSchema = z.enum(["gcash", "maya", "qrph", "alipay", "toss", "kakao", "kbank"]);
 const paymentInstitutionSchema = z.object({
   code: z.string().trim().min(1).max(128),
   name: z.string().trim().min(1).max(200),
@@ -197,8 +198,8 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
   }).format(amount));
   const safePaymentUrl = escapeHtml(paymentUrl);
   const institutionCards = institutions.map(({ name, logoUrl }) => `
-      <li class="institution-card">
-        <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(name)} logo" loading="lazy" decoding="async">
+      <li class="institution-card${logoUrl ? "" : " institution-card--text"}">
+        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(name)} logo" loading="lazy" decoding="async">` : ""}
         <span>${escapeHtml(name)}</span>
       </li>`).join("");
   const institutionContent = institutionCards
@@ -206,6 +207,45 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
     : `<p class="institution-empty">${institutionLoadFailed
       ? "Bank and wallet options are available on SwiftPay’s secure payment page."
       : "More bank and wallet options are available on SwiftPay’s secure payment page."}</p>`;
+  const qrPaymentMethods = [
+    {
+      category: "PHP",
+      methods: [
+        { code: "gcash", name: "GCash", icon: "G", description: "Pay with QR Ph" },
+        { code: "maya", name: "Maya", icon: "M", description: "Pay with QR Ph" },
+        { code: "qrph", name: "QR Ph", icon: "QR", description: "Use a QR Ph-compatible app" },
+        { href: true, name: "Manual Bank Transfer", icon: "BK", description: "Continue to SwiftPay’s secure page for transfer options" }
+      ]
+    },
+    {
+      category: "Other Currencies",
+      methods: [
+        { code: "alipay", name: "Alipay", icon: "A", description: "Pay with QR Ph" },
+        { code: "toss", name: "Toss", icon: "T", description: "Pay with QR Ph" },
+        { code: "kakao", name: "Kakao", icon: "K", description: "Pay with QR Ph" },
+        { code: "kbank", name: "KBank", icon: "KB", description: "Pay with QR Ph" }
+      ]
+    }
+  ].map(({ category, methods }) => `
+      <section class="checkout-method-group" aria-label="${category} payment methods">
+        <h3>${category}</h3>
+        <div class="checkout-method-grid">
+          ${methods.map(({ code: methodCode, name, icon, description, href }) => href
+            ? `<a class="qr-button" href="${safePaymentUrl}" rel="noopener noreferrer">
+                <span class="qr-icon" aria-hidden="true">${icon}</span>
+                <span class="qr-copy"><strong>${name}</strong><small>${description}</small></span>
+                <span class="qr-arrow" aria-hidden="true">→</span>
+              </a>`
+            : `<form class="qr-form" action="/checkout/${encodeURIComponent(code)}/qrph" method="post">
+                <input type="hidden" name="paymentApp" value="${methodCode}">
+                <button class="qr-button" type="submit">
+                  <span class="qr-icon" aria-hidden="true">${icon}</span>
+                  <span class="qr-copy"><strong>${name}</strong><small>${description}</small></span>
+                  <span class="qr-arrow" aria-hidden="true">→</span>
+                </button>
+              </form>`).join("")}
+        </div>
+      </section>`).join("");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -219,7 +259,7 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
 <body>
   <main class="checkout-card">
     <header class="checkout-header">
-      <div class="brand-mark" aria-hidden="true">D</div>
+      <div class="brand-mark"><img src="/checkout-assets/drpay_mark.png" alt="DRPAY"></div>
       <div class="brand-copy">
         <p class="eyebrow">DRPAY checkout</p>
         <p class="secure-label"><span aria-hidden="true">✓</span> Secure payment</p>
@@ -246,15 +286,11 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
       </a>
       <p class="provider-note">You’ll see all supported banks and payment methods on SwiftPay’s secure page.</p>
     </section>
-    <div class="checkout-divider"><span>or</span></div>
-    <form class="qr-form" action="/checkout/${encodeURIComponent(code)}/qrph" method="post">
-      <input type="hidden" name="paymentApp" value="qrph">
-      <button class="qr-button" type="submit">
-        <span class="qr-icon" aria-hidden="true">QR</span>
-        <span class="qr-copy"><strong>Pay with QR Ph</strong><small>Use a banking or wallet app that supports QR Ph</small></span>
-        <span class="qr-arrow" aria-hidden="true">→</span>
-      </button>
-    </form>
+    <div class="checkout-divider"><span>or pay with QR Ph</span></div>
+    <section class="checkout-qr-methods" aria-label="QR Ph payment methods">
+      <p class="checkout-method-note">Choose your payment app. The payment link amount stays fixed and QR Ph settles in PHP.</p>
+      ${qrPaymentMethods}
+    </section>
     <footer class="checkout-footer">
       <span class="footer-lock" aria-hidden="true">●</span>
       Payment details are securely handled by SwiftPay.
@@ -284,7 +320,7 @@ function checkoutQrPage({ code, title, amount, currency, paymentApp, phpAmount, 
 <body>
   <main class="checkout-card">
     <header class="checkout-header">
-      <div class="brand-mark" aria-hidden="true">D</div>
+      <div class="brand-mark"><img src="/checkout-assets/drpay_mark.png" alt="DRPAY"></div>
       <div class="brand-copy">
         <p class="eyebrow">DRPAY checkout</p>
         <p class="secure-label"><span aria-hidden="true">✓</span> Secure payment</p>
@@ -324,7 +360,7 @@ function checkoutErrorPage(message) {
 <body>
   <main class="checkout-card">
     <header class="checkout-header">
-      <div class="brand-mark" aria-hidden="true">D</div>
+      <div class="brand-mark"><img src="/checkout-assets/drpay_mark.png" alt="DRPAY"></div>
       <div class="brand-copy"><p class="eyebrow">DRPAY checkout</p></div>
     </header>
     <section class="payment-summary">
@@ -385,12 +421,53 @@ export function createApp({
   verifyRegistrationOtp,
   cryptoWidgetService,
   pushNotificationService,
-  userStore
+  userStore,
+  clock = () => Date.now()
 }) {
   if (!verifyAccessToken) throw new Error("A JWT verifier is required");
   if (!requestOtp || !verifyOtp) throw new Error("OTP auth handlers are required");
   const app = express();
   const requestProvider = (path, options) => callSwiftPay(config, fetchImpl, path, options);
+  let paymentInstitutionCatalogue = null;
+  let paymentInstitutionCatalogueLoadedAt = 0;
+  let paymentInstitutionCatalogueRetryAt = 0;
+  let paymentInstitutionCatalogueRequest = null;
+
+  async function loadPaymentInstitutionCatalogue() {
+    const currentTime = clock();
+    if (paymentInstitutionCatalogue && currentTime - paymentInstitutionCatalogueLoadedAt < 60_000) {
+      return { institutions: paymentInstitutionCatalogue, failed: false };
+    }
+    if (currentTime < paymentInstitutionCatalogueRetryAt) {
+      return { institutions: paymentInstitutionCatalogue || [], failed: true };
+    }
+    if (paymentInstitutionCatalogueRequest) return paymentInstitutionCatalogueRequest;
+
+    paymentInstitutionCatalogueRequest = (async () => {
+      try {
+        const result = await requestProvider("institutions");
+        const parsedInstitutions = z.array(paymentInstitutionSchema).safeParse(result.data);
+        if (!parsedInstitutions.success) {
+          throw new SwiftPayError(502, "SwiftPay returned an invalid payment institution catalogue");
+        }
+        paymentInstitutionCatalogue = parsedInstitutions.data;
+        paymentInstitutionCatalogueLoadedAt = clock();
+        paymentInstitutionCatalogueRetryAt = 0;
+        return { institutions: paymentInstitutionCatalogue, failed: false };
+      } catch (error) {
+        paymentInstitutionCatalogueRetryAt = clock() + 30_000;
+        return {
+          institutions: paymentInstitutionCatalogue || [],
+          failed: true,
+          error
+        };
+      } finally {
+        paymentInstitutionCatalogueRequest = null;
+      }
+    })();
+    return paymentInstitutionCatalogueRequest;
+  }
+
   const loadPublicPaymentLink = async (code) => {
     const result = await requestProvider(`payments/links/${encodeURIComponent(code)}`, { auth: "basic" });
     let paymentUrl;
@@ -447,29 +524,28 @@ export function createApp({
       const link = await loadPublicPaymentLink(code);
       let institutions = [];
       let institutionLoadFailed = false;
-      try {
-        const result = await requestProvider("institutions");
-        const parsedInstitutions = z.array(paymentInstitutionSchema).safeParse(result.data);
-        if (!parsedInstitutions.success) {
-          throw new SwiftPayError(502, "SwiftPay returned an invalid payment institution catalogue");
-        }
-        institutions = parsedInstitutions.data
-          .filter((institution) =>
-            institution.enabled !== false &&
-            institution.live !== false &&
-            (!institution.currencies || institution.currencies.includes(link.currency)) &&
-            (institution.minAmount === undefined || link.amount >= institution.minAmount) &&
-            (institution.maxAmount === undefined || link.amount <= institution.maxAmount)
-          )
-          .map(({ name, logoUrl }) => ({ name, logoUrl: trustedInstitutionLogoUrl(logoUrl) }))
-          .filter((institution) => institution.logoUrl !== null);
-      } catch (error) {
-        institutionLoadFailed = true;
-        console.error("Checkout institution logos could not be loaded", JSON.stringify({
+      const catalogue = await loadPaymentInstitutionCatalogue();
+      institutionLoadFailed = catalogue.failed;
+      if (catalogue.error) {
+        const error = catalogue.error;
+        console.error("Checkout institution catalogue request failed", JSON.stringify({
           errorName: error instanceof Error ? error.name : "UnknownError",
-          ...(error instanceof SwiftPayError ? { status: error.status } : {})
+          ...(error instanceof SwiftPayError ? {
+            status: error.status,
+            ...(error.providerStatus ? { providerStatus: error.providerStatus } : {}),
+            ...(error.errorCode ? { errorCode: error.errorCode } : {})
+          } : {})
         }));
       }
+      institutions = catalogue.institutions
+        .filter((institution) =>
+          institution.enabled !== false &&
+          institution.live !== false &&
+          (!institution.currencies || institution.currencies.includes(link.currency)) &&
+          (institution.minAmount === undefined || link.amount >= institution.minAmount) &&
+          (institution.maxAmount === undefined || link.amount <= institution.maxAmount)
+        )
+        .map(({ name, logoUrl }) => ({ name, logoUrl: trustedInstitutionLogoUrl(logoUrl) }));
       const title = [link.title, link.description]
         .find((value) => typeof value === "string" && value.trim())
         || "Payment request";
@@ -499,8 +575,7 @@ export function createApp({
   app.post("/checkout/:code/qrph", checkoutPaymentLimiter, asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);
     const link = await loadPublicPaymentLink(code);
-    const paymentApp = z.literal("qrph").default("qrph")
-      .parse(req.body?.paymentApp || "qrph");
+    const paymentApp = parse(checkoutPaymentAppSchema.default("qrph"), req.body?.paymentApp || "qrph");
     const rate = link.currency === "PHP"
       ? { phpPerUnit: 1, updatedAt: new Date().toISOString() }
       : await getLatestPhpRate(link.currency, config.currencyApiKey, fxFetchImpl);
@@ -548,7 +623,14 @@ export function createApp({
       title,
       amount: link.amount,
       currency: link.currency,
-      paymentApp: paymentApp === "qrph" ? null : paymentApp,
+      paymentApp: paymentApp === "qrph" ? null : {
+        gcash: "GCash",
+        maya: "Maya",
+        alipay: "Alipay",
+        toss: "Toss",
+        kakao: "Kakao",
+        kbank: "KBank"
+      }[paymentApp],
       phpAmount,
       phpPerUnit: rate.phpPerUnit,
       imageBase64: image.data.toString("base64")
@@ -963,7 +1045,7 @@ export function createApp({
   }));
 
   app.post("/v1/payments/qrph", requireScope("swiftpay:payments:write"), asyncRoute(async (req, res) => {
-    if (["KRW", "USD", "EUR"].includes(req.body?.currency) && !req.body?.quoteToken) {
+    if (["KRW", "USD", "EUR", "CNY"].includes(req.body?.currency) && !req.body?.quoteToken) {
       throw new FxQuoteError(400, "Foreign-currency QR payments require a locked PHP quote; request a new quote first");
     }
     const request = parse(qrPaymentSchema, req.body);
@@ -1244,7 +1326,7 @@ export function createApp({
       !(error instanceof FxQuoteError)
       ? "Internal server error"
       : error.message;
-    if (status >= 500) {
+    if (status >= 500 || (error instanceof SwiftPayError && error.providerStatus)) {
       const secrets = [
         config.swiftPayAccessKey,
         config.swiftPaySecretKey,

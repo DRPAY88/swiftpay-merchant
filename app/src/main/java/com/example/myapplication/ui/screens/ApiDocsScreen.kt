@@ -111,7 +111,7 @@ fun ApiDocsScreen() {
             DocSection(
                 title = "6. QR Ph and verified callbacks",
                 icon = Icons.Rounded.Security,
-                content = "QR Ph settles in PHP. KRW, USD, and EUR customer prices use a short-lived signed FX quote to lock the PHP amount. Configure the SwiftPay callback URL in the Merchant Portal; verified terminal callbacks take precedence over polling.",
+                content = "QR Ph settles in PHP. KRW, USD, EUR, and CNY customer prices use a short-lived signed FX quote to lock the PHP amount. Configure the SwiftPay callback URL in the Merchant Portal; verified terminal callbacks take precedence over polling.",
                 code = "POST /v1/payments/qrph/quote\nPOST /v1/payments/qrph\nPOST /v1/webhooks/swiftpay",
                 cardColor = cardColor,
                 textColor = textColor
