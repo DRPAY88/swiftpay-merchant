@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0B1F3A">
     <title>DRPAY</title>
+    <script>
+        const appTheme = new URLSearchParams(window.location.search).get("theme");
+        if (appTheme === "dark" || appTheme === "light") {
+            document.documentElement.dataset.theme = appTheme;
+        }
+    </script>
     <style>
         :root {
             --fp-blue: #1B4F9C;
@@ -1089,6 +1095,105 @@
             .page-content { padding-inline: 16px; }
             .transfer-body { padding: 18px; }
             .transfer-hero { padding-inline: 18px; }
+        }
+
+        :root[data-theme="dark"] {
+            color-scheme: dark;
+            --fp-blue: #9BBCEB;
+            --fp-sky: #1D3557;
+            --surface: #17243A;
+            --bg-gray: #071429;
+            --text-main: #EAF1FA;
+            --text-muted: #B5C3D6;
+            --focus-ring: #9BBCEB;
+        }
+
+        :root[data-theme="dark"] body,
+        :root[data-theme="dark"] .page {
+            background-color: var(--bg-gray);
+            color: var(--text-main);
+        }
+
+        :root[data-theme="dark"] .navbar {
+            background: var(--surface);
+            border-color: rgba(255,255,255,0.1);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+        }
+
+        :root[data-theme="dark"] .navbar-title,
+        :root[data-theme="dark"] .section-title,
+        :root[data-theme="dark"] .transfer-hero h2,
+        :root[data-theme="dark"] .summary-row strong,
+        :root[data-theme="dark"] .input-label {
+            color: var(--text-main);
+        }
+
+        :root[data-theme="dark"] .btn-back {
+            color: var(--text-main);
+            background: var(--fp-sky);
+        }
+
+        :root[data-theme="dark"] .btn-back:active {
+            background: #29466B;
+        }
+
+        :root[data-theme="dark"] .action-icon,
+        :root[data-theme="dark"] .action-card:hover,
+        :root[data-theme="dark"] .action-card:active {
+            background: var(--fp-sky);
+            color: var(--fp-blue);
+        }
+
+        :root[data-theme="dark"] .transfer-card,
+        :root[data-theme="dark"] .tap-pay-card,
+        :root[data-theme="dark"] .collect-amount-panel,
+        :root[data-theme="dark"] .summary-card,
+        :root[data-theme="dark"] .api-card,
+        :root[data-theme="dark"] .channel-card {
+            background: var(--surface);
+            color: var(--text-main);
+            border-color: rgba(255,255,255,0.12);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+        }
+
+        :root[data-theme="dark"] .transfer-hero {
+            background: linear-gradient(135deg, #1D3557, #17243A);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        :root[data-theme="dark"] .transfer-hero p,
+        :root[data-theme="dark"] .summary-row,
+        :root[data-theme="dark"] .helper-copy,
+        :root[data-theme="dark"] .channel-desc,
+        :root[data-theme="dark"] .collect-heading p {
+            color: var(--text-muted);
+        }
+
+        :root[data-theme="dark"] .transfer-summary {
+            background: #0D1C31;
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        :root[data-theme="dark"] .modern-input,
+        :root[data-theme="dark"] .institution-picker-control {
+            background: #0D1C31;
+            border-color: #425674;
+            color: var(--text-main);
+        }
+
+        :root[data-theme="dark"] .modern-input::placeholder {
+            color: #AABBD0;
+        }
+
+        :root[data-theme="dark"] .channel-card.selected {
+            background: #1D3557;
+            border-color: #9BBCEB;
+        }
+
+        :root[data-theme="dark"] .action-result {
+            background: #3A2028;
+            border-color: #75414A;
+            color: #FFD9DE;
         }
     </style>
 </head>

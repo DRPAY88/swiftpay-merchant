@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -37,10 +38,18 @@ fun MiniAppScreen(
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val settings = remember { SettingsManager(context) }
+    val themeMode by settings.themeMode.collectAsState(initial = "SYSTEM")
+    val isDarkTheme = when (themeMode) {
+        "DARK" -> true
+        "LIGHT" -> false
+        else -> isSystemInDarkTheme()
+    }
 
-    val webViewUrl = remember(initialPath) {
+    val webViewUrl = remember(initialPath, isDarkTheme) {
         val baseUrl = "file:///android_asset/index.html"
-        if (!initialPath.isNullOrBlank()) "$baseUrl#$initialPath" else baseUrl
+        val themeUrl = "$baseUrl?theme=${if (isDarkTheme) "dark" else "light"}"
+        if (!initialPath.isNullOrBlank()) "$themeUrl#$initialPath" else themeUrl
     }
 
     val uiState = viewModel.uiState

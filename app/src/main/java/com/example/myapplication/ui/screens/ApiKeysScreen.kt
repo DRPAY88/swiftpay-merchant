@@ -59,11 +59,11 @@ fun ApiKeysScreen() {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         DrPayMarkBadge(size = 28.dp)
-                        Text("Payment Service", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                        Text("Payment Service", color = textColor, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = FastPayNavy
+                    containerColor = bgColor
                 )
             )
         },
@@ -78,8 +78,9 @@ fun ApiKeysScreen() {
         ) {
 
             Surface(
-                color = Color(0xFFFFF3CD),
-                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -87,11 +88,11 @@ fun ApiKeysScreen() {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(Icons.Rounded.Warning, null, tint = Color(0xFFF57C00), modifier = Modifier.size(20.dp))
+                    Icon(Icons.Rounded.Warning, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
                     Text(
                         "SwiftPay merchant credentials are held by the secure payment backend, not on this device.",
-                        color = Color(0xFFF57C00),
-                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -107,10 +108,10 @@ fun ApiKeysScreen() {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text("Backend", fontWeight = FontWeight.Bold, color = textColor)
                     Text(backendUrl, color = secondaryTextColor, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color.LightGray.copy(alpha = 0.3f))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     Text(
                         if (backendAccessToken.isNullOrBlank()) "Sign in to authenticate with the payment service" else "Authenticated session active",
-                        color = if (backendAccessToken.isNullOrBlank()) Color(0xFFE53935) else Color(0xFF16835D),
+                        color = if (backendAccessToken.isNullOrBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -140,7 +141,7 @@ fun ApiKeysScreen() {
 
                     Text(
                         "Your customized merchant alias used for generating shareable payment links: https://pay.swiftpay.ph/{alias}",
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
                         color = secondaryTextColor,
                         lineHeight = 16.sp
                     )
@@ -151,8 +152,8 @@ fun ApiKeysScreen() {
                         OutlinedTextField(
                             value = aliasInput,
                             onValueChange = { aliasInput = it.trim() },
-                            label = { Text("Merchant Alias", fontSize = 12.sp) },
-                            placeholder = { Text("e.g. sweetrise or mybusiness", fontSize = 12.sp) },
+                            label = { Text("Merchant alias") },
+                            placeholder = { Text("e.g. sweetrise or mybusiness") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
@@ -268,19 +269,20 @@ fun ApiKeysScreen() {
             Spacer(Modifier.height(24.dp))
 
             Surface(
-                color = Color(0xFFFFF3CD),
-                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Warning, null, tint = Color(0xFFF57C00), modifier = Modifier.size(16.dp))
+                        Icon(Icons.Rounded.Warning, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "How to manage SwiftPay credentials",
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF57C00),
-                            fontSize = 12.sp
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            style = MaterialTheme.typography.titleSmall
                         )
                     }
                     Spacer(Modifier.height(8.dp))
@@ -288,9 +290,9 @@ fun ApiKeysScreen() {
                         "To manage or update API credentials, contact SwiftPay support:\n" +
                         "• Email: support@swiftpay.ph\n" +
                         "• Portal: https://api.pay.live.swiftpay.ph/api-documentation",
-                        fontSize = 11.sp,
-                        color = Color(0xFFF57C00).copy(alpha = 0.85f),
-                        lineHeight = 17.sp
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        lineHeight = 19.sp
                     )
                 }
             }
@@ -307,14 +309,14 @@ private fun CredentialRow(
     onCopy: () -> Unit
 ) {
     val textColor = MaterialTheme.colorScheme.onSurface
-    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, fontSize = 11.sp, color = secondaryTextColor, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(2.dp))
             if (value.isNullOrBlank()) {
                 Text("Not Configured", fontSize = 13.sp, color = Color.Red.copy(alpha = 0.7f), fontWeight = FontWeight.Medium)
