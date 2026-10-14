@@ -73,6 +73,221 @@ async function loadUsers() {
   }
 }
 
+async function loadOnboarding() {
+  const toggle = document.querySelector("#onboarding-enabled");
+  const status = document.querySelector("#onboarding-status");
+  toggle.disabled = true;
+  const setting = await api("/v1/admin/onboarding");
+  toggle.checked = setting.enabled;
+  status.textContent = setting.enabled
+    ? "Onboarding is enabled for eligible new merchant accounts."
+    : "Onboarding is disabled for eligible new merchant accounts.";
+  toggle.disabled = false;
+}
+
+async function updateOnboarding(enabled) {
+  const toggle = document.querySelector("#onboarding-enabled");
+  const status = document.querySelector("#onboarding-status");
+  toggle.disabled = true;
+  try {
+    const setting = await api("/v1/admin/onboarding", {
+      method: "PATCH",
+      body: JSON.stringify({ enabled })
+    });
+    toggle.checked = setting.enabled;
+    status.textContent = setting.enabled
+      ? "Onboarding is enabled for eligible new merchant accounts."
+      : "Onboarding is disabled for eligible new merchant accounts.";
+  } catch (error) {
+    toggle.checked = !enabled;
+    showMessage(dashboardMessage, error.message);
+    return;
+  } finally {
+    toggle.disabled = false;
+  }
+  try {
+    await loadAudit();
+    showMessage(dashboardMessage, "Onboarding setting updated.", false);
+  } catch (error) {
+    showMessage(dashboardMessage, `Onboarding setting saved, but the audit trail could not refresh: ${error.message}`);
+  }
+}
+
+async function loadRegistrationSettings() {
+  const toggle = document.querySelector("#registration-enabled");
+  const status = document.querySelector("#registration-status");
+  toggle.disabled = true;
+  const setting = await api("/v1/admin/registration-settings");
+  toggle.checked = setting.enabled;
+  toggle.disabled = !setting.secureStorageAvailable;
+  status.textContent = !setting.secureStorageAvailable
+    ? "Registration is unavailable. Configure KYB_ENCRYPTION_KEY before accepting applications."
+    : setting.enabled
+      ? "Open registration is accepting applications."
+      : "Open registration is disabled.";
+}
+
+async function updateRegistrationSetting(enabled) {
+  const toggle = document.querySelector("#registration-enabled");
+  const status = document.querySelector("#registration-status");
+  toggle.disabled = true;
+  try {
+    const setting = await api("/v1/admin/registration-settings", {
+      method: "PATCH",
+      body: JSON.stringify({ enabled })
+    });
+    toggle.checked = setting.enabled;
+    status.textContent = setting.enabled
+      ? "Open registration is accepting applications."
+      : "Open registration is disabled.";
+    await Promise.all([loadRegistrations(), loadAudit()]);
+    showMessage(dashboardMessage, "Registration setting updated.", false);
+  } catch (error) {
+    toggle.checked = !enabled;
+    showMessage(dashboardMessage, error.message);
+  } finally {
+    toggle.disabled = false;
+  }
+}
+
+async function loadRegistrations() {
+  const registrations = await api("/v1/admin/registrations");
+  const tbody = document.querySelector("#registrations-table");
+  tbody.replaceChildren();
+  for (const registration of registrations) {
+    const row = document.createElement("tr");
+    cell(row, registration.email);
+    cell(row, registration.status);
+    cell(row, new Date(registration.updatedAt).toLocaleString());
+    const actions = document.createElement("td");
+    const review = document.createElement("button");
+    review.className = "button secondary";
+    review.textContent = "View";
+    review.addEventListener("click", () => showRegistration(registration.email));
+    actions.append(review);
+    row.append(actions);
+    tbody.append(row);
+  }
+}
+
+async function downloadRegistrationDocument(email, kind) {
+  const response = await fetch(`/v1/admin/registrations/${encodeURIComponent(email)}/documents/${encodeURIComponent(kind)}`, {
+    headers: { Authorization: `Bearer ${sessionStorage.getItem(tokenKey)}` }
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    if (response.status === 401) signOut();
+    throw new Error(body.error || `Document download failed (${response.status})`);
+  }
+  const blob = await response.blob();
+  const extension = blob.type === "application/pdf" ? "pdf" : blob.type === "image/png" ? "png" : "jpg";
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${kind}.${extension}`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function showRegistration(email) {
+  const detail = document.querySelector("#registration-detail");
+  try {
+    const registration = await api(`/v1/admin/registrations/${encodeURIComponent(email)}`);
+    detail.replaceChildren();
+    detail.classList.remove("hidden");
+    const heading = document.createElement("h3");
+    heading.textContent = `Application: ${registration.email} (${registration.status})`;
+    detail.append(heading);
+    const fields = [
+      ["Business name", registration.profile.businessName],
+      ["Registration number", registration.profile.businessRegistrationNumber],
+      ["Business address", registration.profile.businessAddress],
+      ["Business type", registration.profile.businessType],
+      ["Authorized representative", registration.profile.representativeFullName],
+      ["Representative phone", registration.profile.representativePhone],
+      ["Review note", registration.reviewNote]
+    ];
+    const list = document.createElement("dl");
+    for (const [label, value] of fields) {
+      const term = document.createElement("dt");
+      term.textContent = label;
+      const description = document.createElement("dd");
+      description.textContent = value || "—";
+      list.append(term, description);
+    }
+    detail.append(list);
+    const documents = document.createElement("div");
+    documents.className = "review-actions";
+    for (const documentInfo of registration.documents) {
+      const download = document.createElement("button");
+      download.type = "button";
+      download.className = "button secondary";
+      download.textContent = `Download ${documentInfo.kind.replaceAll("_", " ")}`;
+      download.addEventListener("click", () => downloadRegistrationDocument(email, documentInfo.kind)
+        .catch((error) => showMessage(dashboardMessage, error.message)));
+      documents.append(download);
+    }
+    detail.append(documents);
+
+    const actions = document.createElement("div");
+    actions.className = "review-actions";
+    if (registration.status === "submitted") {
+      const note = document.createElement("textarea");
+      note.maxLength = 500;
+      note.placeholder = "Review note (optional; visible to applicant)";
+      actions.append(note);
+      for (const status of ["approved", "rejected"]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `button ${status === "rejected" ? "danger" : ""}`;
+        button.textContent = status === "approved" ? "Approve and activate" : "Reject";
+        button.addEventListener("click", () => reviewRegistration(email, status, note.value));
+        actions.append(button);
+      }
+    } else if (registration.status === "approved" || registration.status === "rejected") {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "button danger";
+      remove.textContent = "Delete application and documents";
+      remove.addEventListener("click", () => deleteRegistration(email));
+      actions.append(remove);
+    }
+    detail.append(actions);
+  } catch (error) {
+    showMessage(dashboardMessage, error.message);
+  }
+}
+
+async function reviewRegistration(email, status, note) {
+  const prompt = status === "approved"
+    ? `Approve ${email} and activate merchant sign-in?`
+    : `Reject ${email}'s application? Documents will remain stored until explicitly deleted.`;
+  if (!window.confirm(prompt)) return;
+  try {
+    await api(`/v1/admin/registrations/${encodeURIComponent(email)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, note })
+    });
+    await Promise.all([loadRegistrations(), loadUsers(), loadAudit()]);
+    await showRegistration(email);
+    showMessage(dashboardMessage, `Application ${status}.`, false);
+  } catch (error) {
+    showMessage(dashboardMessage, error.message);
+  }
+}
+
+async function deleteRegistration(email) {
+  if (!window.confirm(`Permanently delete ${email}'s application and all encrypted KYB documents? This cannot be undone.`)) return;
+  try {
+    await api(`/v1/admin/registrations/${encodeURIComponent(email)}`, { method: "DELETE" });
+    document.querySelector("#registration-detail").classList.add("hidden");
+    await Promise.all([loadRegistrations(), loadAudit()]);
+    showMessage(dashboardMessage, "Application and documents permanently deleted.", false);
+  } catch (error) {
+    showMessage(dashboardMessage, error.message);
+  }
+}
+
 async function updateUser(email, status) {
   try {
     await api(`/v1/admin/users/${encodeURIComponent(email)}`, {
@@ -152,7 +367,10 @@ async function loadDashboard() {
   loginPanel.classList.add("hidden");
   dashboard.classList.remove("hidden");
   signOutButton.classList.remove("hidden");
-  const results = await Promise.allSettled([loadUsers(), loadBalance(), loadTransfers(), loadAudit()]);
+  const results = await Promise.allSettled([
+    loadUsers(), loadOnboarding(), loadRegistrationSettings(), loadRegistrations(),
+    loadBalance(), loadTransfers(), loadAudit()
+  ]);
   const failed = results.find((result) => result.status === "rejected");
   if (failed) showMessage(dashboardMessage, failed.reason.message);
 }
@@ -186,6 +404,13 @@ verifyCodeForm.addEventListener("submit", async (event) => {
   } catch (error) {
     showMessage(loginMessage, error.message);
   }
+});
+
+document.querySelector("#onboarding-enabled").addEventListener("change", (event) => {
+  updateOnboarding(event.currentTarget.checked);
+});
+document.querySelector("#registration-enabled").addEventListener("change", (event) => {
+  updateRegistrationSetting(event.currentTarget.checked);
 });
 
 document.querySelector("#add-user-form").addEventListener("submit", async (event) => {

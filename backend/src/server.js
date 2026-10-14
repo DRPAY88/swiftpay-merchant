@@ -6,7 +6,9 @@ import { createFcmSender } from "./fcm.js";
 import { createTransakWidgetService } from "./transak.js";
 
 const config = loadConfig();
-const userStore = config.databaseUrl ? createAdminStore(config.databaseUrl) : null;
+const userStore = config.databaseUrl
+  ? createAdminStore(config.databaseUrl, undefined, { kybEncryptionKey: config.kybEncryptionKey })
+  : null;
 const pushNotificationService = createFcmSender(config.fcmServiceAccountJson);
 if (userStore) {
   await userStore.initialize(config.allowedEmails, config.superAdminEmails);
@@ -14,7 +16,7 @@ if (userStore) {
   console.error("Admin backoffice is disabled until DATABASE_URL is configured");
 }
 const otpAuth = createOtpAuth(config, {
-  sendEmail: (email, code) => sendOtpEmail(config, email, code),
+  sendEmail: (email, code, purpose) => sendOtpEmail(config, email, code, fetch, purpose),
   userStore
 });
 const app = createApp({
@@ -22,6 +24,8 @@ const app = createApp({
   verifyAccessToken: createJwtVerifier(config),
   requestOtp: otpAuth.requestOtp,
   verifyOtp: otpAuth.verifyOtp,
+  requestRegistrationOtp: otpAuth.requestRegistrationOtp,
+  verifyRegistrationOtp: otpAuth.verifyRegistrationOtp,
   cryptoWidgetService: createTransakWidgetService(config),
   pushNotificationService,
   userStore

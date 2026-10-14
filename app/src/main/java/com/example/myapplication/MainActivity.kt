@@ -5,10 +5,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.tween
@@ -46,6 +46,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.fragment.app.FragmentActivity
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import com.example.myapplication.data.SessionManager
@@ -84,7 +85,7 @@ interface NavController {
     fun logout()
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -265,6 +266,7 @@ fun SwiftPayApp() {
                     Route.DeviceLock -> NavEntry(key) {
                         DevicePinScreen(
                             email = loggedInEmail,
+                            biometricUnlockEnabled = settings.isBiometricUnlockEnabled(),
                             onUnlocked = {
                                 isDeviceUnlocked = true
                                 navController.navigate(Route.Home)

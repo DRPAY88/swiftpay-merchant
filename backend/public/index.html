@@ -64,6 +64,32 @@
         <div class="table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody id="users-table"></tbody></table></div>
       </section>
 
+      <section class="panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">NEW MERCHANTS</p><h2>App onboarding</h2></div>
+          <label class="setting-toggle" for="onboarding-enabled">
+            <input id="onboarding-enabled" type="checkbox">
+            Enable onboarding
+          </label>
+        </div>
+        <p id="onboarding-status" class="muted" role="status">Loading onboarding setting…</p>
+        <p class="muted">Procedure: a super admin adds the merchant account; the merchant signs in; eligible new accounts complete the guide, set up an MPIN, optionally enable biometrics, then enter the app. Existing and bootstrap accounts are excluded. Completion is account-wide and is not reset when this setting changes.</p>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">MERCHANT APPLICATIONS</p><h2>Registration and KYB review</h2></div>
+          <label class="setting-toggle" for="registration-enabled">
+            <input id="registration-enabled" type="checkbox">
+            Accept registrations
+          </label>
+        </div>
+        <p id="registration-status" class="muted" role="status">Loading registration setting…</p>
+        <p class="muted">Applicants submit business details, a business registration certificate, representative government ID, and a selfie for manual review only (no automated face matching or liveness check). Submitted files are encrypted in the database. Pending files are retained; after approval or rejection, use “Delete application and documents” for explicit permanent deletion.</p>
+        <div class="table-wrap"><table><thead><tr><th>Applicant</th><th>Status</th><th>Updated</th><th>Review</th></tr></thead><tbody id="registrations-table"></tbody></table></div>
+        <section id="registration-detail" class="review-detail hidden" aria-live="polite"></section>
+      </section>
+
       <section class="grid">
         <article class="panel">
           <p class="eyebrow">BALANCE ADJUSTMENT</p>

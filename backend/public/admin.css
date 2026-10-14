@@ -15,6 +15,8 @@ main { max-width: 1180px; margin: 26px auto; padding: 0 20px 40px; }
 .warning { background: #fff1e7; color: #8a3c08; }
 .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .section-heading h2 { margin-bottom: 0; }
+.setting-toggle { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+.setting-toggle input[type="checkbox"] { width: 20px; min-height: 20px; margin: 0; accent-color: #075bbb; }
 .amount { margin: 16px 0 6px; font-size: 32px; font-weight: 800; }
 .muted { color: #65748b; font-size: 13px; line-height: 1.5; }
 form { display: grid; gap: 10px; margin: 16px 0; }
@@ -33,5 +35,12 @@ th { color: #61728a; font-size: 11px; text-transform: uppercase; letter-spacing:
 td .button { min-height: 32px; margin: 2px; padding: 6px 9px; font-size: 12px; }
 .data-box { max-height: 360px; overflow: auto; padding: 14px; border-radius: 9px; background: #101d2c; color: #d7e7fa; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .message { min-height: 20px; color: #a42d2d; }
+.review-detail { margin-top: 18px; padding: 18px; border: 1px solid #dce5ef; border-radius: 12px; background: #f8fafc; }
+.review-detail h3 { margin: 0 0 12px; }
+.review-detail dl { display: grid; grid-template-columns: minmax(150px, .7fr) 2fr; gap: 8px 16px; margin: 0 0 16px; font-size: 13px; }
+.review-detail dt { color: #61728a; font-weight: 700; }
+.review-detail dd { margin: 0; overflow-wrap: anywhere; }
+.review-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.review-actions textarea { flex: 1 1 100%; }
 .hidden { display: none !important; }
 @media (max-width: 760px) { main { margin-top: 16px; padding: 0 12px 28px; } .grid { grid-template-columns: 1fr; } .inline-form { grid-template-columns: 1fr; } .topbar { padding: 17px 18px; } .panel { padding: 17px; } }

@@ -25,6 +25,8 @@ export function createOtpAuth(config, {
   const allowedEmails = new Set(config.allowedEmails.map((email) => email.toLowerCase()));
   const challenges = new Map();
   const lastSentAt = new Map();
+  const registrationChallenges = new Map();
+  const registrationLastSentAt = new Map();
   const key = new TextEncoder().encode(config.sessionSigningKey);
 
   async function getActiveUser(email) {
@@ -89,10 +91,81 @@ export function createOtpAuth(config, {
     return { accessToken, expiresInSeconds, email, role: user.role };
   }
 
-  return { requestOtp, verifyOtp };
+  async function requestRegistrationOtp(emailValue) {
+    const email = emailValue.trim().toLowerCase();
+    if (!userStore?.getRegistrationSettings || !userStore?.createRegistrationDraft) return;
+    const settings = await userStore.getRegistrationSettings();
+    if (!settings.enabled || !settings.secureStorageAvailable || await userStore.getUser(email)) return;
+
+    const sentAtNow = now();
+    for (const [candidate, sentAt] of registrationLastSentAt) {
+      if (sentAtNow - sentAt >= 10 * 60_000) {
+        registrationLastSentAt.delete(candidate);
+        registrationChallenges.delete(candidate);
+      }
+    }
+    const previousSentAt = registrationLastSentAt.get(email) || 0;
+    if (sentAtNow - previousSentAt < 60_000 || registrationLastSentAt.size >= 10_000) return;
+
+    const code = codeGenerator();
+    const codeHash = createHmac("sha256", key).update(`registration:${email}:${code}`).digest();
+    const challenge = { codeHash, expiresAt: sentAtNow + 10 * 60_000, attempts: 0 };
+    registrationChallenges.set(email, challenge);
+    registrationLastSentAt.set(email, sentAtNow);
+    try {
+      await sendEmail(email, code, "registration");
+    } catch (error) {
+      if (registrationChallenges.get(email) === challenge) {
+        registrationChallenges.delete(email);
+        registrationLastSentAt.delete(email);
+      }
+      throw error;
+    }
+  }
+
+  async function verifyRegistrationOtp(emailValue, code) {
+    const email = emailValue.trim().toLowerCase();
+    const challenge = registrationChallenges.get(email);
+    if (
+      !challenge ||
+      challenge.expiresAt <= now() ||
+      challenge.attempts >= 5 ||
+      await getActiveUser(email) ||
+      !userStore?.createRegistrationDraft
+    ) {
+      registrationChallenges.delete(email);
+      return null;
+    }
+    challenge.attempts += 1;
+    const submittedHash = createHmac("sha256", key).update(`registration:${email}:${code}`).digest();
+    if (!timingSafeEqual(challenge.codeHash, submittedHash)) return null;
+    registrationChallenges.delete(email);
+    const settings = await userStore.getRegistrationSettings();
+    if (!settings.enabled || !settings.secureStorageAvailable) return null;
+    const draft = await userStore.createRegistrationDraft(email);
+    if (draft.status === "approved") return null;
+
+    const expiresInSeconds = 60 * 60;
+    const accessToken = await new SignJWT({ role: "registration_applicant", scope: "kyb:submit" })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setSubject(email)
+      .setIssuer("swiftpay-merchant-backend")
+      .setAudience("swiftpay-merchant-api")
+      .setIssuedAt()
+      .setExpirationTime(`${expiresInSeconds}s`)
+      .sign(key);
+    return { accessToken, expiresInSeconds, email, role: "registration_applicant" };
+  }
+
+  return { requestOtp, verifyOtp, requestRegistrationOtp, verifyRegistrationOtp };
 }
 
-export async function sendOtpEmail(config, email, code, fetchImpl = fetch) {
+export async function sendOtpEmail(config, email, code, fetchImpl = fetch, purpose = "sign-in") {
+  const registration = purpose === "registration";
+  const subject = registration ? "Verify your SwiftPay merchant application" : "Your SwiftPay sign-in code";
+  const message = registration
+    ? `Your SwiftPay merchant registration verification code is ${code}. It expires in 10 minutes.`
+    : `Your SwiftPay sign-in code is ${code}. It expires in 10 minutes.`;
   const response = await fetchImpl("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -102,8 +175,8 @@ export async function sendOtpEmail(config, email, code, fetchImpl = fetch) {
     body: JSON.stringify({
       from: config.otpFromEmail,
       to: [email],
-      subject: "Your SwiftPay sign-in code",
-      text: `Your SwiftPay sign-in code is ${code}. It expires in 10 minutes.`
+      subject,
+      text: message
     }),
     signal: AbortSignal.timeout(10000)
   });

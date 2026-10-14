@@ -64,6 +64,16 @@ test("Transak production environment retains private paired credentials", () => 
   });
 });
 
+test("KYB encryption key is optional but must decode to exactly 32 bytes", () => {
+  assert.equal(loadConfig(baseEnv).kybEncryptionKey, null);
+  const key = Buffer.alloc(32, 5);
+  assert.deepEqual(loadConfig({ ...baseEnv, KYB_ENCRYPTION_KEY: key.toString("base64") }).kybEncryptionKey, key);
+  assert.throws(
+    () => loadConfig({ ...baseEnv, KYB_ENCRYPTION_KEY: Buffer.alloc(16).toString("base64") }),
+    /KYB_ENCRYPTION_KEY must be a base64-encoded 32-byte key/
+  );
+});
+
 test("public checkout origin must use HTTPS and cannot include a path", () => {
   const config = loadConfig({ ...baseEnv, PUBLIC_BASE_URL: "https://merchant.example" });
   assert.equal(config.publicBaseUrl.href, "https://merchant.example/");

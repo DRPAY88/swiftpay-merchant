@@ -26,6 +26,15 @@ class DevicePinManager(context: Context) {
         return runCatching { loadKeyStore().containsAlias(KEY_ALIAS) }.getOrDefault(false)
     }
 
+    fun isBiometricUnlockEnabled(): Boolean =
+        preferences.getBoolean(BIOMETRIC_UNLOCK_ENABLED_KEY, false)
+
+    fun setBiometricUnlockEnabled(enabled: Boolean) {
+        check(preferences.edit().putBoolean(BIOMETRIC_UNLOCK_ENABLED_KEY, enabled).commit()) {
+            "Could not save the biometric unlock preference"
+        }
+    }
+
     fun savePin(pin: String) {
         require(PIN_PATTERN.matches(pin)) { "MPIN must contain exactly 6 digits" }
         val salt = ByteArray(SALT_LENGTH).also { java.security.SecureRandom().nextBytes(it) }
@@ -105,6 +114,7 @@ class DevicePinManager(context: Context) {
         const val PREFERENCES_NAME = "device_pin"
         const val SALT_KEY = "salt"
         const val HASH_KEY = "pin_hmac"
+        const val BIOMETRIC_UNLOCK_ENABLED_KEY = "biometric_unlock_enabled"
         const val FAILED_ATTEMPTS_KEY = "failed_attempts"
         const val LOCKED_UNTIL_KEY = "locked_until"
         const val SALT_LENGTH = 16
