@@ -290,7 +290,7 @@ fun WalletListContent(
         )
 
         Spacer(Modifier.height(20.dp))
-        QuickActionsRow()
+        QuickActionsRow(onTopUp = { viewModel?.onStartDepositWizard() })
         Spacer(Modifier.height(24.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -768,14 +768,14 @@ fun PremiumBalanceCard(
 }
 
 @Composable
-fun QuickActionsRow() {
+fun QuickActionsRow(onTopUp: () -> Unit) {
     val navController = LocalNavController.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         QuickActionItem(Icons.Rounded.Payments, "Top up", "Add money to wallet", FastPayBlue, Modifier.weight(1f)) {
-            navController.navigate(Route.MiniApp("topup-page"))
+            onTopUp()
         }
         QuickActionItem(Icons.AutoMirrored.Rounded.Send, "Transfer", "Send money", FastPayAccent, Modifier.weight(1f)) {
             navController.navigate(Route.MiniApp("disbursement-page"))
