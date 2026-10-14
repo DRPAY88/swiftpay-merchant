@@ -16,7 +16,7 @@ export async function getLatestPhpRate(baseCurrency, apiKey, fetchImpl = fetch, 
     throw new FxQuoteError(400, "Only KRW, USD, EUR, and CNY customer prices can be quoted for PHP QR settlement");
   }
   if (!apiKey) {
-    throw new FxQuoteError(503, "FX-to-PHP quotes are not configured on this server");
+    throw new FxQuoteError(503, "FX quotes unavailable: configure the backend CURRENCYAPI_KEY secret");
   }
 
   let response;
@@ -52,7 +52,6 @@ export async function getLatestPhpRate(baseCurrency, apiKey, fetchImpl = fetch, 
   const rate = body?.data?.PHP?.value;
   const updatedAt = Date.parse(body?.meta?.last_updated_at);
   if (
-    body?.meta?.base_currency !== baseCurrency ||
     typeof rate !== "number" ||
     !Number.isFinite(rate) ||
     rate <= 0 ||

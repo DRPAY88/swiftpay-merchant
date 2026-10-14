@@ -27,6 +27,7 @@ let accountResponseStatus;
 let accountResponseText;
 let accountResponseContentType = "application/json";
 let qrBootstrapStatus;
+let fxResponseOverride;
 let institutionFailureStatus = 0;
 let orderFailureStatus = 0;
 let testClock = Date.now();
@@ -50,8 +51,8 @@ before(async () => {
     fxFetchImpl: async (url, options) => {
       fxRequests.push({ url: url.toString(), options });
       const baseCurrency = new URL(url).searchParams.get("base_currency");
-      return new Response(JSON.stringify({
-        meta: { base_currency: baseCurrency, last_updated_at: new Date().toISOString() },
+      return new Response(JSON.stringify(fxResponseOverride || {
+        meta: { last_updated_at: new Date().toISOString() },
         data: { PHP: { code: "PHP", value: ({ KRW: 0.0425, USD: 57, EUR: 62, CNY: 7.8 })[baseCurrency] } }
       }), {
         status: 200,
@@ -486,6 +487,27 @@ test("USD, EUR, and CNY QR quotes use the customer currency and lock PHP settlem
     assert.equal(payment.customerAmount, amount);
     assert.equal(payment.customerCurrency, currency);
     assert.equal(JSON.parse(requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).options.body).x_amount, expectedPhp);
+  }
+});
+
+test("stale FX provider rates return a 502 instead of an internal server error", async () => {
+  fxResponseOverride = {
+    meta: { last_updated_at: new Date(Date.now() - 3 * 60 * 60_000).toISOString() },
+    data: { PHP: { code: "PHP", value: 7.8 } }
+  };
+  try {
+    const response = await fetch(`${baseUrl}/v1/payments/qrph/quote`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-test-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ amount: 15, currency: "CNY" })
+    });
+    assert.equal(response.status, 502);
+    assert.match((await response.json()).error, /missing or stale CNY\/PHP rate/);
+  } finally {
+    fxResponseOverride = undefined;
   }
 });
 

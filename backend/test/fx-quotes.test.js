@@ -21,7 +21,7 @@ test("CurrencyAPI fetches KRW/PHP rate with header auth and rejects stale quotes
     async (url, options) => {
       request = { url: url.toString(), options };
       return Response.json({
-        meta: { base_currency: "KRW", last_updated_at: new Date(now - 60_000).toISOString() },
+        meta: { last_updated_at: new Date(now - 60_000).toISOString() },
         data: { PHP: { code: "PHP", value: 0.0425 } }
       });
     },
@@ -37,7 +37,7 @@ test("CurrencyAPI fetches KRW/PHP rate with header auth and rejects stale quotes
 
   await assert.rejects(
     getLatestKrwPhpRate("test-key", async () => Response.json({
-      meta: { base_currency: "KRW", last_updated_at: new Date(now - 3 * 60 * 60_000).toISOString() },
+      meta: { last_updated_at: new Date(now - 3 * 60 * 60_000).toISOString() },
       data: { PHP: { code: "PHP", value: 0.0425 } }
     }), now),
     (error) => error instanceof FxQuoteError && error.status === 502
@@ -47,7 +47,7 @@ test("CurrencyAPI fetches KRW/PHP rate with header auth and rejects stale quotes
 test("CurrencyAPI errors fail closed with actionable configuration and quota messages", async () => {
   await assert.rejects(
     getLatestKrwPhpRate(null),
-    (error) => error instanceof FxQuoteError && error.status === 503 && /not configured/.test(error.message)
+    (error) => error instanceof FxQuoteError && error.status === 503 && /CURRENCYAPI_KEY/.test(error.message)
   );
   await assert.rejects(
     getLatestKrwPhpRate("test-key", async () => new Response("{}", { status: 429 })),
@@ -79,7 +79,9 @@ test("KRW/PHP quote is rounded to cents, bound to the merchant, and expires afte
     () => verifyKrwPhpQuote(quote.quoteToken, "merchant-a", signingKey, quote.expiresAt),
     (error) => error instanceof FxQuoteError && error.status === 410
   );
-  const tampered = quote.quoteToken.replace(/.$/, quote.quoteToken.endsWith("A") ? "B" : "A");
+  const [encoded, signature] = quote.quoteToken.split(".");
+  const tamperedSignature = (signature[0] === "A" ? "B" : "A") + signature.slice(1);
+  const tampered = `${encoded}.${tamperedSignature}`;
   assert.throws(
     () => verifyKrwPhpQuote(tampered, "merchant-a", signingKey, now),
     (error) => error instanceof FxQuoteError && error.status === 400
@@ -94,7 +96,7 @@ test("USD, EUR, and CNY FX quotes convert the exact customer price into locked P
     async (url) => {
       requestUrl = url.toString();
       return Response.json({
-        meta: { base_currency: "EUR", last_updated_at: new Date(now).toISOString() },
+        meta: { last_updated_at: new Date(now).toISOString() },
         data: { PHP: { code: "PHP", value: 62 } }
       });
     },

@@ -1316,7 +1316,7 @@ export function createApp({
 
   app.use((_req, res) => res.status(404).json({ error: "not_found" }));
   app.use((error, req, res, _next) => {
-    const status = error instanceof SwiftPayError || error instanceof TransakError
+    const status = error instanceof SwiftPayError || error instanceof TransakError || error instanceof FxQuoteError
       ? error.status
       : Number.isInteger(error.status) && error.status >= 400 && error.status < 500
         ? error.status
