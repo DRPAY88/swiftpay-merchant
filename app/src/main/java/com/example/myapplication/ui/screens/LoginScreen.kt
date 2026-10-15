@@ -3,6 +3,7 @@ package com.example.myapplication.ui.screens
 import android.app.Application
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -800,7 +801,7 @@ private fun BiometricOptInContent(
     onEnabled: () -> Unit,
     onSkip: () -> Unit
 ) {
-    val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
+    val activity = LocalActivity.current as? androidx.fragment.app.FragmentActivity
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val currentOnEnabled by rememberUpdatedState(onEnabled)
     val currentOnError by rememberUpdatedState<(String) -> Unit> { errorMessage = it }

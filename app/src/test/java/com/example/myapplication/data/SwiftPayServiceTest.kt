@@ -10,6 +10,21 @@ import org.junit.Assert.*
 class SwiftPayServiceTest {
 
     @Test
+    fun bearerAuthorizationUsesTheProvidedToken() {
+        assertEquals("Bearer session-token", bearerAuthorization("session-token"))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun bearerAuthorizationRejectsBlankTokens() {
+        bearerAuthorization("  ")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun bearerAuthorizationRejectsTokensContainingWhitespace() {
+        bearerAuthorization("session token")
+    }
+
+    @Test
     fun testRecipientNameRequiresGivenNameAndSurname() {
         assertTrue(hasCompleteRecipientName("Teodoro Santos"))
         assertTrue(hasCompleteRecipientName("  Maria   dela Cruz "))

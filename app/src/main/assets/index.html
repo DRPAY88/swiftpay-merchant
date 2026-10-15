@@ -1664,7 +1664,7 @@
     <!-- Hidden Sub-pages -->
     <section id="api-docs-page" class="page" role="dialog" aria-modal="true" aria-labelledby="api-docs-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <button type="button" class="btn-back" onclick="closePage('api-docs-page')" aria-label="Back to DRPAY dashboard">&#8249;</button>
+            <button type="button" class="btn-back" onclick="backToHome()" aria-label="Back to Home">&#8249;</button>
             <h1 id="api-docs-page-title" class="navbar-title" tabindex="-1">Payment service</h1>
         </div>
         <div class="page-content">
@@ -1680,7 +1680,7 @@
 
     <section id="payment-link-page" class="page" role="dialog" aria-modal="true" aria-labelledby="payment-link-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <button type="button" class="btn-back" onclick="closePage('payment-link-page')" aria-label="Back to DRPAY dashboard">&#8249;</button>
+            <button type="button" class="btn-back" onclick="backToHome()" aria-label="Back to Home">&#8249;</button>
             <h1 id="payment-link-page-title" class="navbar-title" tabindex="-1">Payment link</h1>
         </div>
         <div class="page-content">
@@ -1698,7 +1698,7 @@
 
     <section id="deposit-page" class="page" role="dialog" aria-modal="true" aria-labelledby="deposit-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <button type="button" class="btn-back" onclick="closePage('deposit-page')" aria-label="Back to DRPAY dashboard">&#8249;</button>
+            <button type="button" class="btn-back" onclick="backToHome()" aria-label="Back to Home">&#8249;</button>
             <h1 id="deposit-page-title" class="navbar-title" tabindex="-1">Deposit to wallet</h1>
         </div>
         <div class="page-content">
@@ -1712,7 +1712,7 @@
 
     <section id="card-payment-page" class="page" role="dialog" aria-modal="true" aria-labelledby="card-payment-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <button type="button" class="btn-back" onclick="closePage('card-payment-page')" aria-label="Back to DRPAY dashboard">&#8249;</button>
+            <button type="button" class="btn-back" onclick="backToHome()" aria-label="Back to Home">&#8249;</button>
             <h1 id="card-payment-page-title" class="navbar-title" tabindex="-1">Card payments</h1>
         </div>
         <div class="page-content" style="text-align:center">
@@ -1723,7 +1723,7 @@
 
     <section id="disbursement-page" class="page" role="dialog" aria-modal="true" aria-labelledby="disbursement-page-title" aria-hidden="true" inert>
         <div class="navbar">
-            <button type="button" class="btn-back" onclick="closePage('disbursement-page')" aria-label="Back to DRPAY dashboard">&#8249;</button>
+            <button type="button" class="btn-back" onclick="backToHome()" aria-label="Back to Home">&#8249;</button>
             <h1 id="disbursement-page-title" class="navbar-title" tabindex="-1">Transfer</h1>
         </div>
         <div class="page-content">
@@ -2046,7 +2046,7 @@
             const activePage = document.querySelector('.page.active');
             if (!activePage) return;
             if (event.key === 'Escape') {
-                closePage(activePage.id);
+                backToHome();
                 return;
             }
             if (event.key !== 'Tab') return;

@@ -276,7 +276,7 @@ fun DepositWizardDialog(
 
                 else -> {
                     Text(
-                        "Send money to your account to top up DRPAY",
+                        "Top up your DRPAY Wallet",
                         color = foreground,
                         fontSize = 27.sp,
                         lineHeight = 35.sp,
@@ -298,7 +298,7 @@ fun DepositWizardDialog(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Your SwiftPay wallet account", color = muted, fontSize = 15.sp)
+                                Text("NETBANK (A RURAL BANK), INC.", color = muted, fontSize = 15.sp)
                                 Text(
                                     accountNumber,
                                     color = foreground,

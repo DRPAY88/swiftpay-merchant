@@ -43,9 +43,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -65,9 +63,8 @@ import com.example.myapplication.data.SessionManager
 import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.data.IncomingMoneyPush
+import com.example.myapplication.navigation.AppNavigationState
 import com.example.myapplication.navigation.Route
-import com.example.myapplication.navigation.navigateTo
-import com.example.myapplication.navigation.selectedMainTab
 import com.example.myapplication.ui.screens.ApiDocsScreen
 import com.example.myapplication.ui.screens.ApiKeysScreen
 import com.example.myapplication.ui.screens.CryptoScreen
@@ -216,12 +213,12 @@ fun SwiftPayApp() {
     var isDeviceUnlocked by remember { mutableStateOf(false) }
     var isStartupResolved by remember { mutableStateOf(false) }
 
-    DebugLogger.logAuthCheck(isLoggedIn, loggedInEmail)
+    DebugLogger.logAuthCheck(isLoggedIn)
     DebugLogger.logDeviceInfo()
 
-    val backStack = remember { mutableStateListOf<Route>(Route.Login) }
-    val currentRoute = backStack.lastOrNull() ?: Route.Login
-    val latestRoute by rememberUpdatedState(currentRoute)
+    val navigationState = remember { AppNavigationState() }
+    val backStack = navigationState.backStack
+    val currentRoute = navigationState.currentRoute
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         val hasStoredSession = withContext(Dispatchers.IO) {
@@ -231,8 +228,7 @@ fun SwiftPayApp() {
             devicePinManager.hasPin()
         }
         if (hasStoredSession && hasDevicePin) {
-            backStack.clear()
-            backStack.add(Route.DeviceLock)
+            navigationState.replaceRoot(Route.DeviceLock)
         }
         isStartupResolved = true
     }
@@ -258,16 +254,13 @@ fun SwiftPayApp() {
     androidx.compose.runtime.LaunchedEffect(isLoggedIn, hasDevicePin, isDeviceUnlocked) {
         when {
             isLoggedIn && hasDevicePin && !isDeviceUnlocked && currentRoute != Route.DeviceLock -> {
-                backStack.clear()
-                backStack.add(Route.DeviceLock)
+                navigationState.replaceRoot(Route.DeviceLock)
             }
             isLoggedIn && !hasDevicePin && currentRoute != Route.Login -> {
-                backStack.clear()
-                backStack.add(Route.Login)
+                navigationState.replaceRoot(Route.Login)
             }
             !isLoggedIn && currentRoute != Route.Login -> {
-                backStack.clear()
-                backStack.add(Route.Login)
+                navigationState.replaceRoot(Route.Login)
             }
         }
     }
@@ -277,8 +270,7 @@ fun SwiftPayApp() {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP && isLoggedIn && hasDevicePin && isDeviceUnlocked && currentRoute != Route.DeviceLock) {
                 isDeviceUnlocked = false
-            backStack.clear()
-                backStack.add(Route.DeviceLock)
+                navigationState.replaceRoot(Route.DeviceLock)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -290,13 +282,11 @@ fun SwiftPayApp() {
     val navController = remember {
         object : NavController {
             override fun navigate(route: Route) {
-                backStack.navigateTo(route)
+                navigationState.navigate(route)
             }
             override fun pop() {
-                when {
-                    backStack.size > 1 -> backStack.removeAt(backStack.size - 1)
-                    latestRoute != Route.Home -> navigate(Route.Home)
-                    else -> (context as? ComponentActivity)?.finish()
+                if (!navigationState.popOrNavigateHome()) {
+                    (context as? ComponentActivity)?.finish()
                 }
             }
             override fun logout() {
@@ -306,8 +296,7 @@ fun SwiftPayApp() {
                     settings.getAccessToken()?.let { IncomingMoneyPush.unregisterCurrentDevice(context, it) }
                     settings.clearSession()
                     sessionManager.clearSession()
-                    backStack.clear()
-                    backStack.add(Route.Login)
+                    navigationState.replaceRoot(Route.Login)
                 }
             }
         }
@@ -364,7 +353,7 @@ fun SwiftPayApp() {
                 }
             }
         } else {
-            val activeTab = backStack.selectedMainTab()
+            val activeTab = navigationState.selectedMainTab()
             NavigationSuiteScaffold(
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
                 navigationSuiteItems = {
@@ -470,6 +459,7 @@ fun SwiftPayApp() {
                             val launchScanner = key.initialPath == "scan-qr-page"
                             MiniAppScreen(
                                 initialPath = key.initialPath,
+                                openDepositWizard = key.openDepositWizard,
                                 openQrScanner = launchScanner,
                                 onNavigateHome = { navController.navigate(Route.Home) }
                             )
@@ -487,7 +477,7 @@ fun SwiftPayApp() {
                             WalletScreen()
                         }
                         Route.Scanner -> NavEntry(key) {
-                            MiniAppScreen(openQrScanner = true)
+                            MiniAppScreen(initialPath = "scan-qr-page", openQrScanner = true)
                         }
                         Route.Crypto -> NavEntry(key) {
                             CryptoScreen()

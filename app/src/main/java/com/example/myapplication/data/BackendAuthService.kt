@@ -23,6 +23,13 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 
+internal fun bearerAuthorization(accessToken: String): String {
+    require(accessToken.isNotBlank() && accessToken.none(Char::isWhitespace)) {
+        "A valid access token is required"
+    }
+    return "Bearer $accessToken"
+}
+
 internal fun resolveBackendBaseUrl(configuredUrl: String): String {
     val value = configuredUrl.takeUnless { it.isBlank() } ?: "http://10.0.2.2:3000/"
     val uri = URI(value)
@@ -117,7 +124,7 @@ class BackendAuthService {
         profile: RegistrationProfileBody
     ): Result<Unit> {
         return try {
-            val response = api.saveRegistrationProfile("Bearer $accessToken", profile)
+            val response = api.saveRegistrationProfile(bearerAuthorization(accessToken), profile)
             if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
             Result.success(Unit)
         } catch (error: CancellationException) {
@@ -135,7 +142,7 @@ class BackendAuthService {
     ): Result<Unit> {
         return try {
             val response = api.uploadRegistrationDocument(
-                "Bearer $accessToken",
+                bearerAuthorization(accessToken),
                 kind,
                 contentType,
                 bytes.toRequestBody(contentType.toMediaType())
@@ -151,7 +158,7 @@ class BackendAuthService {
 
     suspend fun submitRegistration(accessToken: String): Result<BackendRegistrationStatusResponse> {
         return try {
-            val response = api.submitRegistration("Bearer $accessToken")
+            val response = api.submitRegistration(bearerAuthorization(accessToken))
             if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
             Result.success(response.body() ?: throw IllegalStateException("Empty registration status response"))
         } catch (error: CancellationException) {
@@ -163,7 +170,7 @@ class BackendAuthService {
 
     suspend fun getRegistrationStatus(accessToken: String): Result<BackendRegistrationStatusResponse> {
         return try {
-            val response = api.getRegistrationStatus("Bearer $accessToken")
+            val response = api.getRegistrationStatus(bearerAuthorization(accessToken))
             if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
             Result.success(response.body() ?: throw IllegalStateException("Empty registration status response"))
         } catch (error: CancellationException) {
@@ -175,7 +182,7 @@ class BackendAuthService {
 
     suspend fun getOnboardingState(accessToken: String): Result<BackendOnboardingStateResponse> {
         return try {
-            val response = api.getOnboardingState("Bearer $accessToken")
+            val response = api.getOnboardingState(bearerAuthorization(accessToken))
             if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
             Result.success(response.body() ?: throw IllegalStateException("Empty onboarding status response"))
         } catch (error: CancellationException) {
@@ -187,7 +194,7 @@ class BackendAuthService {
 
     suspend fun completeOnboarding(accessToken: String): Result<BackendOnboardingCompleteResponse> {
         return try {
-            val response = api.completeOnboarding("Bearer $accessToken")
+            val response = api.completeOnboarding(bearerAuthorization(accessToken))
             if (!response.isSuccessful) throw authError(response.code(), response.errorBody()?.string())
             Result.success(response.body() ?: throw IllegalStateException("Empty onboarding completion response"))
         } catch (error: CancellationException) {

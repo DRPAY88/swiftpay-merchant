@@ -14,7 +14,10 @@ sealed interface Route {
     data object Home : Route
 
     @Serializable
-    data class MiniApp(val initialPath: String? = null) : Route
+    data class MiniApp(
+        val initialPath: String,
+        val openDepositWizard: Boolean = false
+    ) : Route
 
     @Serializable
     data object Wallet : Route
@@ -38,19 +41,3 @@ sealed interface Route {
     data object ApiDocs : Route
 
 }
-
-internal fun MutableList<Route>.navigateTo(route: Route) {
-    when (route) {
-        Route.Home, Route.Wallet, Route.Crypto, Route.Profile -> {
-            clear()
-            add(route)
-        }
-        else -> if (lastOrNull() != route) {
-            removeAll { it == route }
-            add(route)
-        }
-    }
-}
-
-internal fun List<Route>.selectedMainTab(): Route? =
-    lastOrNull { it == Route.Home || it == Route.Wallet || it == Route.Crypto || it == Route.Profile }

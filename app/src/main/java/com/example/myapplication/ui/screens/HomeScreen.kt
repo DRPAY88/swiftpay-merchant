@@ -49,7 +49,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
-    onLaunchMiniApp: (String?) -> Unit,
+    onLaunchMiniApp: (String) -> Unit,
     onNavigateToWallet: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     onHelpClick: () -> Unit = {}
@@ -251,7 +251,7 @@ fun WalletBalanceCard(
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "PROVIDER-REPORTED BALANCE",
+                        "DRPAY WALLET BALANCE",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.76f)

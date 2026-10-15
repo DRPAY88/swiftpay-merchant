@@ -31,7 +31,8 @@ import com.example.myapplication.ui.theme.FintechMotion
 
 @Composable
 fun MiniAppScreen(
-    initialPath: String? = null,
+    initialPath: String,
+    openDepositWizard: Boolean = false,
     openQrScanner: Boolean = false,
     onNavigateHome: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -50,15 +51,18 @@ fun MiniAppScreen(
     val webViewUrl = remember(initialPath, isDarkTheme) {
         val baseUrl = "file:///android_asset/index.html"
         val themeUrl = "$baseUrl?theme=${if (isDarkTheme) "dark" else "light"}"
-        if (!initialPath.isNullOrBlank()) "$themeUrl#$initialPath" else themeUrl
+        "$themeUrl#$initialPath"
     }
 
     val uiState = viewModel.uiState
 
-    LaunchedEffect(initialPath, openQrScanner) {
+    LaunchedEffect(initialPath, openDepositWizard, openQrScanner) {
         viewModel.refreshBalance()
-        if (openQrScanner) {
-            viewModel.onScanQrToSend()
+        when {
+            openDepositWizard -> viewModel.onStartDepositWizard()
+            openQrScanner -> {
+                viewModel.onScanQrToSend()
+            }
         }
     }
 

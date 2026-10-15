@@ -307,7 +307,7 @@ fun WalletListContent(
             )
         }
         item(key = "wallet-actions") {
-            QuickActionsRow(onTopUp = { viewModel?.onStartDepositWizard() })
+            QuickActionsRow()
         }
         item(key = "transaction-heading") {
             Row(
@@ -684,7 +684,7 @@ fun PremiumBalanceCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "PROVIDER-REPORTED BALANCE",
+                        text = "DRPAY WALLET BALANCE",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.74f),
                         fontWeight = FontWeight.SemiBold,
@@ -818,20 +818,17 @@ fun PremiumBalanceCard(
 }
 
 @Composable
-fun QuickActionsRow(onTopUp: () -> Unit) {
+fun QuickActionsRow() {
     val navController = LocalNavController.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         QuickActionItem(Icons.Rounded.Payments, "Top up", "Add money to wallet", FastPayBlue, Modifier.weight(1f)) {
-            onTopUp()
+            navController.navigate(Route.MiniApp(initialPath = "topup-page", openDepositWizard = true))
         }
         QuickActionItem(Icons.AutoMirrored.Rounded.Send, "Transfer", "Send money", FastPayAccent, Modifier.weight(1f)) {
             navController.navigate(Route.MiniApp("disbursement-page"))
-        }
-        QuickActionItem(Icons.Rounded.MoreHoriz, "More", "More wallet actions", MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f)) {
-            navController.navigate(Route.MiniApp())
         }
     }
 }

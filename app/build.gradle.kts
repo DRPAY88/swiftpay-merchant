@@ -38,7 +38,7 @@ android {
     defaultConfig {
         applicationId = "com.swiftpay.site"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 15
         versionName = "1.0.14"
 

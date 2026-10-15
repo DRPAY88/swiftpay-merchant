@@ -68,7 +68,7 @@ class SwiftPayService(
     private val api: SwiftPayBackendApi by lazy {
         val authInterceptor = Interceptor { chain ->
             val request = chain.request().newBuilder().apply {
-                accessToken?.takeIf { it.isNotBlank() }?.let { header("Authorization", "Bearer $it") }
+                accessToken?.takeIf { it.isNotBlank() }?.let { header("Authorization", bearerAuthorization(it)) }
             }.build()
             chain.proceed(request)
         }

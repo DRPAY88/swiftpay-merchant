@@ -5,32 +5,28 @@ import android.util.Log
 object DebugLogger {
     private const val TAG = "FastPay_DEBUG"
 
-    fun logAuthCheck(isLoggedIn: Boolean, email: String? = null) {
-        Log.d(TAG, "AUTH_CHECK: isLoggedIn=$isLoggedIn, email=$email")
+    fun logAuthCheck(isLoggedIn: Boolean) {
+        Log.d(TAG, "AUTH_CHECK: isLoggedIn=$isLoggedIn")
     }
 
     fun logBuildConfigKeys(publicKey: String?, secretKey: String?, mid: String?, terminalId: String?) {
-        val publicMasked = publicKey?.take(10) + "..."
-        val secretMasked = secretKey?.take(8) + "..."
-        Log.d(TAG, "BUILDCONFIG_KEYS: public=$publicMasked, secret=$secretMasked, mid=$mid, terminalId=$terminalId")
+        Log.d(TAG, "BUILDCONFIG_KEYS: configured=${!publicKey.isNullOrBlank() && !secretKey.isNullOrBlank()}")
     }
 
     fun logStoredKeys(publicKey: String?, secretKey: String?, mid: String?, terminalId: String?) {
-        val publicMasked = publicKey?.take(10) + "..."
-        val secretMasked = secretKey?.take(8) + "..."
-        Log.d(TAG, "STORED_KEYS: public=$publicMasked, secret=$secretMasked, mid=$mid, terminalId=$terminalId")
+        Log.d(TAG, "STORED_KEYS: configured=${!publicKey.isNullOrBlank() && !secretKey.isNullOrBlank()}")
     }
 
     fun logLoginSuccess(email: String) {
-        Log.d(TAG, "LOGIN_SUCCESS: email=$email, logging in user...")
+        Log.d(TAG, "LOGIN_SUCCESS")
     }
 
     fun logLoginFailure(email: String, errorMessage: String) {
-        Log.e(TAG, "LOGIN_FAILURE: email=$email, error=$errorMessage")
+        Log.e(TAG, "LOGIN_FAILURE")
     }
 
     fun logLogout(email: String) {
-        Log.d(TAG, "LOGOUT: email=$email, clearing session...")
+        Log.d(TAG, "LOGOUT")
     }
 
     fun logCredentialsLoaded(hasSecret: Boolean, hasPublic: Boolean) {
@@ -38,15 +34,15 @@ object DebugLogger {
     }
 
     fun logDeviceInfo(deviceId: String = android.os.Build.DEVICE) {
-        Log.d(TAG, "DEVICE_INFO: device=$deviceId, app_version=${android.os.Build.VERSION.SDK_INT}")
+        Log.d(TAG, "DEVICE_INFO: api=${android.os.Build.VERSION.SDK_INT}")
     }
     
     fun logSessionCreated(email: String, deviceId: String, isPrimary: Boolean) {
-        Log.d(TAG, "SESSION_CREATED: email=$email, device=$deviceId, primary=$isPrimary")
+        Log.d(TAG, "SESSION_CREATED: primary=$isPrimary")
     }
     
     fun logSessionRestored(email: String, deviceId: String) {
-        Log.d(TAG, "SESSION_RESTORED: email=$email, device=$deviceId (auto-login without OTP)")
+        Log.d(TAG, "SESSION_RESTORED")
     }
     
     fun logSessionCleared() {
@@ -54,16 +50,15 @@ object DebugLogger {
     }
 
     fun logApprovalRequested(email: String, deviceId: String) {
-        Log.d(TAG, "APPROVAL_REQUESTED: email=$email, device=$deviceId (awaiting Huawei approval)")
+        Log.d(TAG, "APPROVAL_REQUESTED")
     }
 
     fun logApprovalApproved(requestId: String) {
-        Log.d(TAG, "APPROVAL_APPROVED: requestId=$requestId (Device 2 now logging in)")
+        Log.d(TAG, "APPROVAL_APPROVED")
     }
 
     fun logApprovalDenied(requestId: String) {
-        Log.d(TAG, "APPROVAL_DENIED: requestId=$requestId (Device 2 login rejected)")
+        Log.d(TAG, "APPROVAL_DENIED")
     }
 }
-
 

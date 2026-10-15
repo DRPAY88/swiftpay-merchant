@@ -1,6 +1,7 @@
 package com.example.myapplication.ui.components
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -118,23 +119,25 @@ fun SwiftPayWebView(
                                 view: WebView?,
                                 request: WebResourceRequest?
                             ): Boolean {
-                                val requestUrl = request?.url?.toString() ?: return false
+                                val uri = request?.url ?: return true
+                                if (isTrustedWebViewAssetUrl(uri.toString())) return false
+                                if (request.isForMainFrame != true) return true
 
-                                if (requestUrl.startsWith("swiftpay-showcase://") || requestUrl.startsWith("swiftpay://")) {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(requestUrl))
-                                    context.startActivity(intent)
-                                    return true
-                                }
-
-                                if (requestUrl.startsWith("http://") || requestUrl.startsWith("https://")) {
-                                    return false
-                                }
+                                val scheme = uri.scheme?.lowercase()
+                                val isPaymentCallback = scheme in setOf("swiftpay", "swiftpay-showcase") &&
+                                    uri.host.equals("payment", ignoreCase = true) &&
+                                    uri.path in setOf("/success", "/failure", "/cancel")
+                                val isExternalWebLink = scheme in setOf("http", "https") &&
+                                    !uri.host.isNullOrBlank() && uri.userInfo == null
+                                if (!isPaymentCallback && !isExternalWebLink) return true
 
                                 return try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(requestUrl))
+                                    val intent = Intent(Intent.ACTION_VIEW, uri)
+                                    if (isPaymentCallback) intent.setPackage(context.packageName)
                                     context.startActivity(intent)
                                     true
-                                } catch (e: Exception) {
+                                } catch (_: ActivityNotFoundException) {
+                                    pageError = "No app is available to open this link."
                                     true
                                 }
                             }

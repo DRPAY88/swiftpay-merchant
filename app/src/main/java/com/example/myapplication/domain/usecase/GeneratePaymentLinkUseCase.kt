@@ -22,8 +22,6 @@ class GeneratePaymentLinkUseCase(
             }
 
             val desc = description.ifBlank { "SwiftPay Payment" }
-            Log.d("GeneratePaymentLinkUseCase", "Generating payment link: amount=$amount, desc=$desc")
-
             val result = swiftPayService.createPaymentLink(
                 amount = if (amount > 0) amount else 0.0,
                 description = desc
@@ -32,17 +30,17 @@ class GeneratePaymentLinkUseCase(
             when {
                 result.isSuccess -> {
                     val linkResponse = result.getOrNull()
-                    Log.i("GeneratePaymentLinkUseCase", "Payment link generated: ${linkResponse?.paymentLinkUrl}")
+                    Log.i("GeneratePaymentLinkUseCase", "Payment link generated")
                     Result.success(linkResponse!!)
                 }
                 else -> {
                     val error = result.exceptionOrNull()?.message ?: "Failed to generate payment link"
-                    Log.e("GeneratePaymentLinkUseCase", "Payment link generation failed: $error")
+                    Log.e("GeneratePaymentLinkUseCase", "Payment link generation failed")
                     Result.failure(Exception(error))
                 }
             }
         } catch (e: Exception) {
-            Log.e("GeneratePaymentLinkUseCase", "Exception in GeneratePaymentLinkUseCase", e)
+            Log.e("GeneratePaymentLinkUseCase", "Exception in GeneratePaymentLinkUseCase")
             Result.failure(e)
         }
     }

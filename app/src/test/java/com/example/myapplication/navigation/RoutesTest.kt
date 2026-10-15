@@ -6,30 +6,61 @@ import org.junit.Test
 class RoutesTest {
     @Test
     fun selectingMainTabReplacesTheCurrentBackStack() {
-        val backStack = mutableListOf<Route>(Route.Home, Route.MiniApp("topup-page"))
+        val navigationState = AppNavigationState(Route.Home)
+        navigationState.navigate(Route.MiniApp("topup-page"))
 
-        backStack.navigateTo(Route.Wallet)
+        navigationState.navigate(Route.Wallet)
 
-        assertEquals(listOf(Route.Wallet), backStack)
-        assertEquals(Route.Wallet, backStack.selectedMainTab())
+        assertEquals(listOf(Route.Wallet), navigationState.backStack)
+        assertEquals(Route.Wallet, navigationState.selectedMainTab())
     }
 
     @Test
     fun secondaryDestinationsKeepTheirMainTabSelected() {
-        val backStack = mutableListOf<Route>(Route.Profile)
+        val navigationState = AppNavigationState(Route.Profile)
 
-        backStack.navigateTo(Route.ApiKeys)
+        navigationState.navigate(Route.ApiKeys)
 
-        assertEquals(listOf(Route.Profile, Route.ApiKeys), backStack)
-        assertEquals(Route.Profile, backStack.selectedMainTab())
+        assertEquals(listOf(Route.Profile, Route.ApiKeys), navigationState.backStack)
+        assertEquals(Route.Profile, navigationState.selectedMainTab())
     }
 
     @Test
     fun selectingTheCurrentMainTabResetsNestedDestinations() {
-        val backStack = mutableListOf<Route>(Route.Home, Route.MiniApp("payment-link-page"))
+        val navigationState = AppNavigationState(Route.Home)
+        navigationState.navigate(Route.MiniApp("payment-link-page"))
 
-        backStack.navigateTo(Route.Home)
+        navigationState.navigate(Route.Home)
 
-        assertEquals(listOf(Route.Home), backStack)
+        assertEquals(listOf(Route.Home), navigationState.backStack)
+    }
+
+    @Test
+    fun walletTopUpOpensMiniAppWithDepositWizardRequested() {
+        val navigationState = AppNavigationState(Route.Wallet)
+        val topUpRoute = Route.MiniApp(initialPath = "topup-page", openDepositWizard = true)
+
+        navigationState.navigate(topUpRoute)
+
+        assertEquals(topUpRoute, navigationState.backStack.last())
+    }
+
+    @Test
+    fun poppingNestedDestinationReturnsToPreviousRoute() {
+        val navigationState = AppNavigationState(Route.Home)
+        navigationState.navigate(Route.Profile)
+        navigationState.navigate(Route.ApiKeys)
+
+        assertEquals(true, navigationState.popOrNavigateHome())
+        assertEquals(Route.Profile, navigationState.currentRoute)
+    }
+
+    @Test
+    fun poppingFromRootNavigatesHomeUnlessAlreadyHome() {
+        val navigationState = AppNavigationState(Route.Profile)
+
+        assertEquals(true, navigationState.popOrNavigateHome())
+        assertEquals(Route.Home, navigationState.currentRoute)
+        assertEquals(false, navigationState.popOrNavigateHome())
     }
 }
