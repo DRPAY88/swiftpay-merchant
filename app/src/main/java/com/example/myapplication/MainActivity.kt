@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -18,7 +19,12 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.CurrencyBitcoin
@@ -26,6 +32,8 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PersonOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
@@ -37,11 +45,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -54,9 +66,12 @@ import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.data.IncomingMoneyPush
 import com.example.myapplication.navigation.Route
+import com.example.myapplication.navigation.navigateTo
+import com.example.myapplication.navigation.selectedMainTab
 import com.example.myapplication.ui.screens.ApiDocsScreen
 import com.example.myapplication.ui.screens.ApiKeysScreen
 import com.example.myapplication.ui.screens.CryptoScreen
+import com.example.myapplication.ui.components.DrPayLogo
 import com.example.myapplication.ui.screens.HomeScreen
 import com.example.myapplication.ui.screens.LoginScreen
 import com.example.myapplication.ui.screens.DevicePinScreen
@@ -71,6 +86,7 @@ import com.example.myapplication.util.DeepLinkBus
 import com.example.myapplication.util.DeepLinkExtractor
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -82,6 +98,61 @@ interface NavController {
     fun navigate(route: Route)
     fun pop()
     fun logout()
+}
+
+@Composable
+private fun MainNavigationIcon(
+    image: ImageVector,
+    description: String,
+    selected: Boolean
+) {
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        animationSpec = tween(FintechMotion.contentMillis, easing = FintechMotion.standardEasing),
+        label = "navigationIconContainer"
+    )
+    val iconColor = if (selected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+        modifier = Modifier.size(width = 52.dp, height = 36.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = image,
+                contentDescription = description,
+                tint = iconColor,
+                modifier = Modifier.size(21.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SessionStartupContent() {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                DrPayLogo(size = 108.dp)
+                CircularProgressIndicator(
+                    modifier = Modifier.size(28.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
 }
 
 class MainActivity : FragmentActivity() {
@@ -143,12 +214,28 @@ fun SwiftPayApp() {
     ) { }
     var hasDevicePin by remember { mutableStateOf(false) }
     var isDeviceUnlocked by remember { mutableStateOf(false) }
+    var isStartupResolved by remember { mutableStateOf(false) }
 
     DebugLogger.logAuthCheck(isLoggedIn, loggedInEmail)
     DebugLogger.logDeviceInfo()
 
     val backStack = remember { mutableStateListOf<Route>(Route.Login) }
     val currentRoute = backStack.lastOrNull() ?: Route.Login
+    val latestRoute by rememberUpdatedState(currentRoute)
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val hasStoredSession = withContext(Dispatchers.IO) {
+            settings.isLoggedIn.first() && !settings.getAccessToken().isNullOrBlank()
+        }
+        hasDevicePin = hasStoredSession && withContext(Dispatchers.IO) {
+            devicePinManager.hasPin()
+        }
+        if (hasStoredSession && hasDevicePin) {
+            backStack.clear()
+            backStack.add(Route.DeviceLock)
+        }
+        isStartupResolved = true
+    }
 
     androidx.compose.runtime.LaunchedEffect(isLoggedIn) {
         hasDevicePin = isLoggedIn && withContext(Dispatchers.IO) { devicePinManager.hasPin() }
@@ -203,16 +290,14 @@ fun SwiftPayApp() {
     val navController = remember {
         object : NavController {
             override fun navigate(route: Route) {
-                if (route == Route.Home) {
-                    backStack.clear()
-                    backStack.add(Route.Home)
-                } else {
-                    backStack.removeAll { it == route }
-                    backStack.add(route)
-                }
+                backStack.navigateTo(route)
             }
             override fun pop() {
-                if (backStack.size > 1) backStack.removeAt(backStack.size - 1)
+                when {
+                    backStack.size > 1 -> backStack.removeAt(backStack.size - 1)
+                    latestRoute != Route.Home -> navigate(Route.Home)
+                    else -> (context as? ComponentActivity)?.finish()
+                }
             }
             override fun logout() {
                 isDeviceUnlocked = false
@@ -228,7 +313,9 @@ fun SwiftPayApp() {
         }
     }
 
-    CompositionLocalProvider(
+    if (!isStartupResolved) {
+        SessionStartupContent()
+    } else CompositionLocalProvider(
         LocalNavController provides navController,
         LocalMiniAppViewModel provides miniAppViewModel
     ) {
@@ -277,84 +364,59 @@ fun SwiftPayApp() {
                 }
             }
         } else {
-            val activeColor = MaterialTheme.colorScheme.primary
-            val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
+            val activeTab = backStack.selectedMainTab()
             NavigationSuiteScaffold(
-                containerColor = MaterialTheme.colorScheme.background,
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
                 navigationSuiteItems = {
                     item(
-                        selected = currentRoute == Route.Home,
+                        selected = activeTab == Route.Home,
                         onClick = { navController.navigate(Route.Home) },
-                        icon = {
-                            Icon(
-                                Icons.Rounded.Home,
-                                contentDescription = "Home",
-                                tint = if (currentRoute == Route.Home) activeColor else inactiveColor
-                            )
-                        },
+                        icon = { MainNavigationIcon(Icons.Rounded.Home, "Home", activeTab == Route.Home) },
                         label = {
                             Text(
                                 "Home",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (currentRoute == Route.Home) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (currentRoute == Route.Home) activeColor else inactiveColor
+                                fontWeight = if (activeTab == Route.Home) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (activeTab == Route.Home) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
                     )
                     item(
-                        selected = currentRoute == Route.Wallet,
+                        selected = activeTab == Route.Wallet,
                         onClick = { navController.navigate(Route.Wallet) },
-                        icon = {
-                            Icon(
-                                Icons.Rounded.AccountBalanceWallet,
-                                contentDescription = "Wallet",
-                                tint = if (currentRoute == Route.Wallet) activeColor else inactiveColor
-                            )
-                        },
+                        icon = { MainNavigationIcon(Icons.Rounded.AccountBalanceWallet, "Wallet", activeTab == Route.Wallet) },
                         label = {
                             Text(
                                 "Wallet",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (currentRoute == Route.Wallet) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (currentRoute == Route.Wallet) activeColor else inactiveColor
+                                fontWeight = if (activeTab == Route.Wallet) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (activeTab == Route.Wallet) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
                     )
                     item(
-                        selected = currentRoute == Route.Crypto,
+                        selected = activeTab == Route.Crypto,
                         onClick = { navController.navigate(Route.Crypto) },
-                        icon = {
-                            Icon(
-                                Icons.Rounded.CurrencyBitcoin,
-                                contentDescription = "Crypto",
-                                tint = if (currentRoute == Route.Crypto) activeColor else inactiveColor
-                            )
-                        },
+                        icon = { MainNavigationIcon(Icons.Rounded.CurrencyBitcoin, "Crypto", activeTab == Route.Crypto) },
                         label = {
                             Text(
                                 "Crypto",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (currentRoute == Route.Crypto) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (currentRoute == Route.Crypto) activeColor else inactiveColor
+                                fontWeight = if (activeTab == Route.Crypto) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (activeTab == Route.Crypto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
                     )
                     item(
-                        selected = currentRoute == Route.Profile,
+                        selected = activeTab == Route.Profile,
                         onClick = { navController.navigate(Route.Profile) },
-                        icon = {
-                            Icon(
-                                Icons.Rounded.PersonOutline,
-                                contentDescription = "Profile",
-                                tint = if (currentRoute == Route.Profile) activeColor else inactiveColor
-                            )
-                        },
+                        icon = { MainNavigationIcon(Icons.Rounded.PersonOutline, "Profile", activeTab == Route.Profile) },
                         label = {
                             Text(
                                 "Profile",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (currentRoute == Route.Profile) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (currentRoute == Route.Profile) activeColor else inactiveColor
+                                fontWeight = if (activeTab == Route.Profile) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (activeTab == Route.Profile) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
                     )
@@ -367,13 +429,13 @@ fun SwiftPayApp() {
                         (fadeIn(animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing)) +
                             slideInHorizontally(
                                 animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing),
-                                initialOffsetX = { it }
+                                initialOffsetX = { it / 8 }
                             ))
                             .togetherWith(
                                 fadeOut(animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing)) +
                                     slideOutHorizontally(
                                         animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing),
-                                        targetOffsetX = { -it }
+                                        targetOffsetX = { -it / 10 }
                                     )
                             )
                     },
@@ -381,13 +443,13 @@ fun SwiftPayApp() {
                         (fadeIn(animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing)) +
                             slideInHorizontally(
                                 animationSpec = tween(FintechMotion.navigationMillis, easing = FintechMotion.standardEasing),
-                                initialOffsetX = { -it }
+                                initialOffsetX = { -it / 8 }
                             ))
                             .togetherWith(
                                 fadeOut(animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing)) +
                                     slideOutHorizontally(
                                         animationSpec = tween(FintechMotion.exitMillis, easing = FintechMotion.standardEasing),
-                                        targetOffsetX = { it }
+                                        targetOffsetX = { it / 10 }
                                     )
                             )
                     },

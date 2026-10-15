@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -77,6 +78,26 @@ sealed interface LoginState {
     data class RegistrationResult(val email: String, val status: String, val reviewNote: String) : LoginState
 }
 
+internal fun validateRegistrationProfile(
+    profile: com.example.myapplication.data.api.RegistrationProfileBody
+): String? {
+    val fields = listOf(
+        Triple("Business name", profile.businessName.trim(), 2..160),
+        Triple("Business registration number", profile.businessRegistrationNumber.trim(), 2..80),
+        Triple("Business address", profile.businessAddress.trim(), 5..300),
+        Triple("Business type", profile.businessType.trim(), 2..100),
+        Triple("Representative name", profile.representativeFullName.trim(), 3..160),
+        Triple("Representative phone number", profile.representativePhone.trim(), 5..35)
+    )
+    val (label, value, range) = fields.firstOrNull { (_, value, range) -> value.length !in range }
+        ?: return null
+    return if (value.length < range.first) {
+        "$label must be at least ${range.first} characters."
+    } else {
+        "$label must be no more than ${range.last} characters."
+    }
+}
+
 class LoginViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsManager = SettingsManager(application)
     private val authService = BackendAuthService()
@@ -116,6 +137,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
             val token = settingsManager.backendAccessToken.first()
             if (!token.isNullOrBlank() && !settingsManager.hasDevicePin()) {
                 onboardingAccessToken = token
+                state = LoginState.OnboardingCheck
                 checkOnboardingState()
             }
         }
@@ -260,8 +282,23 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun registrationProfile() = com.example.myapplication.data.api.RegistrationProfileBody(
+        businessName = businessName.trim(),
+        businessRegistrationNumber = businessRegistrationNumber.trim(),
+        businessAddress = businessAddress.trim(),
+        businessType = businessType.trim(),
+        representativeFullName = representativeFullName.trim(),
+        representativePhone = representativePhone.trim()
+    )
+
+    fun isRegistrationProfileComplete(): Boolean = validateRegistrationProfile(registrationProfile()) == null
+
     fun submitRegistration() {
         if (isLoading) return
+        validateRegistrationProfile(registrationProfile())?.let {
+            errorMessage = it
+            return
+        }
         if (!registrationConsent) {
             errorMessage = "Accept the privacy and selfie-review notice before submitting."
             return
@@ -275,14 +312,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
             errorMessage = "Your application session expired. Verify your email again."
             return
         }
-        val profile = com.example.myapplication.data.api.RegistrationProfileBody(
-            businessName = businessName,
-            businessRegistrationNumber = businessRegistrationNumber,
-            businessAddress = businessAddress,
-            businessType = businessType,
-            representativeFullName = representativeFullName,
-            representativePhone = representativePhone
-        )
+        val profile = registrationProfile()
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
@@ -1101,174 +1131,243 @@ fun LandingContent(
     val contentOffset by animateFloatAsState(
         targetValue = if (visible) 0f else 20f,
         animationSpec = tween(FintechMotion.entranceMillis, easing = FintechMotion.standardEasing),
-    label = "contentOffset"
+        label = "contentOffset"
     )
 
-    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val backgroundColor = MaterialTheme.colorScheme.background
-    val headlineColor = MaterialTheme.colorScheme.onBackground
-    val supportingColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f)
-    val fieldColor = if (isDarkTheme) FastPayDarkNavy else Color.White
-    val outlineColor = if (isDarkTheme) Color.White.copy(alpha = 0.28f) else Color(0xFFCACDD2)
+    val colorScheme = MaterialTheme.colorScheme
+    val backgroundColor = colorScheme.background
 
-    Column(
-    modifier = Modifier
-        .fillMaxSize()
-        .background(backgroundColor)
-        .statusBarsPadding()
-        .navigationBarsPadding()
-        .verticalScroll(rememberScrollState())
-        .padding(horizontal = 28.dp, vertical = 20.dp)
-        .graphicsLayer {
-            alpha = contentAlpha
-            translationY = contentOffset
-        },
-    horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-    Spacer(modifier = Modifier.height(24.dp))
-    DrPayLogo(size = 190.dp)
-    Spacer(modifier = Modifier.height(8.dp))
-    Text(
-        text = "Merchant payments, securely managed.",
-        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-        fontWeight = FontWeight.SemiBold,
-        color = supportingColor,
-        textAlign = TextAlign.Center
-    )
-
-    Spacer(modifier = Modifier.height(36.dp))
-    OutlinedTextField(
-        value = username,
-        onValueChange = onUsernameChange,
-        modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("Merchant email address") },
-        leadingIcon = {
-            Icon(
-                imageVector = Icons.Rounded.AlternateEmail,
-                contentDescription = "Email address",
-                tint = if (isDarkTheme) Color.LightGray else FastPayTextSecondary
-            )
-        },
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Email,
-            imeAction = ImeAction.Go
-        ),
-        singleLine = true,
-        shape = RoundedCornerShape(14.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = headlineColor,
-            unfocusedTextColor = headlineColor,
-            focusedContainerColor = fieldColor,
-            unfocusedContainerColor = fieldColor,
-            focusedBorderColor = FastPayBlue,
-            unfocusedBorderColor = outlineColor,
-            focusedLeadingIconColor = FastPayBlue,
-            unfocusedLeadingIconColor = supportingColor,
-            cursorColor = FastPayBlue
-        )
-    )
-    Text(
-        text = "We'll email you a one-time sign-in code.",
-        style = MaterialTheme.typography.bodySmall,
-        color = supportingColor,
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 4.dp, top = 8.dp)
-    )
-
-    if (errorMessage != null) {
-        Spacer(modifier = Modifier.height(14.dp))
-        Surface(
-            color = if (isDarkTheme) Color(0xFF3A1C25) else Color(0xFFFFEBEE),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = errorMessage,
-                color = if (isDarkTheme) Color(0xFFFFB4AB) else Color(0xFFD32F2F),
-                modifier = Modifier.padding(14.dp),
-                fontSize = 13.sp,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-
-    Spacer(modifier = Modifier.height(24.dp))
-    Button(
-        onClick = onLoginClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(58.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = FastPayNavy,
-            disabledContainerColor = FastPayNavy.copy(alpha = 0.55f)
-        ),
-        shape = RoundedCornerShape(14.dp),
-        enabled = !isLoading
+            .fillMaxSize()
+            .background(backgroundColor)
     ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                color = Color.White,
-                strokeWidth = 2.dp
-            )
-        } else {
-            Text(
-                text = "Log In",
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = 18.sp
-            )
-        }
-    }
-
-    if (registrationAvailable) {
-        OutlinedButton(
-            onClick = onRegisterClick,
-            modifier = Modifier.fillMaxWidth().height(54.dp),
-            enabled = !isLoading
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(310.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            FastPayNavy,
+                            FastPayBlue.copy(alpha = 0.94f),
+                            backgroundColor
+                        )
+                    )
+                )
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 22.dp, vertical = 18.dp)
+                .graphicsLayer {
+                    alpha = contentAlpha
+                    translationY = contentOffset
+                },
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Create merchant account", fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 520.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DrPayLogo(size = 58.dp)
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(
+                        "DRPAY",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        letterSpacing = 1.4.sp
+                    )
+                    Text(
+                        "MERCHANT",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.72f),
+                        letterSpacing = 2.sp
+                    )
+                }
+            }
+            Spacer(Modifier.height(30.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 520.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    "Your business,\nyour payments.",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    lineHeight = 38.sp
+                )
+                Text(
+                    "Sign in to manage your merchant workspace.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White.copy(alpha = 0.82f),
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+            }
+            Spacer(Modifier.height(26.dp))
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 520.dp),
+                shape = RoundedCornerShape(26.dp),
+                color = colorScheme.surface,
+                tonalElevation = 2.dp,
+                shadowElevation = 10.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Welcome back",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = colorScheme.onSurface
+                        )
+                        Text(
+                            "Use the email registered to your merchant account.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colorScheme.onSurfaceVariant
+                        )
+                    }
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = onUsernameChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Merchant email") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Rounded.AlternateEmail,
+                                contentDescription = null
+                            )
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Go
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onGo = { if (!isLoading) onLoginClick() }
+                        ),
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    Text(
+                        "We’ll send a one-time verification code to this email. Entering an email does not create an account.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colorScheme.onSurfaceVariant
+                    )
+                    if (errorMessage != null) {
+                        Surface(
+                            color = colorScheme.errorContainer,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Rounded.ErrorOutline,
+                                    contentDescription = null,
+                                    tint = colorScheme.error
+                                )
+                                Text(
+                                    text = errorMessage,
+                                    color = colorScheme.onErrorContainer,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = onLoginClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        enabled = !isLoading,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                "Continue securely",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null)
+                        }
+                    }
+                    if (registrationAvailable) {
+                        OutlinedButton(
+                            onClick = onRegisterClick,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            enabled = !isLoading,
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Rounded.Business, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Apply for a merchant account", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 520.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Rounded.VerifiedUser,
+                    contentDescription = null,
+                    tint = colorScheme.primary,
+                    modifier = Modifier.size(17.dp)
+                )
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    if (registrationAvailable) {
+                        "Authorized sign-in · New businesses can apply"
+                    } else {
+                        "Merchant access is limited to authorized accounts"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Secure email verification",
+                style = MaterialTheme.typography.labelSmall,
+                color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+            )
+            Spacer(Modifier.height(8.dp))
         }
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-    Text(
-        text = if (registrationAvailable) "New businesses can apply for merchant access." else "Merchant access is available to authorized accounts only.",
-        style = MaterialTheme.typography.bodySmall,
-        color = supportingColor,
-        textAlign = TextAlign.Center
-    )
-
-    Spacer(modifier = Modifier.height(44.dp))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        HorizontalDivider(
-            modifier = Modifier.weight(1f),
-            color = if (isDarkTheme) Color.White.copy(alpha = 0.24f) else Color(0xFFD1D3D6)
-        )
-        Text(
-            text = "Secure Banking",
-            style = MaterialTheme.typography.bodyMedium,
-            color = supportingColor,
-            modifier = Modifier.padding(horizontal = 14.dp)
-        )
-        HorizontalDivider(
-            modifier = Modifier.weight(1f),
-            color = if (isDarkTheme) Color.White.copy(alpha = 0.24f) else Color(0xFFD1D3D6)
-        )
-    }
-    Spacer(modifier = Modifier.height(14.dp))
-    Text(
-        text = "Powered by: Boss Den Den",
-        style = MaterialTheme.typography.labelMedium,
-        color = supportingColor,
-        textAlign = TextAlign.Center
-    )
-    Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -1342,6 +1441,11 @@ private fun RegistrationFormContent(
     var documentKind by remember { mutableStateOf("business_certificate") }
     var selfieFile by remember { mutableStateOf<File?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }
+    val requiredDocumentKinds = listOf("business_certificate", "representative_id", "selfie")
+    val profileComplete = viewModel.isRegistrationProfileComplete()
+    val documentsComplete = requiredDocumentKinds.all { it in viewModel.uploadedRegistrationDocuments }
+    val consentComplete = viewModel.registrationConsent
+    val completedMilestones = listOf(profileComplete, documentsComplete, consentComplete).count { it }
 
     val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -1405,24 +1509,18 @@ private fun RegistrationFormContent(
                 )
                 Text("Business details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Text(
-                    "STEP 1 OF 2",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold
-                )
-            }
         }
         Text(
             "Tell us about your business and authorized representative, then securely upload the required review documents.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 12.dp)
+        )
+        RegistrationChecklist(
+            profileComplete = profileComplete,
+            documentsComplete = documentsComplete,
+            consentComplete = consentComplete,
+            completedMilestones = completedMilestones
         )
         if (viewModel.registrationReviewNote.isNotBlank()) {
             Surface(
@@ -1447,33 +1545,33 @@ private fun RegistrationFormContent(
         ) {
             OutlinedTextField(
                 viewModel.businessName,
-                { viewModel.businessName = it },
+                { viewModel.businessName = it.take(160) },
                 Modifier.fillMaxWidth(),
-                label = { Text("Registered business name") },
+                label = { Text("Registered business name *") },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp)
             )
             OutlinedTextField(
                 viewModel.businessRegistrationNumber,
-                { viewModel.businessRegistrationNumber = it },
+                { viewModel.businessRegistrationNumber = it.take(80) },
                 Modifier.fillMaxWidth(),
-                label = { Text("Business registration number") },
+                label = { Text("Business registration number *") },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp)
             )
             OutlinedTextField(
                 viewModel.businessType,
-                { viewModel.businessType = it },
+                { viewModel.businessType = it.take(100) },
                 Modifier.fillMaxWidth(),
-                label = { Text("Business type") },
+                label = { Text("Business type *") },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp)
             )
             OutlinedTextField(
                 viewModel.businessAddress,
-                { viewModel.businessAddress = it },
+                { viewModel.businessAddress = it.take(300) },
                 Modifier.fillMaxWidth(),
-                label = { Text("Business address") },
+                label = { Text("Business address *") },
                 minLines = 2,
                 shape = RoundedCornerShape(14.dp)
             )
@@ -1484,17 +1582,17 @@ private fun RegistrationFormContent(
         ) {
             OutlinedTextField(
                 viewModel.representativeFullName,
-                { viewModel.representativeFullName = it },
+                { viewModel.representativeFullName = it.take(160) },
                 Modifier.fillMaxWidth(),
-                label = { Text("Full legal name") },
+                label = { Text("Full legal name *") },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp)
             )
             OutlinedTextField(
                 viewModel.representativePhone,
-                { viewModel.representativePhone = it },
+                { viewModel.representativePhone = it.take(35) },
                 Modifier.fillMaxWidth(),
-                label = { Text("Phone number") },
+                label = { Text("Phone number *") },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
@@ -1589,6 +1687,77 @@ private fun RegistrationFormContent(
         ) {
             if (viewModel.isLoading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             else Text("Submit for KYB review")
+        }
+    }
+}
+
+@Composable
+private fun RegistrationChecklist(
+    profileComplete: Boolean,
+    documentsComplete: Boolean,
+    consentComplete: Boolean,
+    completedMilestones: Int
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Application checklist", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    "$completedMilestones of 3 complete",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            LinearProgressIndicator(
+                progress = { completedMilestones / 3f },
+                modifier = Modifier.fillMaxWidth()
+            )
+            RegistrationChecklistRow(
+                title = "Business profile",
+                supportingText = if (profileComplete) "Required details are complete" else "Business and representative details",
+                complete = profileComplete
+            )
+            RegistrationChecklistRow(
+                title = "Review documents",
+                supportingText = if (documentsComplete) "All 3 documents uploaded" else "Upload a certificate, ID, and selfie",
+                complete = documentsComplete
+            )
+            RegistrationChecklistRow(
+                title = "Privacy consent",
+                supportingText = if (consentComplete) "Consent recorded for this application" else "Review and accept the document notice",
+                complete = consentComplete
+            )
+        }
+    }
+}
+
+@Composable
+private fun RegistrationChecklistRow(
+    title: String,
+    supportingText: String,
+    complete: Boolean
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = if (complete) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+            contentDescription = null,
+            tint = if (complete) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Column(modifier = Modifier.padding(start = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(supportingText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

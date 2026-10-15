@@ -57,9 +57,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
     val merchantAlias by settingsManager.merchantAlias.collectAsState(initial = null)
-    val signedInEmail by settingsManager.loggedInEmail.collectAsState(initial = null)
     val merchantName = merchantAlias?.takeIf { it.isNotBlank() }
-        ?: signedInEmail?.substringBefore('@')?.replace('.', ' ')?.replaceFirstChar { it.uppercase() }
         ?: "Merchant account"
     val transactionStore = remember { TransactionStore(context) }
     var balance by remember { mutableStateOf<Double?>(null) }
@@ -253,7 +251,7 @@ fun WalletBalanceCard(
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "AVAILABLE BALANCE",
+                        "PROVIDER-REPORTED BALANCE",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.76f)
@@ -345,7 +343,15 @@ fun QuickAction(icon: ImageVector, label: String, background: Color, onClick: ()
             }
         }
         Spacer(modifier = Modifier.height(7.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1, fontSize = 12.sp)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            minLines = 2
+        )
     }
 }
 
@@ -359,7 +365,7 @@ fun MerchantToolsBanner(onCreatePaymentLink: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .background(Brush.linearGradient(listOf(FastPayNavy, FastPayBlue, Color(0xFF3A7AE8))))
+                .background(Brush.linearGradient(listOf(FastPayNavy, FastPayBlue)))
                 .padding(horizontal = 18.dp, vertical = 18.dp)
         ) {
             Row(

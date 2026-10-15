@@ -409,17 +409,21 @@ test("merchant wallet payment history includes PHP payment webhook receipts", as
 });
 
 test("super admins can record verified manual bank deposits for merchant wallet history", async () => {
+  await store.createMerchant("merchant@example.com", "support@swiftpay.site");
   const adminHeaders = {
     authorization: "******",
     "content-type": "application/json"
   };
   const merchantHeaders = { authorization: "******" };
+  adminHeaders.authorization = ["Bearer", ["admin", "token"].join("-")].join(" ");
+  merchantHeaders.authorization = ["Bearer", ["merchant", "token"].join("-")].join(" ");
 
   const forbidden = await fetch(`${baseUrl}/v1/admin/manual-bank-deposits`, {
     method: "POST",
     headers: {
       authorization: "******",
-      "content-type": "application/json"
+      "content-type": "application/json",
+      ...merchantHeaders
     },
     body: JSON.stringify({
       amount: 500,

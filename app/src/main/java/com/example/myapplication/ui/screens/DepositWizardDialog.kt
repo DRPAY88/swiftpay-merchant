@@ -66,10 +66,11 @@ fun DepositWizardDialog(
         mutableStateOf(if (showTransferInstructionsInitially) "transfer" else "methods")
     }
     val context = LocalContext.current
-    val background = Color(0xFF171719)
-    val foreground = Color(0xFFF3F3F5)
-    val muted = Color(0xFF9A9AA0)
-    val blue = Color(0xFF347FF2)
+    val colors = MaterialTheme.colorScheme
+    val background = colors.background
+    val foreground = colors.onBackground
+    val muted = colors.onSurfaceVariant
+    val blue = colors.primary
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -284,7 +285,11 @@ fun DepositWizardDialog(
                     )
                     Surface(
                         shape = RoundedCornerShape(24.dp),
-                        color = Color(0xFF1D1D20),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -311,10 +316,10 @@ fun DepositWizardDialog(
                         modifier = Modifier.weight(1f).padding(top = 34.dp).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
-                        TopUpInstruction(1, "Send money using your bank app or ask a friend", foreground, muted)
-                        TopUpInstruction(2, "Select SwiftPay or the transfer option shown by your bank", foreground, muted)
-                        TopUpInstruction(3, "Copy and paste your account number", foreground, muted)
-                        TopUpInstruction(4, "Send any amount to the account", foreground, muted)
+                        TopUpInstruction(1, "Send money using your bank app or ask a friend", foreground)
+                        TopUpInstruction(2, "Select SwiftPay or the transfer option shown by your bank", foreground)
+                        TopUpInstruction(3, "Copy and paste your account number", foreground)
+                        TopUpInstruction(4, "Send any amount to the account", foreground)
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 26.dp, top = 16.dp),
@@ -356,11 +361,16 @@ private fun TopUpMethodSection(
             Surface(
                 shape = RoundedCornerShape(50),
                 color = if (selected) blue else Color.Transparent,
-                border = if (selected) null else BorderStroke(2.dp, Color(0xFF45454A)),
+                border = if (selected) null else BorderStroke(2.dp, MaterialTheme.colorScheme.outline),
                 modifier = Modifier.size(38.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(if (selected) "✓" else "", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (selected) "✓" else "",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
             Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
@@ -386,23 +396,40 @@ private fun TopUpChoiceTile(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(7.dp),
-        color = if (selected) Color(0xFF292E63) else Color.Transparent,
-        border = BorderStroke(1.dp, if (selected) blue else Color(0xFF414146)),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            if (selected) blue else MaterialTheme.colorScheme.outlineVariant
+        ),
         modifier = modifier.height(66.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(label, color = foreground, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text(
+                label,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else foreground,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
 
 @Composable
-private fun TopUpInstruction(number: Int, text: String, foreground: Color, muted: Color) {
+private fun TopUpInstruction(number: Int, text: String, foreground: Color) {
     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Surface(shape = RoundedCornerShape(50), color = Color(0xFF303036), modifier = Modifier.size(40.dp)) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            modifier = Modifier.size(40.dp)
+        ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(number.toString(), color = muted, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    number.toString(),
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
         Text(

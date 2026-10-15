@@ -55,6 +55,7 @@ fun ProfileScreen() {
         mutableStateOf(settingsManager.isBiometricUnlockEnabled())
     }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showSignOutDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val navController = LocalNavController.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -90,11 +91,7 @@ fun ProfileScreen() {
     val textColor = MaterialTheme.colorScheme.onSurface
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
     val borderColor = MaterialTheme.colorScheme.outlineVariant
-    val accountName = signedInEmail?.takeIf { it.isNotBlank() }
-        ?.substringBefore('@')
-        ?.replace('.', ' ')
-        ?.replaceFirstChar { it.uppercase() }
-        ?: "Merchant account"
+    val accountName = merchantAlias?.takeIf { it.isNotBlank() } ?: "Merchant account"
     val canEnableBiometrics = hasDevicePin && biometricAuthenticator?.isAvailable() == true
 
     fun onBiometricToggle(enabled: Boolean) {
@@ -314,7 +311,7 @@ fun ProfileScreen() {
                             icon = Icons.Rounded.Description,
                             title = "API documentation",
                             subtitle = "SwiftPay integration reference",
-                            tint = FastPayGreen,
+                            tint = MaterialTheme.colorScheme.tertiary,
                             textColor = textColor,
                             secondaryTextColor = secondaryTextColor,
                             onClick = { navController.navigate(Route.ApiDocs) }
@@ -324,13 +321,15 @@ fun ProfileScreen() {
             }
 
             OutlinedButton(
-                onClick = { navController.logout() },
+                onClick = { showSignOutDialog = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.2f)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
             ) {
                 Icon(Icons.AutoMirrored.Rounded.Logout, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(12.dp))
@@ -347,6 +346,35 @@ fun ProfileScreen() {
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
+    }
+
+    if (showSignOutDialog) {
+        AlertDialog(
+            onDismissRequest = { showSignOutDialog = false },
+            title = { Text("Sign out of DRPAY?", color = textColor) },
+            text = {
+                Text(
+                    "You will need to sign in again to access your merchant account.",
+                    color = secondaryTextColor
+                )
+            },
+            containerColor = surfaceColor,
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSignOutDialog = false
+                        navController.logout()
+                    }
+                ) {
+                    Text("Sign out", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutDialog = false }) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        )
     }
 
     if (showThemeDialog) {

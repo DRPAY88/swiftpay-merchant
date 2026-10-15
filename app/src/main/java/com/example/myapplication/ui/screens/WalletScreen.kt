@@ -83,7 +83,8 @@ fun WalletScreen(
 ) {
     val balance = viewModel.walletBalance
     val adjustedBalance = viewModel.walletAdjustedBalance
-    var transactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
+    var localTransactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
+    var remoteTransactions by remember { mutableStateOf<List<InternalTransaction>>(emptyList()) }
     var transactionHistoryError by remember { mutableStateOf<String?>(null) }
     var isHistoryLoading by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
@@ -96,6 +97,9 @@ fun WalletScreen(
     val surfaceColor = MaterialTheme.colorScheme.surface
     val textColor = MaterialTheme.colorScheme.onBackground
 
+    val transactions = remember(localTransactions, remoteTransactions) {
+        mergeTransactions(localTransactions, remoteTransactions)
+    }
     val filteredTransactions = remember(transactions, selectedFilter) {
         when (selectedFilter) {
             "Income" -> transactions.filter { it.amount > 0 }
@@ -105,32 +109,30 @@ fun WalletScreen(
             else -> transactions
         }
     }
-
     LaunchedEffect(Unit) {
-        viewModel.refreshBalance()
-        launch {
-            try {
-                val context = viewModel.getApplication<Application>()
-                val settings = SettingsManager(context)
-                val transactionStore = TransactionStore(context)
-                val service = settings.createSwiftPayService()
+        val context = viewModel.getApplication<Application>()
+        val settings = SettingsManager(context)
+        val transactionStore = TransactionStore(context)
+        val service = settings.createSwiftPayService()
 
-                transactionStore.transactions.collectLatest { localTransactions ->
-                    val history = service.getWalletTransactionHistory()
-                    transactions = mergeTransactions(
-                        localTransactions,
-                        history.transactions
-                    )
-                    transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
-                    isHistoryLoading = false
-                }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.e("WalletScreen", "Error loading transactions", e)
-                transactionHistoryError = e.message ?: "Transaction history could not be loaded. Refresh to try again."
-            } finally {
-                isHistoryLoading = false
+        launch {
+            transactionStore.transactions.collectLatest { savedTransactions ->
+                localTransactions = savedTransactions
             }
+        }
+        launch { viewModel.refreshBalance() }
+
+        try {
+            val history = service.getWalletTransactionHistory()
+            remoteTransactions = history.transactions
+            transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.e("WalletScreen", "Error loading transactions", e)
+            transactionHistoryError = e.message
+                ?: "Transaction history could not be loaded. Refresh to try again."
+        } finally {
+            isHistoryLoading = false
         }
     }
 
@@ -175,18 +177,16 @@ fun WalletScreen(
                         onClick = {
                             scope.launch {
                                 isLoading = true
+                                isHistoryLoading = true
                                 try {
                                     viewModel.refreshBalance()
                                     val context = viewModel.getApplication<Application>()
                                     val settings = SettingsManager(context)
                                     val transactionStore = TransactionStore(context)
                                     val service = settings.createSwiftPayService()
-                                    val localTransactions = transactionStore.transactions.first()
+                                    localTransactions = transactionStore.transactions.first()
                                     val history = service.getWalletTransactionHistory()
-                                    transactions = mergeTransactions(
-                                        localTransactions,
-                                        history.transactions
-                                    )
+                                    remoteTransactions = history.transactions
                                     transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
                                     delay(800L)
                                 } catch (e: Exception) {
@@ -195,6 +195,7 @@ fun WalletScreen(
                                     transactionHistoryError = e.message ?: "Transaction history could not be refreshed."
                                 } finally {
                                     isLoading = false
+                                    isHistoryLoading = false
                                 }
                             }
                         }
@@ -274,143 +275,147 @@ fun WalletListContent(
         }
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 18.dp)
+            .padding(horizontal = 18.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Your money",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "Manage your balance and recent activity",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 3.dp, bottom = 16.dp)
-        )
-        PremiumBalanceCard(
-            balance = balance,
-            adjustedBalance = adjustedBalance,
-            accountNumber = accountNumber,
-            errorMessage = viewModel?.walletBalanceError,
-            onRetry = { viewModel?.refreshBalance() }
-        )
-
-        Spacer(Modifier.height(20.dp))
-        QuickActionsRow(onTopUp = { viewModel?.onStartDepositWizard() })
-        Spacer(Modifier.height(24.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
+        item(key = "wallet-intro") {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
-                    text = "Transactions",
+                    text = "Your money",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Activity on your PHP wallet",
+                    text = "Manage your balance and recent activity",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 3.dp)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        }
+        item(key = "wallet-balance") {
+            PremiumBalanceCard(
+                balance = balance,
+                adjustedBalance = adjustedBalance,
+                accountNumber = accountNumber,
+                errorMessage = viewModel?.walletBalanceError,
+                onRetry = { viewModel?.refreshBalance() }
+            )
+        }
+        item(key = "wallet-actions") {
+            QuickActionsRow(onTopUp = { viewModel?.onStartDepositWizard() })
+        }
+        item(key = "transaction-heading") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = transactions.size.toString(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            val filters = listOf("All", "Income", "Expense", "Bank Deposits", "Failed")
-            items(filters) { filter ->
-                PremiumFilterChip(
-                    selected = selectedFilter == filter,
-                    text = filter,
-                    onClick = { onFilterSelected(filter) }
-                )
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(bottom = 28.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            transactionHistoryError?.let { error ->
-                item {
+                Column {
                     Text(
-                        text = if (transactions.isEmpty()) {
-                            "Transaction history could not be loaded. $error"
-                        } else {
-                            "Some transaction history could not be loaded. $error"
-                        },
-                        color = MaterialTheme.colorScheme.error,
+                        text = "Transactions",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Activity on your PHP wallet",
                         style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.errorContainer)
-                            .padding(12.dp)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 3.dp)
+                    )
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                ) {
+                    Text(
+                        text = transactions.size.toString(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
                     )
                 }
             }
-            if (transactions.isEmpty() && selectedFilter == "All" && isHistoryLoading) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = "Loading transaction history…",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            } else if (transactions.isEmpty() && selectedFilter == "All" && transactionHistoryError != null) {
-                item {
-                    Text(
-                        text = "Refresh to try loading your transaction history again.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                        textAlign = TextAlign.Center
+        }
+        item(key = "transaction-filters") {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val filters = listOf("All", "Income", "Expense", "Bank Deposits", "Failed")
+                items(filters) { filter ->
+                    PremiumFilterChip(
+                        selected = selectedFilter == filter,
+                        text = filter,
+                        onClick = { onFilterSelected(filter) }
                     )
                 }
-            } else if (transactions.isEmpty() && selectedFilter == "All") {
-                item { EmptyHistoryState() }
-            } else if (transactions.isEmpty()) {
-                item { EmptyFilteredHistoryState(selectedFilter) }
-            } else {
-                items(transactions, key = { it.transactionId }) { tx ->
-                    AnimatedTransactionItem(tx = tx, onClick = { onTransactionClick(tx) }, viewModel = viewModel)
+            }
+        }
+        transactionHistoryError?.let { error ->
+            item(key = "transaction-history-error") {
+                Text(
+                    text = if (transactions.isEmpty()) {
+                        "Transaction history could not be loaded. $error"
+                    } else {
+                        "Some transaction history could not be loaded. $error"
+                    },
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(12.dp)
+                )
+            }
+        }
+        if (transactions.isEmpty() && selectedFilter == "All" && isHistoryLoading) {
+            item(key = "transaction-history-loading") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = "Loading transaction history…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+            }
+        } else if (transactions.isEmpty() && selectedFilter == "All" && transactionHistoryError != null) {
+            item(key = "transaction-history-retry") {
+                Text(
+                    text = "Refresh to try loading your transaction history again.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else if (transactions.isEmpty() && selectedFilter == "All") {
+            item(key = "transaction-history-empty") { EmptyHistoryState() }
+        } else if (transactions.isEmpty()) {
+            item(key = "filtered-transaction-history-empty") {
+                EmptyFilteredHistoryState(selectedFilter)
+            }
+        } else {
+            items(transactions, key = { it.transactionId }) { tx ->
+                AnimatedTransactionItem(
+                    tx = tx,
+                    onClick = { onTransactionClick(tx) },
+                    viewModel = viewModel
+                )
             }
         }
     }
@@ -679,7 +684,7 @@ fun PremiumBalanceCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "AVAILABLE BALANCE",
+                        text = "PROVIDER-REPORTED BALANCE",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.74f),
                         fontWeight = FontWeight.SemiBold,

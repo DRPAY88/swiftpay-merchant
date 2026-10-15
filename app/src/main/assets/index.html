@@ -21,6 +21,12 @@
             --bg-gray: #F4F7FC;
             --text-main: #13243A;
             --text-muted: #53657C;
+            --outline: #D6E0EC;
+            --surface-variant: #EEF3F8;
+            --primary-container: #E6EEF8;
+            --on-primary-container: #163C70;
+            --error-container: #FFF5F4;
+            --on-error-container: #742A2E;
             --focus-ring: #91B8E8;
             --radius-xl: 24px;
             --radius-lg: 16px;
@@ -1160,6 +1166,12 @@
             --bg-gray: #071429;
             --text-main: #EAF1FA;
             --text-muted: #B5C3D6;
+            --outline: #425674;
+            --surface-variant: #0D1C31;
+            --primary-container: #29466B;
+            --on-primary-container: #EAF1FA;
+            --error-container: #3A2028;
+            --on-error-container: #FFD9DE;
             --focus-ring: #9BBCEB;
         }
 
@@ -1265,6 +1277,205 @@
             border-color: #75414A;
             color: #FFD9DE;
         }
+
+        .hero {
+            background:
+                radial-gradient(ellipse at 100% 0%, rgba(213,177,109,0.14), transparent 46%),
+                linear-gradient(145deg, #163C70, #0B1F3A 68%, #071429);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 12px 28px rgba(11,31,58,0.16);
+        }
+
+        .balance-amount {
+            font-size: clamp(28px, 8vw, 36px);
+            letter-spacing: -0.035em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .action-card {
+            min-height: 94px;
+            justify-content: center;
+            padding: 10px 8px;
+            border: 1px solid rgba(11,31,58,0.08);
+            background: var(--surface);
+            box-shadow: 0 3px 12px rgba(11,31,58,0.04);
+        }
+
+        :root[data-theme="dark"] .action-card {
+            border-color: rgba(255,255,255,0.09);
+            background: var(--surface);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+
+        :root[data-theme="dark"] .action-card:hover,
+        :root[data-theme="dark"] .action-card:active {
+            background: var(--fp-sky);
+        }
+
+        :root[data-theme="dark"] .collect-amount-panel,
+        :root[data-theme="dark"] .collect-institution-summary,
+        :root[data-theme="dark"] .summary-card,
+        :root[data-theme="dark"] .api-card,
+        :root[data-theme="dark"] .channel-card,
+        :root[data-theme="dark"] .transfer-card {
+            background: var(--surface);
+            color: var(--text-main);
+            border-color: rgba(255,255,255,0.12);
+        }
+
+        :root[data-theme="dark"] .collect-amount-control,
+        :root[data-theme="dark"] .collect-summary,
+        :root[data-theme="dark"] .transfer-summary {
+            border-color: var(--outline);
+        }
+
+        :root[data-theme="dark"] .collect-amount-input,
+        :root[data-theme="dark"] .institution-picker-input,
+        :root[data-theme="dark"] .modern-input {
+            color: var(--text-main);
+        }
+
+        :root[data-theme="dark"] .collect-amount-input::placeholder,
+        :root[data-theme="dark"] .modern-input::placeholder,
+        :root[data-theme="dark"] .institution-picker-input::placeholder {
+            color: #AABBD0;
+            opacity: 1;
+        }
+
+        :root[data-theme="dark"] .collect-preset {
+            background: var(--surface-variant);
+            border-color: var(--outline);
+            color: var(--text-main);
+        }
+
+        :root[data-theme="dark"] .collect-preset.is-selected,
+        :root[data-theme="dark"] .channel-card.selected {
+            background: var(--primary-container);
+            border-color: var(--fp-blue);
+            color: var(--on-primary-container);
+        }
+
+        :root[data-theme="dark"] .collect-checkout-mark,
+        :root[data-theme="dark"] .channel-icon {
+            background: var(--surface-variant);
+            border-color: var(--outline);
+            color: var(--fp-blue);
+        }
+
+        :root[data-theme="dark"] .fx-quote-card {
+            background: var(--surface-variant);
+            border-color: var(--outline);
+            color: var(--text-main);
+        }
+
+        :root[data-theme="dark"] .fx-quote-card .quote-note,
+        :root[data-theme="dark"] .collect-note {
+            color: var(--text-muted);
+        }
+
+        :root[data-theme="dark"] .institution-options {
+            background: var(--surface);
+            border-color: var(--outline);
+        }
+
+        :root[data-theme="dark"] .institution-option {
+            color: var(--text-main);
+        }
+
+        :root[data-theme="dark"] .institution-option:hover,
+        :root[data-theme="dark"] .institution-option[aria-selected="true"],
+        :root[data-theme="dark"] .institution-option.is-active {
+            background: var(--primary-container);
+        }
+
+        :root[data-theme="dark"] .api-key-val {
+            background: var(--surface-variant);
+            color: var(--text-main);
+        }
+
+        :root[data-theme="dark"] .action-result {
+            background: var(--error-container);
+            border-color: #75414A;
+            color: var(--on-error-container);
+        }
+
+        :root[data-theme="dark"] .collect-method-category-title,
+        :root[data-theme="dark"] .collect-checkout-title,
+        :root[data-theme="dark"] .channel-card .channel-title,
+        :root[data-theme="dark"] .collect-heading h1,
+        :root[data-theme="dark"] .collect-heading h2,
+        :root[data-theme="dark"] .transfer-hero h2,
+        :root[data-theme="dark"] .summary-row strong {
+            color: var(--text-main);
+        }
+
+        .collect-amount-input {
+            font-size: clamp(28px, 8vw, 34px);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .collect-preset,
+        .institution-option,
+        .channel-card,
+        .btn-action {
+            transition: color var(--motion-standard) var(--motion-easing),
+                background var(--motion-standard) var(--motion-easing),
+                border-color var(--motion-standard) var(--motion-easing),
+                box-shadow var(--motion-standard) var(--motion-easing),
+                transform var(--motion-quick) var(--motion-easing);
+        }
+
+        .collect-preset,
+        .institution-picker-toggle {
+            min-height: 48px;
+        }
+
+        .collect-preset.is-selected {
+            background: var(--primary-container);
+            color: var(--on-primary-container);
+        }
+
+        .channel-card:focus-visible,
+        .collect-preset:focus-visible,
+        .institution-picker-toggle:focus-visible,
+        .institution-option:focus-visible {
+            outline: 3px solid var(--focus-ring);
+            outline-offset: 2px;
+        }
+
+        .collect-institution-option {
+            min-height: 76px;
+        }
+
+        .transfer-badge {
+            background: var(--primary-container);
+            color: var(--on-primary-container);
+        }
+
+        .btn-action {
+            background: var(--fp-blue);
+            color: #FFFFFF;
+        }
+
+        :root[data-theme="dark"] .btn-action {
+            color: #071429;
+        }
+
+        .btn-action:disabled {
+            opacity: 0.58;
+            transform: none;
+        }
+
+        #dashboard > .page-content {
+            padding-top: 12px;
+        }
+
+        @media (max-width: 360px) {
+            .collect-content { padding-inline: 14px; }
+            .collect-amount-panel { padding: 16px; }
+            .collect-method-category { gap: 8px; }
+            .collect-institution-option { min-height: 68px; padding: 12px; }
+        }
     </style>
 </head>
 <body>
@@ -1276,7 +1487,7 @@
                 <img src="drpay_mark.png" alt="">
                 <span>DRPAY</span>
             </h1>
-            <p class="balance-badge">AVAILABLE BALANCE</p>
+            <p class="balance-badge">PROVIDER-REPORTED PHP BALANCE</p>
             <div id="balance-display" class="balance-amount" aria-live="polite">&#8369; --.--</div>
         </header>
 
