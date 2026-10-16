@@ -28,6 +28,17 @@ Foreign-currency QR payments (including KRW-priced Toss/Kakao/KBank and CNY-pric
 
 The Render blueprint configures `OTP_FROM_EMAIL` as `SwiftPay <login@swiftpay.site>`, matching the Resend DKIM and sending records for `swiftpay.site`. Keep `RESEND_API_KEY` configured as a Render secret with a valid production Resend API key.
 
+## Marketing site and custom domain
+
+The marketing site is served from `backend/public/marketing/` at `/`; the protected admin console remains at `/admin/`. The site's download button uses `/download`, which redirects to the current published Android APK release. Update that redirect and the displayed version in `backend/src/app.js` and `backend/public/marketing/index.html` when publishing a new APK.
+
+The Render blueprint sets `PUBLIC_BASE_URL` to `https://denpay.cc` so generated payment links use the custom domain. To connect it:
+
+1. Deploy the service from this repository to Render.
+2. In the `swiftpay-merchant-backend` Render service, open **Settings > Custom Domains** and add `denpay.cc`. Render also supports the corresponding `www` hostname and redirects it to the root domain.
+3. In Hostinger's DNS Zone Editor for `denpay.cc`, add the DNS records Render shows for the custom domain. Remove conflicting `AAAA` records as Render directs, but keep unrelated mail records such as `MX` and email-verification `TXT` records.
+4. Return to Render and verify the domain. Render provisions HTTPS after DNS verification; then check `https://denpay.cc` and `https://denpay.cc/download`.
+
 ## USDT buy and sell
 
 The wallet opens Transak's hosted, non-custodial checkout for USDT on TRON. The backend creates a single-use widget URL; BUY requires the customer's TRON destination address, while SELL sends the entered USDT amount to Transak's sell flow. The app does not custody USDT or treat the SwiftPay PHP wallet as a crypto balance. Transak performs its own KYC, quotes, fees, and transaction handling.

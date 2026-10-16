@@ -499,6 +499,10 @@ export function createApp({
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
   app.use(helmet());
+  app.use("/", express.static(fileURLToPath(new URL("../public/marketing/", import.meta.url)), {
+    index: "index.html",
+    maxAge: "1h"
+  }));
   app.use("/admin", express.static(fileURLToPath(new URL("../public/", import.meta.url)), {
     index: "index.html",
     maxAge: "1h"
@@ -518,6 +522,9 @@ export function createApp({
   }));
   const webhookLimiter = rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: "draft-8", legacyHeaders: false });
   app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
+  app.get("/download", (_req, res) => {
+    res.redirect(302, "https://github.com/stden16/swiftpay-merchant/releases/download/v1.0.15/SwiftPay-Merchant-v1.0.15.apk");
+  });
   app.get("/checkout/:code", asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);
     try {

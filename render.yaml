@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: PUBLIC_BASE_URL
-        value: https://swiftpay-merchant.onrender.com
+        value: https://denpay.cc
       - key: SWIFTPAY_BASE_URL
         value: https://api.pay.live.swiftpay.ph/api/
       - key: SWIFTPAY_ALLOW_LIVE

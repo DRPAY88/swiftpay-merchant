@@ -52,6 +52,25 @@ after(async () => {
 });
 
 test("admin dashboard is served while its APIs require a signed super-admin role", async () => {
+  const homepage = await fetch(`${baseUrl}/`);
+  assert.equal(homepage.status, 200);
+  const homepageHtml = await homepage.text();
+  assert.match(homepageHtml, /KRW in\./);
+  assert.match(homepageHtml, /PHP or USDT out\./);
+  assert.match(homepageHtml, /KRW → PHP/);
+  assert.match(homepageHtml, /KRW → USDT/);
+  assert.match(homepageHtml, /KRW → USDT \(TRC20\)/);
+  assert.match(homepageHtml, /without a remittance transfer/);
+  assert.match(homepageHtml, /Not available yet/);
+  assert.match(homepageHtml, /Fast payout is the goal, but exchange is not available yet/);
+
+  const download = await fetch(`${baseUrl}/download`, { redirect: "manual" });
+  assert.equal(download.status, 302);
+  assert.equal(
+    download.headers.get("location"),
+    "https://github.com/stden16/swiftpay-merchant/releases/download/v1.0.15/SwiftPay-Merchant-v1.0.15.apk"
+  );
+
   const page = await fetch(`${baseUrl}/admin/`);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /SwiftPay Super Admin/);
