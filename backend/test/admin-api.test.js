@@ -68,8 +68,8 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /Concept previews, not screenshots of the current app/);
   assert.match(homepageHtml, /id="promo"/);
   assert.match(homepageHtml, /DRPAY IN 15 SECONDS/);
-  assert.match(homepageHtml, /src="\/drpay-promo\.mp4"/);
-  assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg"/);
+  assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=2"/);
+  assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=2"/);
 
   const promoVideo = await fetch(`${baseUrl}/drpay-promo.mp4`, { method: "HEAD" });
   assert.equal(promoVideo.status, 200);
