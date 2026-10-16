@@ -850,137 +850,429 @@ h1 span,
 
 .market-rates {
   margin-top: 22px;
-  padding: 20px;
-  background: #f7faff;
-  border: 1px solid #e5edf7;
-  border-radius: 12px;
+  padding: 22px;
+  background:
+    radial-gradient(ellipse at 100% 0, rgba(70, 153, 238, 0.08), transparent 42%),
+    #f7faff;
+  border: 1px solid #e2eaf4;
+  border-radius: 15px;
+  box-shadow: 0 12px 30px rgba(24, 57, 95, 0.055);
 }
 
 .market-rates-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 11px;
+  margin-bottom: 7px;
+}
+
+.market-rates-mark {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  flex: 0 0 39px;
+  place-items: center;
+  color: #216dc5;
+  background: #e7f1ff;
+  border: 1px solid #d7e8ff;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.market-rates-title {
+  min-width: 0;
+  flex: 1;
 }
 
 .market-rates-heading .eyebrow {
-  margin-bottom: 5px;
-  color: #7186a1;
-  font-size: 9px;
+  margin-bottom: 3px;
+  color: #52759a;
+  font-size: 8px;
+  letter-spacing: 0.9px;
 }
 
 .market-rates-heading h3 {
   margin: 0;
-  color: var(--navy);
+  color: #102a4b;
   font-family: Manrope, "Segoe UI", sans-serif;
-  font-size: 19px;
-  letter-spacing: -0.5px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.45px;
+  line-height: 1.25;
 }
 
 .market-rates-status {
-  color: #687a91;
+  display: inline-flex;
+  min-height: 26px;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  color: #65768c;
+  background: #edf1f6;
+  border: 1px solid #e4e9ef;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(27, 53, 82, 0.04);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.market-rates-status::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  background: currentColor;
+  border-radius: 50%;
+  content: "";
+}
+
+.market-rates-status[data-state="live"] {
+  color: #14845c;
+  background: #e9f8f1;
+  border-color: #d4f0e2;
+}
+
+.market-rates-status[data-state="loading"] {
+  color: #477db5;
+  background: #edf5ff;
+  border-color: #deebfb;
+}
+
+.market-rates-status[data-state="error"],
+.market-rates-status[data-state="input"] {
+  color: #966b24;
+  background: #fff7e8;
+  border-color: #f3e8cb;
+}
+
+.market-rates-intro {
+  margin: 0 0 15px 50px;
+  color: #70839b;
   font-size: 10px;
-  text-align: right;
+  line-height: 1.65;
 }
 
 .market-rates-label {
-  display: block;
-  margin-bottom: 6px;
-  color: #62758d;
-  font-size: 10px;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+  color: #506783;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  line-height: 1.4;
+}
+
+.market-rates-label small {
+  color: #91a0b2;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.market-rates-send {
+  position: relative;
+  overflow: hidden;
+  padding: 12px 13px 13px;
+  background: linear-gradient(120deg, #0d2648, #143c69);
+  border: 1px solid #1b416d;
+  border-radius: 11px;
+  box-shadow: 0 8px 18px rgba(14, 43, 78, 0.12);
+}
+
+.market-rates-send::after {
+  position: absolute;
+  top: -45px;
+  right: -25px;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(91, 174, 241, 0.16), transparent 68%);
+  content: "";
+  pointer-events: none;
+}
+
+.market-rates-send > * {
+  position: relative;
+  z-index: 1;
+}
+
+.market-rates-send .market-rates-label {
+  margin-bottom: 5px;
+  color: #d0dff0;
 }
 
 .market-rates-input {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  background: #fff;
-  border: 1px solid #dfe8f2;
-  border-radius: 8px;
+  gap: 9px;
 }
 
 .market-rates-input > span {
-  color: #7487a0;
+  flex: 0 0 auto;
+  color: #9bb4d0;
+  font-family: Manrope, "Segoe UI", sans-serif;
+  font-size: 19px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .market-rates-input input {
   width: 100%;
   min-width: 0;
-  padding: 11px 0;
-  color: var(--navy);
+  min-height: 32px;
+  flex: 1;
+  padding: 2px 0;
+  color: #fff;
   background: transparent;
   border: 0;
   outline: 0;
-  font: inherit;
-  font-size: 14px;
+  font-family: Manrope, "Segoe UI", sans-serif;
+  font-size: clamp(21px, 3vw, 25px);
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  caret-color: #75c9ff;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.market-rates-input input::-webkit-inner-spin-button,
+.market-rates-input input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.market-rates-input b {
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  color: #c6d8ec;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 .market-rates-results {
   display: grid;
-  gap: 8px;
-  margin-top: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 10px;
 }
 
-.market-rate-row {
+.market-rate-card {
+  display: flex;
+  min-width: 0;
+  min-height: 112px;
+  flex-direction: column;
+  padding: 13px;
+  background: #fff;
+  border: 1px solid #e7edf4;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(28, 62, 101, 0.035);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.market-rate-card-php {
+  background: linear-gradient(145deg, #fff, #f4f8ff);
+  border-color: #e1eaf6;
+}
+
+.market-rate-card-usdt {
+  background: linear-gradient(145deg, #fff, #f3fbf7);
+  border-color: #dfede6;
+}
+
+.market-rate-card:hover {
+  transform: translateY(-1px);
+  border-color: #d7e3f0;
+  box-shadow: 0 6px 14px rgba(28, 62, 101, 0.07);
+}
+
+.market-rate-card-heading {
+  display: flex;
+  min-height: 29px;
+  align-items: center;
+  gap: 8px;
+}
+
+.market-currency-icon {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  flex: 0 0 29px;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.market-currency-icon-php {
+  color: #286fc0;
+  background: #e7f1ff;
+}
+
+.market-currency-icon-usdt {
+  color: #14845e;
+  background: #e4f6ed;
+}
+
+.market-rate-card:hover .market-currency-icon {
+  transform: scale(1.04);
+}
+
+.market-rate-card-heading > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.market-rate-card-heading strong {
+  color: #243f61;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.market-rate-card-heading small {
+  color: #8998aa;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.market-rate-amount {
+  display: block;
+  max-width: 100%;
+  margin-top: 13px;
+  overflow-wrap: anywhere;
+  color: var(--navy);
+  font-family: Manrope, "Segoe UI", sans-serif;
+  font-size: clamp(17px, 2.3vw, 22px);
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.market-rate-card-php .market-rate-amount {
+  color: #175b9e;
+}
+
+.market-rate-card-usdt .market-rate-amount {
+  color: #11734f;
+}
+
+.market-rate-unit {
+  display: block;
+  min-height: 12px;
+  margin-top: 5px;
+  color: #8191a5;
+  font-size: 8px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.market-rates-updated {
+  margin: 11px 0 0;
+  color: #78899e;
+  font-size: 9px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+
+.market-rates-updated:empty {
+  display: none;
+}
+
+.market-rates-notice {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  background: #fff;
-  border: 1px solid #edf1f6;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 9px 10px;
+  background: #fff8ea;
+  border: 1px solid #f2e7cf;
+  border-left: 2px solid #e4c87f;
   border-radius: 8px;
 }
 
-.market-rate-row > div {
+.market-rates-notice > span {
   display: grid;
-  gap: 4px;
-}
-
-.market-rate-row strong {
-  color: #233e62;
-  font-size: 11px;
-}
-
-.market-rate-row small,
-.market-rates-updated {
-  color: #8290a3;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  place-items: center;
+  color: #85601f;
+  background: #f6e9c9;
+  border: 1px solid #eddbb1;
+  border-radius: 50%;
   font-size: 9px;
-}
-
-.market-rate-row > span {
-  color: var(--navy);
-  font-size: 13px;
   font-weight: 800;
-  text-align: right;
 }
 
-.market-rates-updated {
-  margin: 12px 0 0;
+.market-rates-notice p {
+  margin: 0;
+  color: #786b50;
+  font-size: 9px;
   line-height: 1.6;
 }
 
-.market-rates-disclaimer,
 .market-rates-sources {
-  color: #718096;
+  margin: 8px 0 0;
+  color: #8291a4;
   font-size: 9px;
-  line-height: 1.65;
-}
-
-.market-rates-disclaimer {
-  margin: 10px 0 0;
-}
-
-.market-rates-sources {
-  margin: 6px 0 0;
+  line-height: 1.7;
 }
 
 .market-rates-sources a {
   color: #396da8;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: #c5d7eb;
+  text-underline-offset: 2px;
+  transition: color 150ms ease;
+}
+
+.market-rates-sources a:hover,
+.market-rates-sources a:focus-visible {
+  color: #174f91;
+}
+
+.market-rates-sources a:focus-visible {
+  outline: 2px solid #4387cd;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@keyframes market-rate-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.market-rates-status[data-state="loading"]::before {
+  animation: market-rate-pulse 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-rates-status[data-state="loading"]::before,
+  .market-rate-card,
+  .market-currency-icon,
+  .market-rates-sources a {
+    animation: none;
+    transition: none;
+  }
 }
 
 .screen-samples {
@@ -1849,6 +2141,76 @@ h1 span,
 
   .fx-showcase {
     padding: 13px;
+  }
+
+  .market-rates {
+    padding: 16px;
+  }
+
+  .market-rates-heading {
+    gap: 8px;
+  }
+
+  .market-rates-mark {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+    border-radius: 10px;
+  }
+
+  .market-rates-heading h3 {
+    font-size: 15px;
+  }
+
+  .market-rates-heading .eyebrow {
+    font-size: 7px;
+  }
+
+  .market-rates-status {
+    max-width: 112px;
+    gap: 5px;
+    padding-inline: 7px;
+    font-size: 7px;
+  }
+
+  .market-rates-status[data-state="error"],
+  .market-rates-status[data-state="input"] {
+    max-width: 112px;
+  }
+
+  .market-rates-intro {
+    margin-left: 42px;
+  }
+
+  .market-rates-results {
+    gap: 7px;
+  }
+
+  .market-rate-card {
+    min-height: 105px;
+    padding: 10px;
+  }
+
+  .market-rate-card-heading {
+    gap: 6px;
+  }
+
+  .market-rate-card-heading strong {
+    font-size: 9px;
+  }
+
+  .market-rate-amount {
+    font-size: clamp(15px, 4.7vw, 20px);
+  }
+
+  .market-rate-unit,
+  .market-rates-updated {
+    font-size: 8px;
+  }
+
+  .market-rates-notice p,
+  .market-rates-sources {
+    font-size: 8px;
   }
 
   .fx-option {

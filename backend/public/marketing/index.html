@@ -8,8 +8,8 @@
   <link rel="canonical" href="https://denpay.cc/">
   <title>DRPAY — KRW to PHP or USDT</title>
   <link rel="icon" href="/checkout-assets/drpay_mark.png" type="image/png">
-  <link rel="stylesheet" href="/site.css">
-  <script src="/rates.js" defer></script>
+  <link rel="stylesheet" href="/site.css?v=2">
+  <script src="/rates.js?v=2" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -136,30 +136,49 @@
           <p class="fx-disclaimer">Rates, fees, eligibility, and payout times will depend on service availability.</p>
           <section class="market-rates" id="market-rates" aria-labelledby="market-rates-title">
             <div class="market-rates-heading">
-              <div>
-                <p class="eyebrow">REFERENCE ONLY</p>
-                <h3 id="market-rates-title">Live market rates</h3>
+              <span class="market-rates-mark" aria-hidden="true">↗</span>
+              <div class="market-rates-title">
+                <p class="eyebrow">LIVE REFERENCE DATA</p>
+                <h3 id="market-rates-title">Market rate calculator</h3>
               </div>
-              <span class="market-rates-status" id="market-rates-status" role="status" aria-live="polite">Loading rates…</span>
+              <span class="market-rates-status" id="market-rates-status" data-state="loading" role="status" aria-live="polite">Loading rates…</span>
             </div>
-            <label class="market-rates-label" for="market-rates-amount">Korean Won amount</label>
-            <div class="market-rates-input">
-              <span aria-hidden="true">₩</span>
-              <input id="market-rates-amount" type="number" min="1" step="1000" value="100000" inputmode="numeric">
+            <p class="market-rates-intro">Enter an amount to see an estimate in Philippine pesos or USDT.</p>
+            <div class="market-rates-send">
+              <label class="market-rates-label" for="market-rates-amount">
+                <span>YOU SEND</span>
+                <small>Korean Won · KRW</small>
+              </label>
+              <div class="market-rates-input">
+                <span aria-hidden="true">₩</span>
+                <input id="market-rates-amount" type="number" min="1" step="1000" value="100000" inputmode="numeric">
+                <b>KRW</b>
+              </div>
             </div>
             <div class="market-rates-results" aria-live="polite">
-              <div class="market-rate-row">
-                <div><strong>Philippine Peso</strong><small id="market-rates-php-per-krw">Rate loading…</small></div>
-                <span id="market-rates-php-estimate">—</span>
-              </div>
-              <div class="market-rate-row">
-                <div><strong>USDT · TRC20</strong><small id="market-rates-usdt-per-krw">Rate loading…</small></div>
-                <span id="market-rates-usdt-estimate">—</span>
-              </div>
+              <article class="market-rate-card market-rate-card-php">
+                <div class="market-rate-card-heading">
+                  <span class="market-currency-icon market-currency-icon-php" aria-hidden="true">₱</span>
+                  <span><strong>Philippine Peso</strong><small>KRW → PHP</small></span>
+                </div>
+                <span class="market-rate-amount" id="market-rates-php-estimate">—</span>
+                <small class="market-rate-unit" id="market-rates-php-per-krw">Rate loading…</small>
+              </article>
+              <article class="market-rate-card market-rate-card-usdt">
+                <div class="market-rate-card-heading">
+                  <span class="market-currency-icon market-currency-icon-usdt" aria-hidden="true">₮</span>
+                  <span><strong>USDT</strong><small>TRON · TRC20</small></span>
+                </div>
+                <span class="market-rate-amount" id="market-rates-usdt-estimate">—</span>
+                <small class="market-rate-unit" id="market-rates-usdt-per-krw">Rate loading…</small>
+              </article>
             </div>
             <p class="market-rates-updated" id="market-rates-updated"></p>
-            <p class="market-rates-disclaimer">Indicative market references, not a DRPAY offer or guaranteed payout. Fees, spread, eligibility, and TRC20 network costs are not included. Direct exchange is not available yet.</p>
-            <p class="market-rates-sources">Sources: <a href="https://currencyapi.com/" target="_blank" rel="noopener noreferrer">CurrencyAPI</a> and <a href="https://www.coingecko.com/en/coins/tether" target="_blank" rel="noopener noreferrer">CoinGecko</a>.</p>
+            <div class="market-rates-notice">
+              <span aria-hidden="true">i</span>
+              <p>Reference estimate only—not a DRPAY offer. Fees, spread, eligibility and network costs are excluded. Direct exchange is not available yet.</p>
+            </div>
+            <p class="market-rates-sources">Market data from <a href="https://currencyapi.com/" target="_blank" rel="noopener noreferrer">CurrencyAPI</a> and <a href="https://www.coingecko.com/en/coins/tether" target="_blank" rel="noopener noreferrer">CoinGecko</a>.</p>
           </section>
         </div>
       </div>

@@ -87,7 +87,9 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=2"/);
   assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=2"/);
   assert.match(homepageHtml, /id="market-rates"/);
-  assert.match(homepageHtml, /Indicative market references, not a DRPAY offer or guaranteed payout/);
+  assert.match(homepageHtml, /Reference estimate only—not a DRPAY offer/);
+  assert.match(homepageHtml, /href="\/site\.css\?v=2"/);
+  assert.match(homepageHtml, /src="\/rates\.js\?v=2"/);
 
   const ratesScript = await fetch(`${baseUrl}/rates.js`);
   assert.equal(ratesScript.status, 200);

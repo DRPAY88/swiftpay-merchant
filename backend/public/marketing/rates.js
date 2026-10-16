@@ -10,6 +10,11 @@
   const updated = document.getElementById("market-rates-updated");
   let rates = null;
 
+  function setStatus(message, state) {
+    status.textContent = message;
+    status.dataset.state = state;
+  }
+
   function formatRate(value, currency) {
     const maximumFractionDigits = currency === "PHP" ? 6 : 8;
     return new Intl.NumberFormat("en-PH", { maximumFractionDigits }).format(value);
@@ -34,16 +39,16 @@
     if (!rates || !Number.isFinite(amount) || amount <= 0) {
       phpEstimate.textContent = "—";
       usdtEstimate.textContent = "—";
-      if (rates) status.textContent = "Enter a positive KRW amount";
+      if (rates) setStatus("Enter a positive KRW amount", "input");
       return;
     }
-    status.textContent = "Indicative estimates";
+    setStatus("Indicative rates", "live");
     phpEstimate.textContent = formatEstimate(amount * rates.PHP.perKrw, "PHP");
     usdtEstimate.textContent = `≈ ${formatEstimate(amount * rates.USDT.perKrw, "USDT")}`;
   }
 
   async function refreshRates() {
-    status.textContent = "Updating live rates…";
+    setStatus("Updating rates…", "loading");
     try {
       const response = await fetch("/api/marketing/rates", {
         headers: { Accept: "application/json" },
@@ -70,7 +75,7 @@
       phpRate.textContent = "Rate unavailable";
       usdtRate.textContent = "Rate unavailable";
       updated.textContent = "";
-      status.textContent = "Live rates temporarily unavailable";
+      setStatus("Rates unavailable", "error");
       renderEstimates();
     }
   }
