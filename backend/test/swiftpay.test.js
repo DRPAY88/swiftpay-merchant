@@ -992,6 +992,39 @@ test("disbursement is represented as pending after provider acceptance", async (
   assert.equal(JSON.parse(requests.at(-1).options.body).creditInformation.remarks, "Bank transfer");
 });
 
+test("ambiguous disbursement provider failures require confirmation and warn against retrying", async () => {
+  disbursementFailure = {
+    status: 500,
+    body: { errorCode: "PROVIDER_ERROR", errorUuid: "support-ref-456" }
+  };
+  try {
+    const response = await fetch(`${baseUrl}/v1/disbursements`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-test-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        amount: 75,
+        referenceNo: "TRANSFER-UNKNOWN-1",
+        channel: "INSTAPAY",
+        institutionCode: "TESTBANK",
+        recipientInformation: { accountNumber: "123456", fullName: "Test Recipient" }
+      })
+    });
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), {
+      status: "UNKNOWN",
+      outcomeUnknown: true,
+      referenceNo: "TRANSFER-UNKNOWN-1",
+      message: "SwiftPay has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference."
+    });
+  } finally {
+    disbursementFailure = null;
+  }
+});
+
 test("disbursement trims supplied remarks and replaces blank remarks with a nonblank default", async () => {
   const headers = {
     authorization: "Bearer valid-test-token",
@@ -1088,7 +1121,7 @@ test("disbursement history requests a provider page and returns its records as a
     resultCount: 1
   };
   try {
-    const response = await fetch(`${baseUrl}/v1/disbursements`, {
+    const response = await fetch(`${baseUrl}/v1/disbursements?pageNo=2&pageSize=50`, {
       headers: { authorization: "Bearer valid-test-token" }
     });
     assert.equal(response.status, 200);
@@ -1096,8 +1129,8 @@ test("disbursement history requests a provider page and returns its records as a
     const request = requests.at(-1);
     const providerUrl = new URL(request.url);
     assert.equal(providerUrl.pathname, "/api/disbursements");
-    assert.equal(providerUrl.searchParams.get("pageNo"), "0");
-    assert.equal(providerUrl.searchParams.get("pageSize"), "100");
+    assert.equal(providerUrl.searchParams.get("pageNo"), "2");
+    assert.equal(providerUrl.searchParams.get("pageSize"), "50");
     assert.match(request.options.headers.Authorization, /^Basic /);
   } finally {
     disbursementPage = { pageNo: 0, result: [], totalCount: 0, resultCount: 0 };

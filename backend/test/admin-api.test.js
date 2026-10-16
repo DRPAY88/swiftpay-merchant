@@ -406,6 +406,36 @@ test("merchant wallet payment history includes PHP payment webhook receipts", as
     currency: "PHP",
     status: "EXECUTED"
   }]);
+
+  await store.recordWebhookEvent({
+    eventKey: "payment:00000000-0000-4000-8000-000000000004:revision",
+    eventType: "payment",
+    paymentId: "00000000-0000-4000-8000-000000000004",
+    referenceNo: "ORDER-PHP-2",
+    status: "REJECTED",
+    amount: 825,
+    currency: "PHP"
+  });
+  const latestPayment = await fetch(`${baseUrl}/v1/wallet/payment-transactions`, {
+    headers: { authorization: "Bearer merchant-token" }
+  });
+  assert.equal(latestPayment.status, 200);
+  assert.equal((await latestPayment.json())[0]?.status, "REJECTED");
+
+  await store.recordWebhookEvent({
+    eventKey: "payment:00000000-0000-4000-8000-000000000005",
+    eventType: "payment",
+    paymentId: "00000000-0000-4000-8000-000000000005",
+    referenceNo: "ORDER-PHP-3",
+    status: "EXECUTED",
+    amount: 900,
+    currency: "PHP"
+  });
+  const nextPaymentPage = await fetch(`${baseUrl}/v1/wallet/payment-transactions?limit=1&offset=1`, {
+    headers: { authorization: "Bearer merchant-token" }
+  });
+  assert.equal(nextPaymentPage.status, 200);
+  assert.equal((await nextPaymentPage.json())[0].id, "00000000-0000-4000-8000-000000000004");
 });
 
 test("super admins can record verified manual bank deposits for merchant wallet history", async () => {
@@ -461,18 +491,37 @@ test("super admins can record verified manual bank deposits for merchant wallet 
   assert.equal(created.referenceNo, "BANK-REF-1");
   assert.equal(created.affectsProviderFunds, false);
 
+  const secondDeposit = await fetch(`${baseUrl}/v1/admin/manual-bank-deposits`, {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({
+      amount: 600,
+      bankName: "Example Bank",
+      referenceNo: "BANK-REF-2"
+    })
+  });
+  assert.equal(secondDeposit.status, 201);
+
   const history = await fetch(`${baseUrl}/v1/wallet/manual-deposits`, {
     headers: merchantHeaders
   });
   assert.equal(history.status, 200);
-  assert.deepEqual(await history.json(), [{
+  const allDeposits = await history.json();
+  assert.equal(allDeposits.length, 2);
+  assert.ok(allDeposits.some((deposit) => deposit.id === created.id));
+  const nextDepositPage = await fetch(`${baseUrl}/v1/wallet/manual-deposits?limit=1&offset=1`, {
+    headers: merchantHeaders
+  });
+  assert.equal(nextDepositPage.status, 200);
+  assert.equal((await nextDepositPage.json()).length, 1);
+  assert.deepEqual(allDeposits.find((deposit) => deposit.id === created.id), {
     id: created.id,
     amount: 500,
     bankName: "Example Bank",
     referenceNo: "BANK-REF-1",
     notes: "Verified incoming transfer",
     createdAt: created.createdAt
-  }]);
+  });
 
   assert.ok((await store.listAudit(10)).some((entry) => entry.action === "manual_bank_deposit.recorded"));
 });

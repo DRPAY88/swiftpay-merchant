@@ -168,7 +168,7 @@ fun EnhancedPaymentLinkDialog(
                 if (expiryTimestamp != null) {
                     val expiry = rememberPaymentLinkExpiry(expiryTimestamp)
                     PaymentLinkExpiryWidget(
-                        expiryTimestamp = expiryTimestamp,
+                        expiry = expiry,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(12.dp))

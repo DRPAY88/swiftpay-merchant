@@ -7,6 +7,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 @Serializable
 data class BackendOrderRequest(
@@ -192,9 +193,11 @@ data class BackendRecipientInformation(
 
 @Serializable
 data class BackendDisbursementResponse(
-    val id: String,
+    val id: String? = null,
     val referenceNo: String? = null,
-    val status: String = "PENDING"
+    val status: String = "PENDING",
+    val outcomeUnknown: Boolean = false,
+    val message: String? = null
 )
 
 @Serializable
@@ -242,10 +245,16 @@ interface SwiftPayBackendApi {
     suspend fun getWalletBalance(): Response<BackendWalletBalanceResponse>
 
     @GET("v1/wallet/manual-deposits")
-    suspend fun getManualBankDeposits(): Response<List<BackendManualBankDeposit>>
+    suspend fun getManualBankDeposits(
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int
+    ): Response<List<BackendManualBankDeposit>>
 
     @GET("v1/wallet/payment-transactions")
-    suspend fun getPaymentTransactions(): Response<List<BackendPaymentTransaction>>
+    suspend fun getPaymentTransactions(
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int
+    ): Response<List<BackendPaymentTransaction>>
 
     @GET("v1/wallet/krw-receipts")
     suspend fun getKrwReceiptBalance(): Response<BackendKrwReceiptBalanceResponse>
@@ -281,7 +290,10 @@ interface SwiftPayBackendApi {
     suspend fun sendDisbursement(@Body request: BackendDisbursementRequest): Response<BackendDisbursementResponse>
 
     @GET("v1/disbursements")
-    suspend fun getDisbursements(): Response<List<BackendDisbursementRecord>>
+    suspend fun getDisbursements(
+        @Query("pageNo") pageNo: Int,
+        @Query("pageSize") pageSize: Int
+    ): Response<List<BackendDisbursementRecord>>
 
     @GET("v1/disbursement-institutions")
     suspend fun getDisbursementInstitutions(): Response<List<BackendTransferInstitution>>

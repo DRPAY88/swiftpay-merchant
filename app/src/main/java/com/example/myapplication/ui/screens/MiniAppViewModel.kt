@@ -707,21 +707,40 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         launchProcessingAction("Processing SwiftPay transfer...", bridgeAction = "send_disbursement") {
             val result = getService().disburse(amount, bankCode, accountNumber, recipientName)
             result.onSuccess { response ->
+                if (response.outcomeUnknown) {
+                    bridge?.sendResponse(
+                        mapOf(
+                            "status" to "unknown",
+                            "outcomeUnknown" to true,
+                            "referenceNo" to (response.referenceNo ?: ""),
+                            "message" to (response.message
+                                ?: "SwiftPay has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference.")
+                        ),
+                        action = "send_disbursement"
+                    )
+                    uiState = MiniAppUiState.Idle
+                    return@onSuccess
+                }
+
                 val status = normalizePaymentStatus(response.status)
+                val transferId = response.disbursementId ?: response.id
                 recordLocalTransaction(
-                    id = response.disbursementId ?: response.id ?: "DISB${System.currentTimeMillis()}",
+                    id = transferId ?: "DISB${System.currentTimeMillis()}",
                     amount = -amount,
-                    status = status
+                    status = status,
+                    transactionType = "DISBURSEMENT",
+                    referenceNo = response.referenceNo,
+                    description = "Transfer to $recipientName ($bankCode)"
                 )
                 bridge?.sendResponse(mapOf(
                     "status" to status.lowercase(),
-                    "disbursementId" to (response.disbursementId ?: response.id ?: ""),
+                    "disbursementId" to (transferId ?: ""),
                     "message" to if (status == "SUCCESS") {
                         "Transfer of ₱${"%.2f".format(amount)} to $recipientName ($bankCode) completed."
                     } else {
                         "Transfer submitted for processing. Check transaction status before treating it as complete."
                     }
-                ))
+                ), action = "send_disbursement")
                 uiState = MiniAppUiState.Idle
             }.onFailure { error ->
                 val errorMsg = error.message ?: "Transfer failed"
@@ -917,25 +936,53 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             try {
                 val service = getService()
-                val response = service.getPaymentStatus(paymentId).getOrNull()
-                    ?: service.getCheckoutStatus(paymentId).getOrNull()
-
-                if (response != null) {
-                    val status = response.status ?: response.paymentStatus
-                    if (status != null) {
-                        val currentMap = transactionStatusMap.toMutableMap()
-                        currentMap[paymentId] = response
-                        transactionStatusMap = currentMap
-
-                        val normalized = normalizePaymentStatus(status)
-                        val storedAmount = response.amount ?: 0.0
-                        recordLocalTransaction(
-                            id = paymentId,
-                            amount = storedAmount,
-                            status = normalized
-                        )
+                for (attempt in 0 until MAX_STATUS_POLL_ATTEMPTS) {
+                    val result = service.getPaymentStatus(paymentId)
+                    val response = result.getOrNull()
+                    if (response == null) {
+                        if (attempt == MAX_STATUS_POLL_ATTEMPTS - 1) {
+                            Log.e(
+                                "MiniAppViewModel",
+                                "Could not fetch payment status for $paymentId after $MAX_STATUS_POLL_ATTEMPTS attempts",
+                                result.exceptionOrNull()
+                            )
+                            break
+                        }
+                        delay(STATUS_POLL_INTERVAL_MS)
+                        continue
                     }
+
+                    val status = response.status ?: response.paymentStatus
+                    if (status == null) {
+                        if (attempt == MAX_STATUS_POLL_ATTEMPTS - 1) {
+                            Log.e(
+                                "MiniAppViewModel",
+                                "Payment status response for $paymentId contained no status after $MAX_STATUS_POLL_ATTEMPTS attempts"
+                            )
+                            break
+                        }
+                        delay(STATUS_POLL_INTERVAL_MS)
+                        continue
+                    }
+
+                    val currentMap = transactionStatusMap.toMutableMap()
+                    currentMap[paymentId] = response
+                    transactionStatusMap = currentMap
+
+                    val normalized = normalizePaymentStatus(status)
+                    val storedAmount = response.amount ?: 0.0
+                    recordLocalTransaction(
+                        id = paymentId,
+                        amount = storedAmount,
+                        status = normalized
+                    )
+                    if (normalized != "PENDING" || attempt == MAX_STATUS_POLL_ATTEMPTS - 1) {
+                        break
+                    }
+                    delay(STATUS_POLL_INTERVAL_MS)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("MiniAppViewModel", "Exception fetching payment status", e)
             } finally {
@@ -1080,6 +1127,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
 
     companion object {
         const val NFC_SESSION_SECONDS = 90
+        private const val MAX_STATUS_POLL_ATTEMPTS = 30
+        private const val STATUS_POLL_INTERVAL_MS = 10_000L
     }
 }
 

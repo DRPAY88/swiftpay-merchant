@@ -40,12 +40,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.api.InternalTransaction
-import com.example.myapplication.data.api.VaultPaymentResponse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -58,8 +62,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.myapplication.ui.components.DrPayLogo
 import com.example.myapplication.ui.components.DrPayMarkBadge
+import com.example.myapplication.ui.components.rememberReducedMotion
 import kotlin.math.abs
 
 import com.example.myapplication.LocalNavController
@@ -100,12 +106,21 @@ fun WalletScreen(
     val transactions = remember(localTransactions, remoteTransactions) {
         mergeTransactions(localTransactions, remoteTransactions)
     }
-    val filteredTransactions = remember(transactions, selectedFilter) {
+    val transactionStatusMap = viewModel.transactionStatusMap
+    val filteredTransactions = remember(transactions, selectedFilter, transactionStatusMap) {
         when (selectedFilter) {
             "Income" -> transactions.filter { it.amount > 0 }
             "Expense" -> transactions.filter { it.amount < 0 }
-            "Bank Deposits" -> transactions.filter { it.transactionId.startsWith("DEP") || it.transactionId.contains("NETBANK") || (it.amount > 0 && it.transactionId.startsWith("VA")) }
-            "Failed" -> transactions.filter { it.status.uppercase() == "FAILED" }
+            "Bank Deposits" -> transactions.filter {
+                it.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true) ||
+                    it.transactionId.startsWith("DEP") ||
+                    it.transactionId.contains("NETBANK") ||
+                    (it.amount > 0 && it.transactionId.startsWith("VA"))
+            }
+            "Failed" -> transactions.filter {
+                val response = transactionStatusMap[it.transactionId]
+                isFailedTransactionStatus(response?.status ?: response?.paymentStatus ?: it.status)
+            }
             else -> transactions
         }
     }
@@ -288,7 +303,8 @@ fun WalletListContent(
                     text = "Your money",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Text(
                     text = "Manage your balance and recent activity",
@@ -320,7 +336,8 @@ fun WalletListContent(
                         text = "Transactions",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.semantics { heading() }
                     )
                     Text(
                         text = "Activity on your PHP wallet",
@@ -331,7 +348,10 @@ fun WalletListContent(
                 }
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.semantics {
+                        contentDescription = "${transactions.size} transactions"
+                    }
                 ) {
                     Text(
                         text = transactions.size.toString(),
@@ -693,7 +713,11 @@ fun PremiumBalanceCard(
                     )
                     IconButton(
                         onClick = { isBalanceVisible = !isBalanceVisible },
-                        modifier = Modifier.size(34.dp)
+                        modifier = Modifier
+                            .size(48.dp)
+                            .semantics {
+                                stateDescription = if (isBalanceVisible) "Balance visible" else "Balance hidden"
+                            }
                     ) {
                         Icon(
                             imageVector = if (isBalanceVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
@@ -714,8 +738,19 @@ fun PremiumBalanceCard(
                     color = Color.White,
                     fontSize = 34.sp,
                     letterSpacing = (-0.7).sp,
-                    maxLines = 1,
-                    modifier = Modifier.padding(vertical = 2.dp)
+                    maxLines = 2,
+                    modifier = Modifier
+                        .padding(vertical = 2.dp)
+                        .then(
+                            if (balance != null && !isBalanceVisible) {
+                                Modifier.semantics { contentDescription = "Balance hidden" }
+                            } else Modifier
+                        )
+                )
+                Text(
+                    "Balance from payment provider",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.88f)
                 )
                 adjustedBalance?.let {
                     Row(
@@ -770,11 +805,16 @@ fun PremiumBalanceCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(13.dp))
                         .background(Color.White.copy(alpha = 0.08f))
                         .then(
                             if (!accountNumber.isNullOrBlank()) {
-                                Modifier.clickable {
+                                Modifier
+                                    .semantics(mergeDescendants = true) {
+                                        contentDescription = "Deposit account, $accountNumber. Double tap to copy."
+                                    }
+                                    .clickable(role = Role.Button) {
                                     clipboardManager.setText(AnnotatedString(accountNumber))
                                     Toast.makeText(context, "Account number copied to clipboard", Toast.LENGTH_SHORT).show()
                                 }
@@ -800,7 +840,8 @@ fun PremiumBalanceCard(
                             style = MaterialTheme.typography.titleSmall,
                             color = Color.White,
                             fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     if (!accountNumber.isNullOrBlank()) {
@@ -883,50 +924,42 @@ fun QuickActionItem(
 
 @Composable
 fun PremiumFilterChip(selected: Boolean, text: String, onClick: () -> Unit) {
-    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
-    val unselectedBg = MaterialTheme.colorScheme.surface
-    val selectedBg = if (isDarkTheme) MaterialTheme.colorScheme.primary else FastPayBlue
-    val unselectedText = MaterialTheme.colorScheme.onSurface
-    val borderColor = MaterialTheme.colorScheme.outlineVariant
-
-    val alpha by animateFloatAsState(if (selected) 1f else 0.72f, label = "alpha")
-    
-    Surface(
-        color = if (selected) selectedBg else unselectedBg,
-        shape = CircleShape,
-        shadowElevation = 0.dp,
-        border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, borderColor),
-        modifier = Modifier
-            .clickable { onClick() }
-            .alpha(alpha)
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 15.dp, vertical = 9.dp),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = if (selected) Color.White else unselectedText
-        )
-    }
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(text, style = MaterialTheme.typography.labelLarge) },
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 @Composable
 fun AnimatedRefreshButton(isLoading: Boolean, onClick: () -> Unit) {
-    val infiniteTransition = rememberInfiniteTransition(label = "refresh")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing)
-        ),
-        label = "refreshRotation"
-    )
-    IconButton(onClick = onClick) {
+    val rotation = remember { Animatable(0f) }
+    val reduceMotion = rememberReducedMotion()
+    LaunchedEffect(isLoading, reduceMotion) {
+        if (isLoading && !reduceMotion) {
+            while (true) {
+                rotation.animateTo(
+                    targetValue = rotation.value + 360f,
+                    animationSpec = tween(900, easing = LinearEasing)
+                )
+            }
+        } else {
+            rotation.snapTo(0f)
+        }
+    }
+    IconButton(
+        onClick = onClick,
+        enabled = !isLoading,
+        modifier = Modifier.semantics {
+            stateDescription = if (isLoading) "Refreshing" else "Ready"
+        }
+    ) {
         Icon(
             Icons.Rounded.Refresh,
-            contentDescription = "Refresh",
-            tint = FastPayNavy,
-            modifier = if (isLoading) Modifier.rotate(rotation) else Modifier
+            contentDescription = if (isLoading) "Refreshing wallet" else "Refresh wallet",
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.rotate(rotation.value)
         )
     }
 }
@@ -940,19 +973,28 @@ fun AnimatedTransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewMo
         animationSpec = tween(350, easing = EaseOutCubic),
         label = "txAlpha"
     )
-    val offsetX by animateFloatAsState(
-        targetValue = if (visible) 0f else 30f,
+    val offsetY by animateFloatAsState(
+        targetValue = if (visible) 0f else 8f,
         animationSpec = tween(350, easing = EaseOutCubic),
-        label = "txOffset"
+        label = "txOffsetY"
     )
     Box(
         modifier = Modifier.graphicsLayer {
             this.alpha = alpha
-            this.translationX = offsetX
+            this.translationY = offsetY
         }
     ) {
         TransactionItem(tx = tx, onClick = onClick, viewModel = viewModel)
     }
+}
+
+private fun isFailedTransactionStatus(status: String): Boolean {
+    val normalized = status.uppercase()
+    return normalized.contains("FAIL") ||
+        normalized.contains("REJECT") ||
+        normalized.contains("ERROR") ||
+        normalized.contains("EXPIRED") ||
+        normalized.contains("CANCEL")
 }
 
 @Composable
@@ -961,16 +1003,31 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
     val isManualBankDeposit = tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)
     val normalizedStatus = tx.status.uppercase()
     val apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
-    val apiStatus = apiPaymentStatus?.status?.uppercase()
+    val apiStatus = (apiPaymentStatus?.status ?: apiPaymentStatus?.paymentStatus)?.uppercase()
     val statusForDisplay = apiStatus ?: normalizedStatus
-    val isFailed = statusForDisplay.contains("FAIL") || statusForDisplay.contains("REJECT") || statusForDisplay == "ERROR"
+    val isFailed = isFailedTransactionStatus(statusForDisplay)
     val isPending = statusForDisplay.contains("PEND")
+    val transactionType = tx.transactionType?.uppercase()
+    val transactionTitle = when {
+        isManualBankDeposit -> "Bank deposit"
+        isFailed && isExpense -> "Transfer failed"
+        isFailed -> "Payment failed"
+        isPending && isExpense -> "Transfer pending"
+        isPending -> "Payment pending"
+        transactionType == "DISBURSEMENT" || isExpense -> "Bank transfer"
+        transactionType == "PAYMENT" -> "Payment received"
+        else -> "Wallet transaction"
+    }
+    val transactionReference = tx.referenceNo?.takeIf { it.isNotBlank() }
 
+    val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
+    val successColor = if (isDarkTheme) Color(0xFF8BE0AC) else FastPaySuccess
+    val warningColor = if (isDarkTheme) Color(0xFFFFD18A) else FastPayWarning
     val (icon, statusColor) = when {
-        isFailed || apiStatus?.contains("FAIL") == true -> Icons.Rounded.ErrorOutline to Color(0xFFEF4444)
-        isPending || apiStatus?.contains("PEND") == true -> Icons.Rounded.Schedule to Color(0xFFF59E0B)
-        isExpense -> Icons.Rounded.NorthEast to FastPayRed
-        else -> Icons.Rounded.SouthWest to Color(0xFF10B981)
+        isFailed || apiStatus?.contains("FAIL") == true -> Icons.Rounded.ErrorOutline to MaterialTheme.colorScheme.error
+        isPending || apiStatus?.contains("PEND") == true -> Icons.Rounded.Schedule to warningColor
+        isExpense -> Icons.Rounded.NorthEast to MaterialTheme.colorScheme.error
+        else -> Icons.Rounded.SouthWest to successColor
     }
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -984,15 +1041,15 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
 
     val surfaceColor = MaterialTheme.colorScheme.surface
     val textColor = MaterialTheme.colorScheme.onSurface
-    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .scale(itemScale)
             .clickable(
-                interactionSource = interactionSource, 
-                indication = null,
+                interactionSource = interactionSource,
+                role = Role.Button,
                 onClick = onClick
             ),
         shape = RoundedCornerShape(18.dp),
@@ -1027,24 +1084,27 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
             
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = when {
-                        isManualBankDeposit -> "Manual bank deposit"
-                        isFailed && isExpense -> "Transfer failed"
-                        isFailed -> "Payment failed"
-                        isPending && isExpense -> "Transfer pending"
-                        isPending -> "Payment pending"
-                        isExpense -> "Transfer completed"
-                        else -> "Payment received"
-                    },
+                    text = transactionTitle,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = textColor
                 )
                 Text(
-                    text = tx.date,
+                    text = transactionReference ?: tx.date,
                     style = MaterialTheme.typography.labelSmall,
-                    color = secondaryTextColor
+                    color = secondaryTextColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                if (transactionReference != null) {
+                    Text(
+                        text = tx.date,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = secondaryTextColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             
             Column(horizontalAlignment = Alignment.End) {
@@ -1053,9 +1113,9 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
                     color = when {
-                        isFailed -> FastPayRed
-                        isExpense -> FastPayNavy
-                        else -> Color(0xFF12805C)
+                        isFailed -> MaterialTheme.colorScheme.error
+                        isExpense -> textColor
+                        else -> successColor
                     }
                 )
                 
@@ -1076,12 +1136,11 @@ fun TransactionDetailScreen(
     onShowSnackbar: (String) -> Unit = {},
     viewModel: MiniAppViewModel? = null
 ) {
-    var apiPaymentStatus by remember { mutableStateOf<VaultPaymentResponse?>(null) }
+    val apiPaymentStatus = viewModel?.transactionStatusMap?.get(tx.transactionId)
     
     LaunchedEffect(tx.transactionId) {
         if (!tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)) {
             viewModel?.fetchPaymentStatus(tx.transactionId)
-            apiPaymentStatus = viewModel?.getPaymentStatusForId(tx.transactionId)
         }
     }
     
@@ -1090,7 +1149,7 @@ fun TransactionDetailScreen(
     val bgColor = MaterialTheme.colorScheme.background
     val surfaceColor = MaterialTheme.colorScheme.surface
     val textColor = MaterialTheme.colorScheme.onSurface
-    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(
         modifier = Modifier
@@ -1102,13 +1161,17 @@ fun TransactionDetailScreen(
     ) {
         val isExpense = tx.amount < 0
         val isManualBankDeposit = tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)
-        val statusToDisplay = apiPaymentStatus?.status?.uppercase() ?: tx.status.uppercase()
+        val statusToDisplay = (apiPaymentStatus?.status ?: apiPaymentStatus?.paymentStatus)?.uppercase()
+            ?: tx.status.uppercase()
+        val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
         val color = when {
-            statusToDisplay.contains("FAIL") -> FastPayRed
-            isExpense -> FastPayNavy
-            statusToDisplay.contains("SUCCESS") || statusToDisplay == "EXECUTED" -> FastPayGreen
-            statusToDisplay.contains("PENDING") -> FastPayOrange
-            else -> FastPayNavy
+            statusToDisplay.contains("FAIL") -> MaterialTheme.colorScheme.error
+            isExpense -> MaterialTheme.colorScheme.onSurface
+            statusToDisplay.contains("SUCCESS") || statusToDisplay == "EXECUTED" ->
+                if (isDarkTheme) Color(0xFF8BE0AC) else FastPaySuccess
+            statusToDisplay.contains("PENDING") ->
+                if (isDarkTheme) Color(0xFFFFD18A) else FastPayWarning
+            else -> MaterialTheme.colorScheme.onSurface
         }
 
         Surface(
@@ -1227,11 +1290,11 @@ fun TransactionDetailScreen(
                                     clipboardManager.setText(AnnotatedString(tx.referenceNo ?: tx.transactionId))
                                     onShowSnackbar("Reference number copied")
                                 },
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.ContentCopy,
-                                    contentDescription = "Copy",
+                                    contentDescription = "Copy transaction reference",
                                     modifier = Modifier.size(18.dp),
                                     tint = FastPayBlue
                                 )
@@ -1313,7 +1376,7 @@ fun ReceiptRow(label: String, value: String, valueColor: Color, isBadge: Boolean
 @Composable
 fun DetailRowWithIcon(icon: ImageVector, label: String, value: String) {
     val textColor = MaterialTheme.colorScheme.onSurface
-    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1340,7 +1403,7 @@ fun DetailRowWithIcon(icon: ImageVector, label: String, value: String) {
 fun EmptyDetailState() {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val textColor = MaterialTheme.colorScheme.onSurface
-    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(40.dp)) {
@@ -1378,7 +1441,7 @@ fun EmptyDetailState() {
 
 @Composable
 fun EmptyHistoryState() {
-    val secondaryTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
@@ -1388,7 +1451,7 @@ fun EmptyHistoryState() {
             Icons.Rounded.Inbox, 
             contentDescription = null, 
             modifier = Modifier.size(64.dp),
-            tint = Color.LightGray.copy(alpha = 0.5f)
+            tint = MaterialTheme.colorScheme.outline
         )
         Spacer(Modifier.height(16.dp))
         Text(
@@ -1400,7 +1463,7 @@ fun EmptyHistoryState() {
         Text(
             "Your sales history will appear here.",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray.copy(alpha = 0.7f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

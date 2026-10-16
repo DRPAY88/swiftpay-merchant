@@ -87,15 +87,11 @@ fun TransactionStatusIndicator(
     }
 
     // Trigger auto-close after delay
-    LaunchedEffect(transactionId) {
+    val currentOnAutoClose by rememberUpdatedState(onAutoClose)
+    LaunchedEffect(transactionId, visible) {
         if (visible) {
-            delay(6000L) // 6 seconds display time
-            try {
-                onAutoClose(transactionId)
-            } catch (_: Exception) {
-                // Ignore errors during cleanup
-            }
+            delay(6000L)
+            currentOnAutoClose(transactionId)
         }
     }
 }
-

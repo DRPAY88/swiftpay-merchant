@@ -617,11 +617,11 @@ export function createAdminStore(
     );
   }
 
-  async function listManualBankDeposits(limit) {
+  async function listManualBankDeposits(limit, offset = 0) {
     const result = await pool.query(
       `SELECT id, amount, bank_name, reference_no, notes, created_at
-       FROM manual_bank_deposits ORDER BY created_at DESC, id DESC LIMIT $1`,
-      [limit]
+       FROM manual_bank_deposits ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
     return result.rows;
   }
@@ -825,17 +825,22 @@ export function createAdminStore(
     return result.rows[0] || null;
   }
 
-  async function listPaymentWebhookTransactions(limit) {
+  async function listPaymentWebhookTransactions(limit, offset = 0) {
     const result = await pool.query(
-      `SELECT payment_id AS id, reference_no, amount, currency, status, received_at
-       FROM swiftpay_webhook_events
-       WHERE event_type = 'payment'
-         AND payment_id IS NOT NULL
-         AND amount IS NOT NULL
-         AND currency = 'PHP'
+      `SELECT payment_id AS id, reference_no, amount, currency, status, received_at, event_key
+       FROM (
+         SELECT DISTINCT ON (payment_id)
+           payment_id, reference_no, amount, currency, status, received_at, event_key
+         FROM swiftpay_webhook_events
+         WHERE event_type = 'payment'
+           AND payment_id IS NOT NULL
+           AND amount IS NOT NULL
+           AND currency = 'PHP'
+         ORDER BY payment_id, received_at DESC, event_key DESC
+       ) latest
        ORDER BY received_at DESC, payment_id DESC
-       LIMIT $1`,
-      [limit]
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
     return result.rows;
   }

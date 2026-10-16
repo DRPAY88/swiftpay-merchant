@@ -1926,7 +1926,7 @@ fun CustomTextField(
                 IconButton(onClick = onTogglePassword ?: {}) {
                     Icon(
                         imageVector = if (isPasswordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                        contentDescription = null,
+                        contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
                         tint = iconColor,
                         modifier = Modifier.size(20.dp)
                     )

@@ -76,9 +76,7 @@ fun mergeTransactions(
         .filter { it.transactionId.isNotBlank() }
         .groupBy { it.transactionId }
         .map { (_, versions) ->
-            val preferred = versions.find { it.status.uppercase() == "SUCCESS" }
-                ?: versions.find { it.status.uppercase() != "PENDING" }
-                ?: versions.first()
+            val preferred = versions.last()
             preferred.copy(
                 transactionType = preferred.transactionType
                     ?: versions.firstNotNullOfOrNull { it.transactionType },

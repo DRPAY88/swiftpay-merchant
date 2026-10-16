@@ -172,8 +172,8 @@ fun ApiKeysScreen() {
                                     } else {
                                         Toast.makeText(context, "Alias cannot be empty", Toast.LENGTH_SHORT).show()
                                     }
-                                }) {
-                                    Icon(Icons.Rounded.Save, null, tint = FastPayNavy)
+                                }, modifier = Modifier.size(48.dp)) {
+                                    Icon(Icons.Rounded.Save, "Save merchant alias", tint = FastPayNavy)
                                 }
                             }
                         )
@@ -247,8 +247,8 @@ fun ApiKeysScreen() {
                                         val link = "https://pay.swiftpay.ph/${aliasFlow.value}"
                                         clipboardManager.setPrimaryClip(ClipData.newPlainText("Payment Link", link))
                                         Toast.makeText(context, "Link copied!", Toast.LENGTH_SHORT).show()
-                                    }, modifier = Modifier.size(36.dp)) {
-                                        Icon(Icons.Rounded.ContentCopy, null, tint = if (isDarkTheme) Color.LightGray else FastPayNavy.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                                    }, modifier = Modifier.size(48.dp)) {
+                                        Icon(Icons.Rounded.ContentCopy, "Copy payment link", tint = if (isDarkTheme) Color.LightGray else FastPayNavy.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
                                     }
                                 }
                                 IconButton(
@@ -256,9 +256,9 @@ fun ApiKeysScreen() {
                                         aliasInput = aliasFlow.value ?: ""
                                         editingAlias = true
                                     },
-                                    modifier = Modifier.size(36.dp)
+                                    modifier = Modifier.size(48.dp)
                                 ) {
-                                    Icon(Icons.Rounded.Edit, null, tint = textColor, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Rounded.Edit, "Edit merchant alias", tint = textColor, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -332,8 +332,8 @@ private fun CredentialRow(
         }
 
         if (!value.isNullOrBlank()) {
-            IconButton(onClick = onCopy, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy", tint = FastPayBlue, modifier = Modifier.size(18.dp))
+            IconButton(onClick = onCopy, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy API key", tint = FastPayBlue, modifier = Modifier.size(18.dp))
             }
         }
     }

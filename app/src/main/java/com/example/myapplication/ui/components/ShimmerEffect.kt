@@ -13,6 +13,19 @@ import androidx.compose.ui.unit.IntSize
 
 fun Modifier.shimmerEffect(): Modifier = composed {
     var size by remember { mutableStateOf(IntSize.Zero) }
+    val reduceMotion = rememberReducedMotion()
+    if (reduceMotion) {
+        return@composed background(
+            Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFFF0F2F5),
+                    Color(0xFFF7F9FB),
+                    Color(0xFFF0F2F5)
+                )
+            )
+        )
+    }
+
     val transition = rememberInfiniteTransition(label = "Shimmer")
     val startOffsetX by transition.animateFloat(
         initialValue = -2 * size.width.toFloat(),

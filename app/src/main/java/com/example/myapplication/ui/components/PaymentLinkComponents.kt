@@ -65,9 +65,9 @@ fun PaymentLinkDisplayCard(
                     clipboardManager.setPrimaryClip(ClipData.newPlainText("Payment Link", url))
                     Toast.makeText(context, "Link copied!", Toast.LENGTH_SHORT).show()
                 },
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(48.dp)
             ) {
-                Icon(Icons.Rounded.ContentCopy, null, tint = textColor, modifier = Modifier.size(18.dp))
+                Icon(Icons.Rounded.ContentCopy, "Copy payment link", tint = textColor, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -240,4 +240,3 @@ fun PaymentLinkDialog(
         )
     }
 }
-

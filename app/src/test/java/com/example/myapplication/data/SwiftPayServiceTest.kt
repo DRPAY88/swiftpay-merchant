@@ -33,6 +33,30 @@ class SwiftPayServiceTest {
     }
 
     @Test
+    fun mergeTransactionsUsesLatestBackendStatusInsteadOfStaleLocalSuccess() {
+        val local = InternalTransaction(
+            transactionId = "payment-1",
+            amount = 125.0,
+            status = "SUCCESS",
+            date = "2026-10-15T10:00:00Z",
+            transactionType = "PAYMENT"
+        )
+        val remote = InternalTransaction(
+            transactionId = "payment-1",
+            amount = 125.0,
+            status = "FAILED",
+            date = "2026-10-15T10:00:00Z",
+            transactionType = "PAYMENT",
+            referenceNo = "ORDER-1"
+        )
+
+        val merged = mergeTransactions(listOf(local), listOf(remote)).single()
+
+        assertEquals("FAILED", merged.status)
+        assertEquals("ORDER-1", merged.referenceNo)
+    }
+
+    @Test
     fun testAmountBoundaryValidation() {
         assertTrue("0.01 should be valid", 0.01 > 0 && 0.01 <= 1000000.0)
         assertTrue("1000000.0 should be valid", 1000000.0 > 0 && 1000000.0 <= 1000000.0)

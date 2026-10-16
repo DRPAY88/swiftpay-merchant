@@ -27,7 +27,7 @@
             --on-primary-container: #163C70;
             --error-container: #FFF5F4;
             --on-error-container: #742A2E;
-            --focus-ring: #91B8E8;
+            --focus-ring: #1B4F9C;
             --radius-xl: 24px;
             --radius-lg: 16px;
             --radius-md: 12px;
@@ -1487,7 +1487,7 @@
                 <img src="drpay_mark.png" alt="">
                 <span>DRPAY</span>
             </h1>
-            <p class="balance-badge">PROVIDER-REPORTED PHP BALANCE</p>
+            <p class="balance-badge">Balance from payment provider</p>
             <div id="balance-display" class="balance-amount" aria-live="polite">&#8369; --.--</div>
         </header>
 
@@ -1589,7 +1589,7 @@
             <header class="collect-heading">
                 <p class="collect-eyebrow">PAYMENT METHOD</p>
                 <h2>Choose a top-up method</h2>
-                <p>All QR payments generate a SwiftPay QR Ph code and settle in PHP. Alipay uses CNY; Toss, Kakao, and KBank use KRW, with a conversion quote shown before QR generation.</p>
+                <p>For Kakao, Toss, and KBank, customers pay in KRW using SwiftPay QR Ph. SwiftPay converts the KRW amount to PHP, and the payment settles in PHP. This requires multicurrency to be enabled for your account and a KRW-to-PHP rate to be configured; a live quote is shown before generating the QR.</p>
             </header>
             <div id="collect-institution-list" class="collect-institution-list" aria-label="Payment methods">
                 <section class="collect-method-category" role="group" aria-labelledby="collect-php-category-title">
@@ -1656,7 +1656,7 @@
                 <div class="summary-row"><span>Exchange rate</span><strong id="collect-confirm-rate">—</strong></div>
                 <div class="summary-row"><span>Rate updated</span><strong id="collect-confirm-updated">—</strong></div>
             </div>
-            <p class="collect-note">Confirming will generate a PHP-settled SwiftPay QR Ph code using this quote.</p>
+            <p class="collect-note">The customer pays the displayed amount in KRW. SwiftPay QR Ph converts it to the displayed PHP settlement amount using this quote. The customer's final KRW debit may vary based on their payment provider.</p>
             <button type="button" class="btn-action" id="collect-confirm-button" onclick="confirmCollectKrwQuote()">Pay Now</button>
         </div>
     </section>
@@ -2106,6 +2106,18 @@
             pendingCollectQuote = null;
             openPage('topup-page');
         }
+        function handleAndroidBack() {
+            const activePage = document.querySelector('.page.active');
+            if (activePage?.id === 'collect-quote-confirm-page') {
+                backToCollectAmount();
+                return true;
+            }
+            if (activePage?.id === 'topup-page' && selectedCollectPaymentApp) {
+                openPage('collect-institution-page');
+                return true;
+            }
+            return false;
+        }
         function configureCollectAmountPage(paymentApp) {
             selectedCollectPaymentApp = paymentApp;
             pendingCollectPayment = null;
@@ -2125,7 +2137,7 @@
             document.getElementById('collect-amount-copy').textContent = `${paymentApp} selected. Enter the amount the customer will pay.`;
             document.getElementById('collect-summary-label').textContent = `Amount (${currency})`;
             document.getElementById('collect-amount-note').textContent = isQuotedCollectApp(paymentApp)
-                ? `A live ${currency}-to-PHP exchange quote will show the PHP settlement amount for confirmation before the QR Ph code is generated.`
+                ? `The customer pays ${currency}. SwiftPay QR Ph converts this amount to PHP for settlement using a live quote. This requires multicurrency to be enabled on your account and a ${currency}-to-PHP rate to be configured.`
                 : 'This generates a PHP-denominated SwiftPay QR Ph code. Make sure the selected app supports QR Ph.';
             document.querySelector('.collect-presets').hidden = isKrw || isCny;
             document.getElementById('topup-submit-btn').disabled = false;
@@ -2310,14 +2322,23 @@
             if (res.action === 'generate_dynamic_qr') {
                 setCollectPaymentAppsDisabled(false);
                 document.getElementById('topup-submit-btn').disabled = false;
+                if (res.status === 'error') {
+                    showNotice(res.message || 'Could not generate the payment QR. Please try again.', true);
+                }
                 return;
             }
             if (res.action === 'generate_quoted_krw_php_qr') {
                 document.getElementById('collect-confirm-button').disabled = false;
+                if (res.status === 'error') {
+                    showNotice(res.message || 'Could not generate the quoted payment QR. Please try again.', true);
+                }
                 return;
             }
             if (res.action === 'generate_quoted_fx_php_qr') {
                 document.getElementById('collect-confirm-button').disabled = false;
+                if (res.status === 'error') {
+                    showNotice(res.message || 'Could not generate the quoted payment QR. Please try again.', true);
+                }
                 return;
             }
             if (res.action === 'get_transfer_institutions') {
@@ -2334,7 +2355,9 @@
                 }
             }
             const transferButton = document.querySelector('#disbursement-page .btn-action');
-            if (transferButton && transferButton.disabled) {
+            const transferOutcomeUnknown =
+                res.action === 'send_disbursement' && res.data?.outcomeUnknown === true;
+            if (transferButton && transferButton.disabled && !transferOutcomeUnknown) {
                 transferButton.disabled = false;
                 transferButton.textContent = 'Confirm Transfer';
             }
@@ -2356,6 +2379,39 @@
                     return;
                 }
                 showNotice(res.message || 'The request failed. Please try again.', true);
+                return;
+            }
+            if (res.action === 'send_disbursement') {
+                const transfer = res.data || {};
+                if (transfer.outcomeUnknown === true) {
+                    transferButton.disabled = true;
+                    transferButton.textContent = 'Do not retry';
+                    document.getElementById('transfer-result-title').textContent =
+                        'Transfer confirmation required';
+                    document.getElementById('transfer-result-message').textContent =
+                        transfer.message || 'SwiftPay has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference.';
+                    const transferReference = document.getElementById('transfer-result-reference');
+                    transferReference.hidden = !transfer.referenceNo;
+                    transferReference.textContent = transfer.referenceNo
+                        ? `Transfer reference: ${transfer.referenceNo}`
+                        : '';
+                    document.getElementById('transfer-result').hidden = false;
+                    return;
+                }
+                const transferStatus = String(transfer.status || 'pending').toUpperCase();
+                const transferId = transfer.disbursementId || transfer.id || '';
+                document.getElementById('transfer-result-title').textContent =
+                    transferStatus === 'SUCCESS' || transferStatus === 'EXECUTED'
+                        ? 'Transfer completed'
+                        : transferStatus === 'FAILED' || transferStatus === 'REJECTED'
+                            ? 'Transfer failed'
+                            : 'Transfer submitted';
+                document.getElementById('transfer-result-message').textContent =
+                    transfer.message || 'Transfer submitted. Check its status in Wallet before treating it as complete.';
+                const transferReference = document.getElementById('transfer-result-reference');
+                transferReference.hidden = !transferId;
+                transferReference.textContent = transferId ? `Transfer ID: ${transferId}` : '';
+                document.getElementById('transfer-result').hidden = false;
                 return;
             }
             if (Array.isArray(res.data)) {

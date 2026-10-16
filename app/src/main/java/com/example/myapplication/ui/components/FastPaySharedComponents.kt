@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -12,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -89,7 +93,7 @@ fun FastPayInfoCard(
                 Text(
                     title,
                     style = MaterialTheme.typography.labelMedium,
-                    color = contentColor.copy(alpha = 0.6f),
+                    color = contentColor.copy(alpha = 0.9f),
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(Modifier.height(4.dp))
@@ -114,11 +118,21 @@ fun FastPayStatusBadge(
     backgroundColor: Color? = null,
     textColor: Color? = null
 ) {
-    val defaultBg = FastPayBlue.copy(alpha = 0.1f)
-    val defaultText = FastPayBlue
+    val normalizedStatus = status.lowercase()
+    val defaultBg = MaterialTheme.colorScheme.primaryContainer
+    val defaultText = MaterialTheme.colorScheme.onPrimaryContainer
+    val statusIcon = when {
+        normalizedStatus.contains("fail") ||
+            normalizedStatus.contains("reject") ||
+            normalizedStatus.contains("error") -> Icons.Rounded.ErrorOutline
+        normalizedStatus.contains("pend") -> Icons.Rounded.Schedule
+        else -> Icons.Rounded.CheckCircle
+    }
 
     Surface(
-        modifier = modifier,
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = status
+        },
         shape = RoundedCornerShape(8.dp),
         color = backgroundColor ?: defaultBg
     ) {
@@ -128,7 +142,7 @@ fun FastPayStatusBadge(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Icon(
-                Icons.Rounded.CheckCircle,
+                statusIcon,
                 contentDescription = null,
                 tint = textColor ?: defaultText,
                 modifier = Modifier.size(12.dp)

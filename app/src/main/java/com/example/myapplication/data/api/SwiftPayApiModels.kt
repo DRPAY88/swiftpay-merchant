@@ -156,6 +156,8 @@ data class SwiftPayDisbursementResponse(
     val status: String? = null,
     val amount: Double? = null,
     val currency: String? = null,
+    val outcomeUnknown: Boolean = false,
+    val message: String? = null,
     @SerialName("reference_no")
     val referenceNo: String? = null,
     @SerialName("created_at")

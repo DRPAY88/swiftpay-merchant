@@ -3,6 +3,9 @@ package com.example.myapplication.navigation
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 
+internal fun canProcessPaymentDeepLink(isLoggedIn: Boolean, isDeviceUnlocked: Boolean): Boolean =
+    isLoggedIn && isDeviceUnlocked
+
 internal class AppNavigationState(initialRoute: Route = Route.Login) {
     val backStack: SnapshotStateList<Route> = mutableStateListOf(initialRoute)
 

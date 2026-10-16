@@ -28,6 +28,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -163,14 +167,22 @@ fun HomeGreeting(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                DrPayMarkBadge(size = 42.dp)
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                Text("Welcome back", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            DrPayMarkBadge(size = 42.dp)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Welcome back",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
                 Text(
                     merchantName,
                     style = MaterialTheme.typography.labelMedium,
@@ -186,7 +198,7 @@ fun HomeGreeting(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 2.dp,
-                modifier = Modifier.size(42.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 IconButton(onClick = onHelpClick, modifier = Modifier.fillMaxSize()) {
                     Icon(Icons.AutoMirrored.Rounded.HelpOutline, "Help and API documentation", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(21.dp))
@@ -197,7 +209,7 @@ fun HomeGreeting(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 2.dp,
-                modifier = Modifier.size(42.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 IconButton(onClick = onProfileClick, modifier = Modifier.fillMaxSize()) {
                     Icon(Icons.Rounded.AccountCircle, "Profile", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
@@ -252,12 +264,22 @@ fun WalletBalanceCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "DRPAY WALLET BALANCE",
+                        modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.76f)
+                        color = Color.White.copy(alpha = 0.9f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(onClick = onToggleBalance, modifier = Modifier.size(30.dp)) {
+                    IconButton(
+                        onClick = onToggleBalance,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .semantics {
+                                stateDescription = if (isBalanceVisible) "Balance visible" else "Balance hidden"
+                            }
+                    ) {
                         Icon(
                             if (isBalanceVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
                             contentDescription = if (isBalanceVisible) "Hide balance" else "Show balance",
@@ -266,19 +288,37 @@ fun WalletBalanceCard(
                         )
                     }
                 }
+                Text(
+                    "Balance from payment provider",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.88f)
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     when {
-                        isLoading -> Box(Modifier.width(168.dp).height(38.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.22f)))
+                        isLoading -> Box(
+                            Modifier
+                                .width(168.dp)
+                                .height(38.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.22f))
+                                .semantics { contentDescription = "Loading wallet balance" }
+                        )
                         balance != null && isBalanceVisible -> Text(
                             text = "₱${"%,.2f".format(balance)}",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                             fontSize = 30.sp,
-                            maxLines = 1
+                            maxLines = 2
                         )
-                        balance != null -> Text("₱ ••••••", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                        balance != null -> Text(
+                            "₱ ••••••",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.semantics { contentDescription = "Balance hidden" }
+                        )
                         else -> Text("Unavailable", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
@@ -306,52 +346,82 @@ fun QuickActionsSection(
     val scheme = MaterialTheme.colorScheme
     val actionSurface = scheme.primaryContainer
     Column(modifier = Modifier.padding(horizontal = 18.dp)) {
-        Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = scheme.onBackground)
+        Text(
+            "Quick actions",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = scheme.onBackground,
+            modifier = Modifier.semantics { heading() }
+        )
         Spacer(modifier = Modifier.height(12.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            QuickAction(Icons.Rounded.Payments, "Collect", actionSurface, onCollect, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.Send, "Transfer", actionSurface, onTransfer, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.Link, "Payment link", actionSurface, onPaymentLink, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.QrCodeScanner, "QR Scanner", scheme.secondaryContainer, onScanQr, Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            QuickAction(Icons.Rounded.Payments, "Collect payment", actionSurface, onCollect, Modifier.weight(1f))
+            QuickAction(Icons.AutoMirrored.Rounded.Send, "Send money", actionSurface, onTransfer, Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(10.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            QuickAction(Icons.Rounded.Link, "Payment link", actionSurface, onPaymentLink, Modifier.weight(1f))
+            QuickAction(Icons.Rounded.QrCodeScanner, "Scan QR code", scheme.secondaryContainer, onScanQr, Modifier.weight(1f))
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             QuickAction(Icons.Rounded.Terminal, "API docs", scheme.secondaryContainer, onDeveloperDocs, Modifier.weight(1f))
             QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Transactions", actionSurface, onTransactionsClick, Modifier.weight(1f))
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             QuickAction(Icons.Rounded.Person, "Profile", actionSurface, onProfileClick, Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
         }
     }
 }
 
 @Composable
 fun QuickAction(icon: ImageVector, label: String, background: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Surface(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 72.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = background,
-            shadowElevation = 1.dp,
-            modifier = Modifier.size(56.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(28.dp))
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = background,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
+            Text(
+                label,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Icon(
+                Icons.AutoMirrored.Rounded.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
-        Spacer(modifier = Modifier.height(7.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            minLines = 2
-        )
     }
 }
 
@@ -406,15 +476,32 @@ fun TransactionHistorySection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Recent activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+            Text(
+                "Recent activity",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.semantics { heading() }
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("See all", style = MaterialTheme.typography.labelMedium, color = FastPayBlue, fontWeight = FontWeight.SemiBold)
-                Icon(Icons.Rounded.ChevronRight, null, tint = FastPayBlue, modifier = Modifier.size(18.dp))
+                Text(
+                    "See all",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Icon(
+                    Icons.Rounded.ChevronRight,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
         Spacer(modifier = Modifier.height(14.dp))

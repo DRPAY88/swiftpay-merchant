@@ -16,6 +16,7 @@ import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,13 +66,25 @@ fun SwiftPayWebView(
 ) {
     val scope = rememberCoroutineScope()
     var webView: WebView? by remember { mutableStateOf(null) }
-    var canGoBack by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
     var isLoading by remember { mutableStateOf(true) }
     var pageError: String? by remember { mutableStateOf(null) }
     var loadAttempt by remember { mutableIntStateOf(0) }
     val currentLoading = rememberUpdatedState(isLoading)
     val currentPageError = rememberUpdatedState(pageError)
+
+    BackHandler(enabled = onNavigateHome != null) {
+        val currentWebView = webView
+        if (currentWebView == null || pageError != null) {
+            onNavigateHome?.invoke()
+        } else {
+            currentWebView.evaluateJavascript(
+                "window.handleAndroidBack ? window.handleAndroidBack() : false"
+            ) { handled ->
+                if (handled != "true") onNavigateHome?.invoke()
+            }
+        }
+    }
 
     LaunchedEffect(url, loadAttempt) {
         isLoading = true
@@ -150,7 +163,6 @@ fun SwiftPayWebView(
 
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 isLoading = false
-                                canGoBack = view?.canGoBack() == true
                             }
 
                             override fun onReceivedError(

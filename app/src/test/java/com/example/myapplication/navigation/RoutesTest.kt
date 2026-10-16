@@ -5,6 +5,13 @@ import org.junit.Test
 
 class RoutesTest {
     @Test
+    fun paymentDeepLinkRequiresAnAuthenticatedUnlockedSession() {
+        assertEquals(false, canProcessPaymentDeepLink(isLoggedIn = false, isDeviceUnlocked = true))
+        assertEquals(false, canProcessPaymentDeepLink(isLoggedIn = true, isDeviceUnlocked = false))
+        assertEquals(true, canProcessPaymentDeepLink(isLoggedIn = true, isDeviceUnlocked = true))
+    }
+
+    @Test
     fun selectingMainTabReplacesTheCurrentBackStack() {
         val navigationState = AppNavigationState(Route.Home)
         navigationState.navigate(Route.MiniApp("topup-page"))
@@ -43,6 +50,15 @@ class RoutesTest {
         navigationState.navigate(topUpRoute)
 
         assertEquals(topUpRoute, navigationState.backStack.last())
+    }
+
+    @Test
+    fun backingOutOfWalletMiniAppReturnsToWallet() {
+        val navigationState = AppNavigationState(Route.Wallet)
+        navigationState.navigate(Route.MiniApp(initialPath = "disbursement-page"))
+
+        assertEquals(true, navigationState.popOrNavigateHome())
+        assertEquals(Route.Wallet, navigationState.currentRoute)
     }
 
     @Test

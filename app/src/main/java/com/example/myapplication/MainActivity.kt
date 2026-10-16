@@ -42,6 +42,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -64,6 +65,7 @@ import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.data.DevicePinManager
 import com.example.myapplication.data.IncomingMoneyPush
 import com.example.myapplication.navigation.AppNavigationState
+import com.example.myapplication.navigation.canProcessPaymentDeepLink
 import com.example.myapplication.navigation.Route
 import com.example.myapplication.ui.screens.ApiDocsScreen
 import com.example.myapplication.ui.screens.ApiKeysScreen
@@ -175,7 +177,7 @@ class MainActivity : FragmentActivity() {
             val map = DeepLinkExtractor.bundleToMap(extras)
             if (map != null) {
                 lifecycleScope.launch {
-                    DeepLinkBus.flow.emit(map)
+                    DeepLinkBus.send(map)
                 }
             }
         }
@@ -187,7 +189,7 @@ class MainActivity : FragmentActivity() {
         val map = DeepLinkExtractor.bundleToMap(intent.extras)
         if (map != null) {
             lifecycleScope.launch {
-                DeepLinkBus.flow.emit(map)
+                DeepLinkBus.send(map)
             }
         }
     }
@@ -212,6 +214,7 @@ fun SwiftPayApp() {
     var hasDevicePin by remember { mutableStateOf(false) }
     var isDeviceUnlocked by remember { mutableStateOf(false) }
     var isStartupResolved by remember { mutableStateOf(false) }
+    val pendingPaymentDeepLinks = remember { mutableStateListOf<String>() }
 
     DebugLogger.logAuthCheck(isLoggedIn)
     DebugLogger.logDeviceInfo()
@@ -311,15 +314,27 @@ fun SwiftPayApp() {
         val currentContext = LocalContext.current
         androidx.compose.runtime.LaunchedEffect(Unit) {
             DeepLinkBus.flow.collectLatest { payload ->
-                if (payload != null) {
-                    navController.navigate(Route.Home)
-                    val (linkId, _) = DeepLinkExtractor.extractPaymentInfo(payload)
-                    if (linkId.isNotBlank()) {
-                        miniAppViewModel.handleDeepLink(linkId)
-                        Toast.makeText(currentContext, "Checking your payment status", Toast.LENGTH_LONG).show()
-                    }
-                }
+                val (linkId, _) = DeepLinkExtractor.extractPaymentInfo(payload)
+                if (linkId.isBlank()) return@collectLatest
+                pendingPaymentDeepLinks.add(linkId)
             }
+        }
+        androidx.compose.runtime.LaunchedEffect(
+            pendingPaymentDeepLinks.size,
+            isStartupResolved,
+            isLoggedIn,
+            isDeviceUnlocked
+        ) {
+            if (
+                !isStartupResolved ||
+                !canProcessPaymentDeepLink(isLoggedIn, isDeviceUnlocked)
+            ) return@LaunchedEffect
+
+            val linkId = pendingPaymentDeepLinks.firstOrNull() ?: return@LaunchedEffect
+            pendingPaymentDeepLinks.removeAt(0)
+            navController.navigate(Route.Home)
+            miniAppViewModel.handleDeepLink(linkId)
+            Toast.makeText(currentContext, "Checking your payment status", Toast.LENGTH_LONG).show()
         }
         if (currentRoute == Route.Login || currentRoute == Route.DeviceLock) {
             NavDisplay(
@@ -461,7 +476,7 @@ fun SwiftPayApp() {
                                 initialPath = key.initialPath,
                                 openDepositWizard = key.openDepositWizard,
                                 openQrScanner = launchScanner,
-                                onNavigateHome = { navController.navigate(Route.Home) }
+                                onNavigateHome = { navController.pop() }
                             )
                         }
                         Route.Profile -> NavEntry(key) {
@@ -477,7 +492,11 @@ fun SwiftPayApp() {
                             WalletScreen()
                         }
                         Route.Scanner -> NavEntry(key) {
-                            MiniAppScreen(initialPath = "scan-qr-page", openQrScanner = true)
+                            MiniAppScreen(
+                                initialPath = "scan-qr-page",
+                                openQrScanner = true,
+                                onNavigateHome = { navController.pop() }
+                            )
                         }
                         Route.Crypto -> NavEntry(key) {
                             CryptoScreen()

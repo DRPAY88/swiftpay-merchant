@@ -67,16 +67,22 @@ fun SwiftPayBaseDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (icon != null) {
-                    val infiniteTransition = rememberInfiniteTransition(label = "iconPulse")
-                    val pulseScale by infiniteTransition.animateFloat(
-                        initialValue = 1f,
-                        targetValue = 1.05f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(1200, easing = EaseInOutCubic),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "iconPulse"
-                    )
+                    val reduceMotion = rememberReducedMotion()
+                    val pulseScale = if (reduceMotion) {
+                        1f
+                    } else {
+                        val infiniteTransition = rememberInfiniteTransition(label = "iconPulse")
+                        val animatedScale by infiniteTransition.animateFloat(
+                            initialValue = 1f,
+                            targetValue = 1.05f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(1200, easing = EaseInOutCubic),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "iconPulse"
+                        )
+                        animatedScale
+                    }
 
                     Surface(
                         shape = CircleShape,
@@ -142,44 +148,53 @@ fun SwiftPayProcessingDialog(message: String) {
         title = message,
         icon = Icons.Rounded.AccountBalanceWallet,
         content = {
-            val infiniteTransition = rememberInfiniteTransition(label = "processing")
-            val rotation by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(2000, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "rotate"
-            )
-
-            Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    modifier = Modifier.fillMaxSize().graphicsLayer { rotationZ = rotation },
-                    color = FastPayNavy,
-                    strokeWidth = 3.dp,
-                    trackColor = FastPayNavy.copy(alpha = 0.1f)
+            if (rememberReducedMotion()) {
+                Icon(
+                    imageVector = Icons.Rounded.HourglassTop,
+                    contentDescription = "Processing",
+                    modifier = Modifier.size(40.dp),
+                    tint = FastPayNavy
                 )
-            }
+            } else {
+                val infiniteTransition = rememberInfiniteTransition(label = "processing")
+                val rotation by infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(2000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "rotate"
+                )
 
-            Spacer(modifier = Modifier.height(24.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                repeat(3) { index ->
-                    val dotScale by infiniteTransition.animateFloat(
-                        initialValue = 0.5f,
-                        targetValue = 1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(600, delayMillis = index * 150, easing = EaseInOutCubic),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "dot$index"
+                Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.fillMaxSize().graphicsLayer { rotationZ = rotation },
+                        color = FastPayNavy,
+                        strokeWidth = 3.dp,
+                        trackColor = FastPayNavy.copy(alpha = 0.1f)
                     )
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .graphicsLayer { scaleX = dotScale; scaleY = dotScale }
-                            .background(FastPayNavy.copy(alpha = 0.4f), CircleShape)
-                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    repeat(3) { index ->
+                        val dotScale by infiniteTransition.animateFloat(
+                            initialValue = 0.5f,
+                            targetValue = 1f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(600, delayMillis = index * 150, easing = EaseInOutCubic),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "dot$index"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .graphicsLayer { scaleX = dotScale; scaleY = dotScale }
+                                .background(FastPayNavy.copy(alpha = 0.4f), CircleShape)
+                        )
+                    }
                 }
             }
         }
@@ -803,16 +818,22 @@ private fun NfcReaderIllustration(
     isError: Boolean,
     isWarning: Boolean
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "nfcIllustration")
-    val phoneFloat by infiniteTransition.animateFloat(
-        initialValue = -10f,
-        targetValue = 10f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "phoneFloat"
-    )
+    val reduceMotion = rememberReducedMotion()
+    val infiniteTransition = if (reduceMotion) null else rememberInfiniteTransition(label = "nfcIllustration")
+    val phoneFloat = if (infiniteTransition == null) {
+        0f
+    } else {
+        val animatedFloat by infiniteTransition.animateFloat(
+            initialValue = -10f,
+            targetValue = 10f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2200, easing = EaseInOutCubic),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "phoneFloat"
+        )
+        animatedFloat
+    }
 
     Box(
         modifier = Modifier
@@ -822,32 +843,42 @@ private fun NfcReaderIllustration(
         contentAlignment = Alignment.Center
     ) {
         repeat(3) { index ->
-            val waveScale by infiniteTransition.animateFloat(
-                initialValue = 0.78f,
-                targetValue = 1.18f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(
-                        durationMillis = 1800,
-                        delayMillis = index * 260,
-                        easing = EaseOutCubic
+            val waveScale = if (infiniteTransition == null) {
+                1f
+            } else {
+                val animatedScale by infiniteTransition.animateFloat(
+                    initialValue = 0.78f,
+                    targetValue = 1.18f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(
+                            durationMillis = 1800,
+                            delayMillis = index * 260,
+                            easing = EaseOutCubic
+                        ),
+                        repeatMode = RepeatMode.Restart
                     ),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "waveScale$index"
-            )
-            val waveAlpha by infiniteTransition.animateFloat(
-                initialValue = if (isError) 0.08f else 0.28f,
-                targetValue = 0f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(
-                        durationMillis = 1800,
-                        delayMillis = index * 260,
-                        easing = EaseOutCubic
+                    label = "waveScale$index"
+                )
+                animatedScale
+            }
+            val waveAlpha = if (infiniteTransition == null) {
+                if (isError) 0.08f else 0.2f
+            } else {
+                val animatedAlpha by infiniteTransition.animateFloat(
+                    initialValue = if (isError) 0.08f else 0.28f,
+                    targetValue = 0f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(
+                            durationMillis = 1800,
+                            delayMillis = index * 260,
+                            easing = EaseOutCubic
+                        ),
+                        repeatMode = RepeatMode.Restart
                     ),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "waveAlpha$index"
-            )
+                    label = "waveAlpha$index"
+                )
+                animatedAlpha
+            }
 
             Surface(
                 shape = CircleShape,

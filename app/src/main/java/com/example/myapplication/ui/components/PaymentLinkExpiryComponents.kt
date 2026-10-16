@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.ui.theme.FastPayBlack
 import kotlinx.coroutines.delay
-import java.util.*
 
 /**
  * Data class for link expiry information.
@@ -42,20 +41,29 @@ data class PaymentLinkExpiry(
  */
 @Composable
 fun rememberPaymentLinkExpiry(expiryTimestamp: Long): PaymentLinkExpiry {
-    var expiry by remember { mutableStateOf(calculateExpiry(expiryTimestamp)) }
+    var expiry by remember(expiryTimestamp) {
+        mutableStateOf(calculateExpiry(expiryTimestamp))
+    }
 
     LaunchedEffect(expiryTimestamp) {
         while (true) {
-            delay(60000) // Update every minute
-            expiry = calculateExpiry(expiryTimestamp)
+            val now = System.currentTimeMillis()
+            val nextExpiry = calculateExpiry(expiryTimestamp, now)
+            expiry = nextExpiry
+            if (nextExpiry.isExpired) break
+
+            val untilExpiry = (expiryTimestamp - now + 1L).coerceAtLeast(1L)
+            delay(minOf(60_000L, untilExpiry))
         }
     }
 
     return expiry
 }
 
-private fun calculateExpiry(expiryTimestamp: Long): PaymentLinkExpiry {
-    val now = System.currentTimeMillis()
+internal fun calculateExpiry(
+    expiryTimestamp: Long,
+    now: Long = System.currentTimeMillis()
+): PaymentLinkExpiry {
     val isExpired = now > expiryTimestamp
 
     if (isExpired) {
@@ -79,10 +87,9 @@ private fun calculateExpiry(expiryTimestamp: Long): PaymentLinkExpiry {
  */
 @Composable
 fun PaymentLinkExpiryWidget(
-    expiryTimestamp: Long,
+    expiry: PaymentLinkExpiry,
     modifier: Modifier = Modifier
 ) {
-    val expiry = rememberPaymentLinkExpiry(expiryTimestamp)
     val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
     val bgColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color(0xFFF5F5F5)
     val textColor = if (isDarkTheme) Color.White else Color(0xFF333333)

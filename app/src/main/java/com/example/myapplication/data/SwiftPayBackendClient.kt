@@ -48,6 +48,10 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+private const val HISTORY_PAGE_SIZE = 200
+private const val DISBURSEMENT_PAGE_SIZE = 100
+private const val MAX_HISTORY_PAGES = 100_000
+
 data class WalletTransactionHistory(
     val transactions: List<InternalTransaction>,
     val errors: List<String>
@@ -126,6 +130,8 @@ class SwiftPayService(
             if (response.isSuccessful) Result.success(Unit) else failure(response)
         } catch (error: CancellationException) {
             throw error
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             Result.failure(error)
         }
@@ -182,11 +188,15 @@ class SwiftPayService(
                 val body = response.body() ?: return Result.failure(IllegalStateException("Empty payment status"))
                 return Result.success(SwiftPayStatusResponse(id = body.paymentId ?: paymentId, status = body.status))
             }
+            if (response.code() != 404) return failure(response)
             val transferResponse = api.getDisbursement(paymentId)
             if (transferResponse.isSuccessful) {
                 val transfer = transferResponse.body()
-                Result.success(SwiftPayStatusResponse(id = transfer?.id ?: paymentId, status = transfer?.status))
-            } else failure(response)
+                    ?: return Result.failure(IllegalStateException("Empty transfer status response"))
+                Result.success(SwiftPayStatusResponse(id = transfer.id ?: paymentId, status = transfer.status))
+            } else failure(transferResponse)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             Result.failure(error)
         }
@@ -231,6 +241,8 @@ class SwiftPayService(
                     currency = body.currency ?: normalizedCurrency
                 )
             )
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             Result.failure(error)
         }
@@ -474,9 +486,23 @@ class SwiftPayService(
     suspend fun getInternalTransactions(): Result<List<InternalTransaction>> {
         if (!hasApiKey) return missingSession()
         return try {
-            val response = api.getDisbursements()
-            if (!response.isSuccessful) return failure(response)
-            Result.success(response.body().orEmpty().mapNotNull { it.toInternalTransaction() })
+            val transactions = mutableListOf<InternalTransaction>()
+            var pageNo = 0
+            while (true) {
+                val response = api.getDisbursements(pageNo, DISBURSEMENT_PAGE_SIZE)
+                if (!response.isSuccessful) return failure(response)
+                val page = response.body()
+                    ?: return Result.failure(IllegalStateException("Empty disbursement history response"))
+                transactions += page.mapNotNull { it.toInternalTransaction() }
+                if (page.size < DISBURSEMENT_PAGE_SIZE) break
+                pageNo++
+                if (pageNo > MAX_HISTORY_PAGES) {
+                    return Result.failure(IllegalStateException("Disbursement history exceeded the paging limit"))
+                }
+            }
+            Result.success(transactions)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             Result.failure(error)
         }
@@ -484,10 +510,10 @@ class SwiftPayService(
 
     suspend fun getManualBankDepositTransactions(): Result<List<InternalTransaction>> {
         if (!hasApiKey) return missingSession()
-        return try {
-            val response = api.getManualBankDeposits()
-            if (!response.isSuccessful) return failure(response)
-            Result.success(response.body().orEmpty().map { deposit ->
+        return getAllOffsetPages { limit, offset ->
+            api.getManualBankDeposits(limit, offset)
+        }.map { deposits ->
+            deposits.map { deposit ->
                 InternalTransaction(
                     transactionId = deposit.id,
                     amount = deposit.amount,
@@ -498,28 +524,22 @@ class SwiftPayService(
                     description = deposit.notes,
                     bankName = deposit.bankName
                 )
-            })
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            Result.failure(error)
+            }
         }
     }
 
     suspend fun getPaymentTransactions(): Result<List<InternalTransaction>> {
         if (!hasApiKey) return missingSession()
-        return try {
-            val response = api.getPaymentTransactions()
-            if (!response.isSuccessful) return failure(response)
-            val payments = response.body()
-                ?: return Result.failure(IllegalStateException("Empty payment transaction response"))
+        return getAllOffsetPages { limit, offset ->
+            api.getPaymentTransactions(limit, offset)
+        }.mapCatching { payments ->
             if (payments.any {
                     it.currency != "PHP" || !it.amount.isFinite() || it.amount <= 0.0
                 }
             ) {
-                return Result.failure(IllegalStateException("Backend returned an invalid PHP payment transaction"))
+                throw IllegalStateException("Backend returned an invalid PHP payment transaction")
             }
-            Result.success(payments.map { payment ->
+            payments.map { payment ->
                 InternalTransaction(
                     transactionId = payment.id,
                     amount = payment.amount,
@@ -529,7 +549,29 @@ class SwiftPayService(
                     referenceNo = payment.referenceNo,
                     bankName = "SwiftPay"
                 )
-            })
+            }
+        }
+    }
+
+    private suspend fun <T> getAllOffsetPages(
+        fetchPage: suspend (limit: Int, offset: Int) -> Response<List<T>>
+    ): Result<List<T>> {
+        return try {
+            val results = mutableListOf<T>()
+            var offset = 0
+            while (true) {
+                val response = fetchPage(HISTORY_PAGE_SIZE, offset)
+                if (!response.isSuccessful) return failure(response).map { emptyList<T>() }
+                val page = response.body()
+                    ?: return Result.failure(IllegalStateException("Empty transaction history response"))
+                results += page
+                if (page.size < HISTORY_PAGE_SIZE) break
+                offset += page.size
+                if (offset / HISTORY_PAGE_SIZE >= MAX_HISTORY_PAGES) {
+                    return Result.failure(IllegalStateException("Transaction history exceeded the paging limit"))
+                }
+            }
+            Result.success(results)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -633,9 +675,13 @@ class SwiftPayService(
                     status = body.status,
                     amount = amount,
                     currency = "PHP",
+                    outcomeUnknown = body.outcomeUnknown,
+                    message = body.message,
                     referenceNo = body.referenceNo ?: reference
                 )
             )
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             Result.failure(error)
         }

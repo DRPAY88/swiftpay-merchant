@@ -905,7 +905,8 @@ export function createApp({
 
   app.get("/v1/wallet/manual-deposits", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
     const limit = z.coerce.number().int().min(1).max(200).catch(100).parse(req.query.limit);
-    const deposits = await userStore.listManualBankDeposits(limit);
+    const offset = z.coerce.number().int().min(0).max(2_147_483_647).catch(0).parse(req.query.offset);
+    const deposits = await userStore.listManualBankDeposits(limit, offset);
     res.json(deposits.map((deposit) => ({
       id: deposit.id,
       amount: Number(deposit.amount),
@@ -921,7 +922,8 @@ export function createApp({
       throw new SwiftPayError(503, "Payment transaction history is unavailable");
     }
     const limit = z.coerce.number().int().min(1).max(200).catch(100).parse(req.query.limit);
-    const transactions = await userStore.listPaymentWebhookTransactions(limit);
+    const offset = z.coerce.number().int().min(0).max(2_147_483_647).catch(0).parse(req.query.offset);
+    const transactions = await userStore.listPaymentWebhookTransactions(limit, offset);
     res.json(transactions.map((transaction) => ({
       id: transaction.id,
       referenceNo: transaction.reference_no,
@@ -1245,22 +1247,43 @@ export function createApp({
       result = await requestProvider("disbursements/send", { method: "POST", auth: "basic", body: payload });
     } catch (error) {
       if (auditId !== null) {
-        await userStore.finishTransferIntent(
-          auditId,
-          error instanceof SwiftPayError && error.status < 500 ? "rejected" : "unknown",
-          input.referenceNo,
-          { error: error instanceof SwiftPayError && error.status < 500 ? error.message : "Provider outcome requires reconciliation" }
-        );
+        try {
+          await userStore.finishTransferIntent(
+            auditId,
+            error instanceof SwiftPayError && error.status < 500 ? "rejected" : "unknown",
+            input.referenceNo,
+            { error: error instanceof SwiftPayError && error.status < 500 ? error.message : "Provider outcome requires reconciliation" }
+          );
+        } catch {
+          console.error("Transfer outcome could not be saved to the audit log");
+        }
+      }
+      if (!(error instanceof SwiftPayError) || error.status >= 500) {
+        return res.status(202).json({
+          status: "UNKNOWN",
+          outcomeUnknown: true,
+          referenceNo: input.referenceNo,
+          message: "SwiftPay has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference."
+        });
       }
       throw error;
     }
     if (typeof result.data?.id !== "string" || !z.string().uuid().safeParse(result.data.id).success) {
       if (auditId !== null) {
-        await userStore.finishTransferIntent(auditId, "unknown", input.referenceNo, {
-          error: "Provider accepted a response with an invalid transfer ID; reconcile before retrying"
-        });
+        try {
+          await userStore.finishTransferIntent(auditId, "unknown", input.referenceNo, {
+            error: "Provider accepted a response with an invalid transfer ID; reconcile before retrying"
+          });
+        } catch {
+          console.error("Transfer outcome could not be saved to the audit log");
+        }
       }
-      throw new SwiftPayError(502, "SwiftPay did not return a valid disbursement ID");
+      return res.status(202).json({
+        status: "UNKNOWN",
+        outcomeUnknown: true,
+        referenceNo: input.referenceNo,
+        message: "SwiftPay may have accepted this transfer, but did not return a valid confirmation. Do not submit it again. Check your transaction history or contact support with this reference."
+      });
     }
     if (auditId !== null) {
       try {
@@ -1281,8 +1304,13 @@ export function createApp({
     res.status(202).json({ id: result.data?.id, referenceNo: input.referenceNo, status: "PENDING" });
   }));
 
-  app.get("/v1/disbursements", requireScope("swiftpay:disbursements:read"), asyncRoute(async (_req, res) => {
-    const result = await requestProvider("disbursements?pageNo=0&pageSize=100", { auth: "basic" });
+  app.get("/v1/disbursements", requireScope("swiftpay:disbursements:read"), asyncRoute(async (req, res) => {
+    const pageNo = z.coerce.number().int().min(0).max(100_000).catch(0).parse(req.query.pageNo);
+    const pageSize = z.coerce.number().int().min(1).max(100).catch(100).parse(req.query.pageSize);
+    const result = await requestProvider(
+      `disbursements?pageNo=${pageNo}&pageSize=${pageSize}`,
+      { auth: "basic" }
+    );
     const records = z.array(z.record(z.string(), z.unknown())).safeParse(result.data?.result);
     if (!records.success) {
       throw new SwiftPayError(502, "SwiftPay returned an invalid disbursement page");
