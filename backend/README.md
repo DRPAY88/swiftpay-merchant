@@ -34,6 +34,8 @@ The marketing site is served from `backend/public/marketing/` at `/`; the protec
 
 The marketing page also serves a 15-second vertical promotional video at `/drpay-promo.mp4` with its poster image at `/drpay-promo-poster.jpg`. Keep the video's availability messaging aligned with the current product: direct KRW-to-PHP or KRW-to-USDT exchange is not available in the current app.
 
+The homepage's live rate panel requests `GET /api/marketing/rates`. It combines the backend CurrencyAPI KRW/PHP and USD/PHP rates with CoinGecko's USDT/USD market price; responses are cached for 60 seconds in-process and source values are checked for staleness. The panel is an indicative market reference only, not an executable DRPAY quote; it excludes fees, spreads, eligibility, and network costs. It requires the existing `CURRENCYAPI_KEY` configuration and shows an unavailable state rather than substituting sample values when a feed fails.
+
 The Render blueprint sets `PUBLIC_BASE_URL` to `https://denpay.cc` so generated payment links use the custom domain. To connect it:
 
 1. Deploy the service from this repository to Render.

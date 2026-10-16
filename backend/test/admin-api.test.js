@@ -7,12 +7,14 @@ import { createApp } from "../src/app.js";
 const config = {
   swiftPayBaseUrl: new URL("https://provider.example/api/"),
   swiftPayAccessKey: "A".repeat(32),
-  swiftPaySecretKey: "S".repeat(32)
+  swiftPaySecretKey: "S".repeat(32),
+  currencyApiKey: "test-currency-key"
 };
 const scope = "swiftpay:payments:read swiftpay:payments:write swiftpay:disbursements:read swiftpay:disbursements:write";
 let store;
 let server;
 let baseUrl;
+let marketRateRequestCount = 0;
 
 before(async () => {
   const database = newDb();
@@ -39,6 +41,20 @@ before(async () => {
         return new Response(JSON.stringify({ id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01" }), { status: 200 });
       }
       return new Response(JSON.stringify({ balance: 75, number: "000123" }), { status: 200 });
+    },
+    fxFetchImpl: async (url) => {
+      const currency = new URL(url).searchParams.get("base_currency");
+      const value = currency === "KRW" ? 0.04 : 58.4;
+      return Response.json({
+        meta: { last_updated_at: new Date().toISOString() },
+        data: { PHP: { code: "PHP", value } }
+      });
+    },
+    marketRateFetchImpl: async () => {
+      marketRateRequestCount += 1;
+      return Response.json({
+        tether: { usd: 1.002, last_updated_at: Math.floor(Date.now() / 1000) }
+      });
     }
   });
   server = app.listen(0, "127.0.0.1");
@@ -70,6 +86,12 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /DRPAY IN 15 SECONDS/);
   assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=2"/);
   assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=2"/);
+  assert.match(homepageHtml, /id="market-rates"/);
+  assert.match(homepageHtml, /Indicative market references, not a DRPAY offer or guaranteed payout/);
+
+  const ratesScript = await fetch(`${baseUrl}/rates.js`);
+  assert.equal(ratesScript.status, 200);
+  assert.match(await ratesScript.text(), /api\/marketing\/rates/);
 
   const promoVideo = await fetch(`${baseUrl}/drpay-promo.mp4`, { method: "HEAD" });
   assert.equal(promoVideo.status, 200);
@@ -105,6 +127,22 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   });
   assert.equal(admin.status, 200);
   assert.equal((await admin.json()).length, 2);
+});
+
+test("public marketing rates are sourced, cached, and labeled as reference values", async () => {
+  const response = await fetch(`${baseUrl}/api/marketing/rates`);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("cache-control"), /max-age=30/);
+  const result = await response.json();
+  assert.equal(result.rates.PHP.perKrw, 0.04);
+  assert.equal(result.rates.USDT.perKrw, 0.04 / 58.4 / 1.002);
+  assert.ok(result.rates.PHP.updatedAt);
+  assert.ok(result.rates.USDT.usdtUsdUpdatedAt);
+  assert.equal(marketRateRequestCount, 1);
+
+  const cachedResponse = await fetch(`${baseUrl}/api/marketing/rates`);
+  assert.equal(cachedResponse.status, 200);
+  assert.equal(marketRateRequestCount, 1);
 });
 
 test("admin merchant lifecycle suspends, removes, and reactivates sign-in access", async () => {

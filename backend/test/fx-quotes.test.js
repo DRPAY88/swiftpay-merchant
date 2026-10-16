@@ -6,6 +6,7 @@ import {
   FxQuoteError,
   getLatestPhpRate,
   getLatestKrwPhpRate,
+  getLatestMarketingKrwRates,
   KRW_PHP_QUOTE_TTL_MS,
   verifyFxPhpQuote,
   verifyKrwPhpQuote
@@ -56,6 +57,58 @@ test("CurrencyAPI errors fail closed with actionable configuration and quota mes
   await assert.rejects(
     getLatestKrwPhpRate("test-key", async () => new Response("{}", { status: 403 })),
     (error) => error instanceof FxQuoteError && /not authorized/.test(error.message)
+  );
+});
+
+test("marketing reference rates combine KRW/PHP and live USDT/USD prices", async () => {
+  const fxRequests = [];
+  const marketRequests = [];
+  const rates = await getLatestMarketingKrwRates(
+    "test-key",
+    async (url, options) => {
+      const requestUrl = new URL(url);
+      fxRequests.push({ requestUrl, options });
+      const currency = requestUrl.searchParams.get("base_currency");
+      const value = currency === "KRW" ? 0.0425 : 58.5;
+      return Response.json({
+        meta: { last_updated_at: new Date(now - 60_000).toISOString() },
+        data: { PHP: { code: "PHP", value } }
+      });
+    },
+    async (url, options) => {
+      marketRequests.push({ url: url.toString(), options });
+      return Response.json({
+        tether: { usd: 1.001, last_updated_at: Math.floor((now - 30_000) / 1000) }
+      });
+    },
+    now
+  );
+
+  assert.equal(fxRequests.length, 2);
+  assert.equal(fxRequests[0].options.headers.apikey, "test-key");
+  assert.equal(fxRequests[1].options.headers.apikey, "test-key");
+  assert.match(marketRequests[0].url, /^https:\/\/api\.coingecko\.com\/api\/v3\/simple\/price/);
+  assert.equal(marketRequests[0].options.headers.apikey, undefined);
+  assert.equal(rates.retrievedAt, new Date(now).toISOString());
+  assert.equal(rates.rates.PHP.perKrw, 0.0425);
+  assert.equal(rates.rates.USDT.perKrw, 0.0425 / 58.5 / 1.001);
+  assert.equal(rates.rates.USDT.usdtUsdUpdatedAt, new Date(now - 30_000).toISOString());
+});
+
+test("marketing reference rates reject stale or unavailable USDT market prices", async () => {
+  const fxFetch = async (url) => Response.json({
+    meta: { last_updated_at: new Date(now).toISOString() },
+    data: { PHP: { code: "PHP", value: new URL(url).searchParams.get("base_currency") === "KRW" ? 0.04 : 58 } }
+  });
+  await assert.rejects(
+    getLatestMarketingKrwRates("test-key", fxFetch, async () => Response.json({
+      tether: { usd: 1, last_updated_at: Math.floor((now - 6 * 60 * 1000) / 1000) }
+    }), now),
+    (error) => error instanceof FxQuoteError && error.status === 502 && /stale/.test(error.message)
+  );
+  await assert.rejects(
+    getLatestMarketingKrwRates("test-key", fxFetch, async () => new Response("{}", { status: 429 }), now),
+    (error) => error instanceof FxQuoteError && error.status === 503
   );
 });
 

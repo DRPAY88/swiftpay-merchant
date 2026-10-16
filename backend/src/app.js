@@ -13,7 +13,13 @@ import {
   SwiftPayError,
   verifySwiftPaySignature
 } from "./swiftpay.js";
-import { createFxPhpQuote, FxQuoteError, getLatestPhpRate, verifyFxPhpQuote } from "./fx-quotes.js";
+import {
+  createFxPhpQuote,
+  FxQuoteError,
+  getLatestMarketingKrwRates,
+  getLatestPhpRate,
+  verifyFxPhpQuote
+} from "./fx-quotes.js";
 import { TransakError } from "./transak.js";
 
 const amountSchema = z.number().finite().min(0.01).max(1_000_000);
@@ -414,6 +420,7 @@ export function createApp({
   config,
   fetchImpl = fetch,
   fxFetchImpl = fetch,
+  marketRateFetchImpl = fetch,
   verifyAccessToken,
   requestOtp,
   verifyOtp,
@@ -432,6 +439,40 @@ export function createApp({
   let paymentInstitutionCatalogueLoadedAt = 0;
   let paymentInstitutionCatalogueRetryAt = 0;
   let paymentInstitutionCatalogueRequest = null;
+  let marketingRates = null;
+  let marketingRatesLoadedAt = 0;
+  let marketingRatesRetryAt = 0;
+  let marketingRatesRequest = null;
+
+  async function loadMarketingRates() {
+    const currentTime = clock();
+    if (marketingRates && currentTime - marketingRatesLoadedAt < 60_000) return marketingRates;
+    if (currentTime < marketingRatesRetryAt) {
+      throw new FxQuoteError(503, "Reference rates are temporarily unavailable; try again shortly");
+    }
+    if (marketingRatesRequest) return marketingRatesRequest;
+
+    marketingRatesRequest = (async () => {
+      try {
+        const result = await getLatestMarketingKrwRates(
+          config.currencyApiKey,
+          fxFetchImpl,
+          marketRateFetchImpl,
+          clock()
+        );
+        marketingRates = result;
+        marketingRatesLoadedAt = clock();
+        marketingRatesRetryAt = 0;
+        return result;
+      } catch (error) {
+        marketingRatesRetryAt = clock() + 15_000;
+        throw error;
+      } finally {
+        marketingRatesRequest = null;
+      }
+    })();
+    return marketingRatesRequest;
+  }
 
   async function loadPaymentInstitutionCatalogue() {
     const currentTime = clock();
@@ -1347,6 +1388,11 @@ export function createApp({
         .filter((institution) => institution.enabled !== false)
         .map(({ code, name, logoUrl }) => ({ code, name, logoUrl: trustedInstitutionLogoUrl(logoUrl) }))
     );
+  }));
+
+  app.get("/api/marketing/rates", asyncRoute(async (_req, res) => {
+    const rates = await loadMarketingRates();
+    res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=30").json(rates);
   }));
 
   app.use((_req, res) => res.status(404).json({ error: "not_found" }));

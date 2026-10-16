@@ -3,6 +3,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 export const FX_PHP_QUOTE_TTL_MS = 5 * 60 * 1000;
 export const KRW_PHP_QUOTE_TTL_MS = FX_PHP_QUOTE_TTL_MS;
 const MAX_FX_RATE_AGE_MS = 26 * 60 * 60 * 1000;
+const MAX_USDT_RATE_AGE_MS = 5 * 60 * 1000;
 const FX_CURRENCIES = new Set(["KRW", "USD", "EUR", "CNY"]);
 
 export class FxQuoteError extends Error {
@@ -69,6 +70,72 @@ export async function getLatestPhpRate(baseCurrency, apiKey, fetchImpl = fetch, 
 export function getLatestKrwPhpRate(apiKey, fetchImpl = fetch, now = Date.now()) {
   return getLatestPhpRate("KRW", apiKey, fetchImpl, now)
     .then(({ phpPerUnit, updatedAt }) => ({ phpPerKrw: phpPerUnit, updatedAt }));
+}
+
+export async function getLatestMarketingKrwRates(
+  apiKey,
+  fxFetchImpl = fetch,
+  marketFetchImpl = fetch,
+  now = Date.now()
+) {
+  const [krwPhpRate, usdPhpRate] = await Promise.all([
+    getLatestPhpRate("KRW", apiKey, fxFetchImpl, now),
+    getLatestPhpRate("USD", apiKey, fxFetchImpl, now)
+  ]);
+
+  let response;
+  try {
+    response = await marketFetchImpl(
+      "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd&include_last_updated_at=true",
+      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
+    );
+  } catch {
+    throw new FxQuoteError(503, "The USDT market rate service is temporarily unavailable");
+  }
+  if (!response.ok) {
+    throw new FxQuoteError(503, "The USDT market rate service could not provide a rate; try again later");
+  }
+
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    throw new FxQuoteError(502, "The USDT market rate service returned an invalid response");
+  }
+
+  const usdPerUsdt = body?.tether?.usd;
+  const usdtUpdatedAt = Number(body?.tether?.last_updated_at) * 1000;
+  if (
+    typeof usdPerUsdt !== "number" ||
+    !Number.isFinite(usdPerUsdt) ||
+    usdPerUsdt <= 0 ||
+    !Number.isFinite(usdtUpdatedAt) ||
+    usdtUpdatedAt > now + 60_000 ||
+    now - usdtUpdatedAt > MAX_USDT_RATE_AGE_MS
+  ) {
+    throw new FxQuoteError(502, "The USDT market rate service returned a missing or stale price");
+  }
+
+  const usdtPerKrw = krwPhpRate.phpPerUnit / usdPhpRate.phpPerUnit / usdPerUsdt;
+  if (!Number.isFinite(usdtPerKrw) || usdtPerKrw <= 0) {
+    throw new FxQuoteError(502, "The rate services returned an invalid KRW/USDT conversion");
+  }
+
+  return {
+    retrievedAt: new Date(now).toISOString(),
+    rates: {
+      PHP: {
+        perKrw: krwPhpRate.phpPerUnit,
+        updatedAt: krwPhpRate.updatedAt
+      },
+      USDT: {
+        perKrw: usdtPerKrw,
+        fxUpdatedAt: krwPhpRate.updatedAt,
+        usdFxUpdatedAt: usdPhpRate.updatedAt,
+        usdtUsdUpdatedAt: new Date(usdtUpdatedAt).toISOString()
+      }
+    }
+  };
 }
 
 export function createFxPhpQuote({
