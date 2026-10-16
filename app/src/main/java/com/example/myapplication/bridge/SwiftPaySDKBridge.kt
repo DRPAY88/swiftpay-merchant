@@ -33,7 +33,7 @@ class SwiftPaySDKBridge(
     private val onGetSettings: () -> Unit,
     private val onScanNFCCard: (Double) -> Unit,
     private val onGenerateDynamicQr: (Double) -> Unit,
-    private val onStartDepositWizard: (Boolean) -> Unit,
+    private val onGetWalletDepositAccount: () -> Unit,
     private val onScanQrToSend: () -> Unit,
     private val onGetTransferInstitutions: () -> Unit,
     private val onSendDisbursement: ((Double, String, String, String) -> Unit)? = null,
@@ -163,11 +163,7 @@ class SwiftPaySDKBridge(
                     sendError("Request a new FX-to-PHP quote before creating this QR", action = "generate_quoted_fx_php_qr")
                 }
             }
-            "start_deposit_wizard" -> {
-                val showAccountNumberImmediately = request.data?.jsonObject
-                    ?.get("showAccountNumberImmediately")?.jsonPrimitive?.contentOrNull == "true"
-                onStartDepositWizard(showAccountNumberImmediately)
-            }
+            "get_wallet_deposit_account" -> onGetWalletDepositAccount()
             "scan_qr_to_send" -> onScanQrToSend()
             "get_transfer_institutions" -> onGetTransferInstitutions()
             "send_disbursement" -> {

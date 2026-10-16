@@ -39,8 +39,8 @@ android {
         applicationId = "com.swiftpay.site"
         minSdk = 24
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.0.15"
+        versionCode = 17
+        versionName = "1.0.16"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "FCM_PROJECT_ID", buildConfigString(optionalProperty("FCM_PROJECT_ID")))
@@ -122,6 +122,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.runtime)
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
     implementation(libs.converter.moshi)
     implementation(libs.converter.kotlinx.serialization)
     implementation(libs.kotlinx.coroutines.android)

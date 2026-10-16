@@ -32,7 +32,6 @@ import com.example.myapplication.ui.theme.FintechMotion
 @Composable
 fun MiniAppScreen(
     initialPath: String,
-    openDepositWizard: Boolean = false,
     openQrScanner: Boolean = false,
     onNavigateHome: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -56,10 +55,9 @@ fun MiniAppScreen(
 
     val uiState = viewModel.uiState
 
-    LaunchedEffect(initialPath, openDepositWizard, openQrScanner) {
+    LaunchedEffect(initialPath, openQrScanner) {
         viewModel.refreshBalance()
         when {
-            openDepositWizard -> viewModel.onStartDepositWizard()
             openQrScanner -> {
                 viewModel.onScanQrToSend()
             }
@@ -93,7 +91,7 @@ fun MiniAppScreen(
                     viewModel.onGenerateQuotedFxPhpQr(quoteToken, paymentApp)
                 },
                 onNavigateHome = onNavigateHome,
-                onStartDepositWizard = { showAccountNumber -> viewModel.onStartDepositWizard(showAccountNumber) },
+                onGetWalletDepositAccount = viewModel::onGetWalletDepositAccount,
                 onScanQrToSend = { viewModel.onScanQrToSend() },
                 onGetTransferInstitutions = viewModel::onGetTransferInstitutions,
                 onSendDisbursement = { amount, bank, acc, name -> viewModel.onSendDisbursement(amount, bank, acc, name) },
@@ -147,36 +145,6 @@ fun MiniAppScreen(
                             ratePhpPerUnit = state.ratePhpPerUnit,
                             rateUpdatedAt = state.rateUpdatedAt,
                             paymentAppName = state.paymentAppName
-                        )
-                    }
-                    is MiniAppUiState.DepositWizard -> {
-                        DepositWizardDialog(
-                            accountNumber = state.accountNumber,
-                            balance = state.balance,
-                            showTransferInstructionsInitially = state.showTransferInstructionsInitially,
-                            onCheckout = viewModel::startDepositCheckout,
-                            onDismiss = { viewModel.dismissConsent() }
-                        )
-                    }
-                    is MiniAppUiState.DepositCheckoutReady -> {
-                        DepositCheckoutDialog(
-                            url = state.url,
-                            paymentId = state.paymentId,
-                            referenceNo = state.referenceNo,
-                            amount = state.amount,
-                            onDismiss = { viewModel.closeDepositCheckout() }
-                        )
-                    }
-                    is MiniAppUiState.DepositCheckoutComplete -> {
-                        DepositCheckoutResultDialog(
-                            paymentId = state.paymentId,
-                            amount = state.amount,
-                            success = state.success,
-                            status = state.status,
-                            onDismiss = {
-                                if (state.success) viewModel.refreshBalance()
-                                viewModel.dismissConsent()
-                            }
                         )
                     }
                     is MiniAppUiState.ScanQrToSend -> {

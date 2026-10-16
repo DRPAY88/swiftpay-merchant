@@ -74,6 +74,7 @@ import com.example.myapplication.data.SettingsManager
 import com.example.myapplication.data.TransactionStore
 import com.example.myapplication.data.createSwiftPayService
 import com.example.myapplication.data.mergeTransactions
+import com.example.myapplication.ui.utils.formatReceiptDate
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.ui.theme.*
 
@@ -747,11 +748,6 @@ fun PremiumBalanceCard(
                             } else Modifier
                         )
                 )
-                Text(
-                    "Balance from payment provider",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.88f)
-                )
                 adjustedBalance?.let {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -866,7 +862,7 @@ fun QuickActionsRow() {
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         QuickActionItem(Icons.Rounded.Payments, "Top up", "Add money to wallet", FastPayBlue, Modifier.weight(1f)) {
-            navController.navigate(Route.MiniApp(initialPath = "topup-page", openDepositWizard = true))
+            navController.navigate(Route.MiniApp(initialPath = "topup-page"))
         }
         QuickActionItem(Icons.AutoMirrored.Rounded.Send, "Transfer", "Send money", FastPayAccent, Modifier.weight(1f)) {
             navController.navigate(Route.MiniApp("disbursement-page"))
@@ -1155,9 +1151,10 @@ fun TransactionDetailScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor)
-            .padding(20.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         val isExpense = tx.amount < 0
         val isManualBankDeposit = tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)
@@ -1176,22 +1173,22 @@ fun TransactionDetailScreen(
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             color = surfaceColor,
             shadowElevation = 2.dp,
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.2f))
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
         ) {
             Column(
-                modifier = Modifier.padding(28.dp),
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                DrPayLogo(size = 90.dp)
+                DrPayLogo(size = 68.dp)
                 
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(20.dp))
                 
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(64.dp)
                         .background(color.copy(alpha = 0.1f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1199,11 +1196,11 @@ fun TransactionDetailScreen(
                         imageVector = if (isExpense) Icons.Rounded.NorthEast else Icons.Rounded.SouthWest,
                         contentDescription = null,
                         tint = color,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                 }
                 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(16.dp))
                 
                 Text(
                     text = when {
@@ -1220,26 +1217,27 @@ fun TransactionDetailScreen(
                 )
                 
                 Text(
-                    text = "₱ ${"%,.2f".format(abs(tx.amount))}",
+                    text = "₱${"%,.2f".format(abs(tx.amount))}",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Black,
                     color = textColor,
-                    fontSize = 36.sp
+                    fontSize = 36.sp,
+                    maxLines = 1
                 )
                 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(20.dp))
                 
                 HorizontalDivider(
                     modifier = Modifier.fillMaxWidth(),
                     thickness = 1.dp,
-                    color = Color.LightGray.copy(alpha = 0.3f)
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
                 )
                 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(20.dp))
                 
-                Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     ReceiptRow("Status", statusToDisplay, color, isBadge = true)
-                    ReceiptRow("Date", tx.date, textColor)
+                    ReceiptRow("Date", formatReceiptDate(tx.date), textColor)
                     ReceiptRow(
                         "Type",
                         when {
@@ -1283,7 +1281,10 @@ fun TransactionDetailScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = textColor,
                                 fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
                             IconButton(
                                 onClick = {
@@ -1307,34 +1308,34 @@ fun TransactionDetailScreen(
         
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedButton(
                 onClick = { onShowSnackbar("Preparing to share...") },
-                modifier = Modifier.weight(1f).height(56.dp),
-                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.weight(1f).height(52.dp),
+                shape = RoundedCornerShape(14.dp),
                 border = androidx.compose.foundation.BorderStroke(1.5.dp, FastPayBlue)
             ) {
-                Icon(Icons.Rounded.Share, contentDescription = null, tint = FastPayBlue)
-                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Rounded.Share, contentDescription = null, tint = FastPayBlue, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
                 Text("Share", color = FastPayBlue, fontWeight = FontWeight.Bold)
             }
             
             Button(
                 onClick = { onShowSnackbar("Generating PDF receipt...") },
-                modifier = Modifier.weight(1f).height(56.dp),
-                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.weight(1f).height(52.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = FastPayNavy)
             ) {
-                Icon(Icons.Rounded.FileDownload, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Download", fontWeight = FontWeight.Bold)
+                Icon(Icons.Rounded.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Save receipt", fontWeight = FontWeight.Bold, maxLines = 1)
             }
         }
         
         TextButton(
             onClick = { onShowSnackbar("Opening Priority Support...") },
-            modifier = Modifier.padding(top = 8.dp)
+            modifier = Modifier.padding(top = 0.dp, bottom = 8.dp)
         ) {
             Text(
                 text = "Need help? Contact Support",
@@ -1350,12 +1351,18 @@ fun TransactionDetailScreen(
 fun ReceiptRow(label: String, value: String, valueColor: Color, isBadge: Boolean = false) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+        Text(
+            label,
+            modifier = Modifier.weight(0.8f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         if (isBadge) {
             Surface(
+                modifier = Modifier.weight(1.2f, fill = false),
                 color = valueColor.copy(alpha = 0.1f),
                 shape = RoundedCornerShape(6.dp)
             ) {
@@ -1364,11 +1371,21 @@ fun ReceiptRow(label: String, value: String, valueColor: Color, isBadge: Boolean
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Black,
-                    color = valueColor
+                    color = valueColor,
+                    textAlign = TextAlign.End
                 )
             }
         } else {
-            Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = valueColor)
+            Text(
+                value,
+                modifier = Modifier.weight(1.2f),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = valueColor,
+                textAlign = TextAlign.End,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

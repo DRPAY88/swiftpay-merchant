@@ -14,10 +14,7 @@ sealed interface Route {
     data object Home : Route
 
     @Serializable
-    data class MiniApp(
-        val initialPath: String,
-        val openDepositWizard: Boolean = false
-    ) : Route
+    data class MiniApp(val initialPath: String) : Route
 
     @Serializable
     data object Wallet : Route

@@ -37,6 +37,10 @@ import androidx.compose.ui.window.Dialog
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.widget.Toast
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
@@ -290,6 +294,14 @@ fun SwiftPayQrDialog(
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
+    val institutionLogoAsset = remember(paymentAppName) {
+        qrInstitutionLogoAsset(paymentAppName)
+    }
+    val institutionLogoImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components { add(SvgDecoder.Factory()) }
+            .build()
+    }
 
     SwiftPayBaseDialog(
         onDismissRequest = onDismiss,
@@ -321,12 +333,39 @@ fun SwiftPayQrDialog(
                 modifier = Modifier.size(200.dp),
             ) {
                 if (qrImage != null) {
-                    Image(
-                        bitmap = qrImage,
-                        contentDescription = "QR Ph code for ${formatQrCurrency(customerAmountFx ?: customerAmountKrw?.toDouble() ?: amount, customerCurrency ?: if (customerAmountKrw != null) "KRW" else currency)}",
-                        modifier = Modifier.fillMaxSize().background(Color.White).padding(12.dp),
-                        contentScale = ContentScale.Fit
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.White)
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            bitmap = qrImage,
+                            contentDescription = "QR Ph code for ${formatQrCurrency(customerAmountFx ?: customerAmountKrw?.toDouble() ?: amount, customerCurrency ?: if (customerAmountKrw != null) "KRW" else currency)}",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                        Surface(
+                            modifier = Modifier.size(36.dp),
+                            shape = CircleShape,
+                            color = Color.White
+                        ) {
+                            if (institutionLogoAsset != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data("file:///android_asset/$institutionLogoAsset")
+                                        .build(),
+                                    imageLoader = institutionLogoImageLoader,
+                                    contentDescription = "$paymentAppName logo in QR code",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(6.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+                        }
+                    }
                 } else {
                     Text(
                         text = "QR image unavailable",

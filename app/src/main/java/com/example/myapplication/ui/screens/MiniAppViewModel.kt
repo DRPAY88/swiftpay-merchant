@@ -56,23 +56,6 @@ sealed interface MiniAppUiState {
         val rateUpdatedAt: String? = null,
         val paymentAppName: String? = null
     ) : MiniAppUiState
-    data class DepositWizard(
-        val accountNumber: String,
-        val balance: Double,
-        val showTransferInstructionsInitially: Boolean = false
-    ) : MiniAppUiState
-    data class DepositCheckoutReady(
-        val url: String,
-        val paymentId: String,
-        val referenceNo: String,
-        val amount: Double
-    ) : MiniAppUiState
-    data class DepositCheckoutComplete(
-        val paymentId: String,
-        val amount: Double,
-        val success: Boolean,
-        val status: String
-    ) : MiniAppUiState
     object ScanQrToSend : MiniAppUiState
     data class QrTransferReview(
         val suggestedAmount: Double?,
@@ -147,8 +130,6 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     var bridge: SwiftPaySDKBridge? = null
     private var nfcTimerJob: Job? = null
     private var threeDSecureTimeoutJob: Job? = null
-    private var pendingDepositCheckoutId: String? = null
-    private var pendingDepositCheckoutAmount: Double? = null
     private var pendingCheckoutId: String? = null
         set(value) {
             field = value
@@ -526,64 +507,21 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun onStartDepositWizard(showAccountNumberImmediately: Boolean = false) {
-        launchProcessingAction("Loading deposit instructions...") {
+    fun onGetWalletDepositAccount() {
+        launchProcessingAction(
+            "Loading deposit account...",
+            bridgeAction = "get_wallet_deposit_account"
+        ) {
             val service = getService()
             val account = service.getWalletDepositAccount().getOrElse { throw it }
-            uiState = MiniAppUiState.DepositWizard(
-                accountNumber = account.accountNumber,
-                balance = account.balance,
-                showTransferInstructionsInitially = showAccountNumberImmediately
+            bridge?.sendResponse(
+                mapOf(
+                    "accountNumber" to account.accountNumber,
+                    "balance" to account.balance
+                ),
+                action = "get_wallet_deposit_account"
             )
-        }
-    }
-
-    fun startDepositCheckout(amount: Double) {
-        if (!amount.isFinite() || amount <= 0.0) {
-            uiState = MiniAppUiState.Error("Enter a valid PHP deposit amount.")
-            return
-        }
-        if (amount > 1_000_000.0) {
-            uiState = MiniAppUiState.Error("Deposit amount exceeds the PHP 1,000,000 checkout limit.")
-            return
-        }
-
-        launchProcessingAction("Preparing secure checkout...") {
-            val payment = PaymentData(
-                amount = amount,
-                currency = "PHP",
-                description = "DRPAY wallet deposit"
-            )
-            getService().createCheckout(payment)
-                .onSuccess { response ->
-                    val checkoutUrl = response.checkoutUrl ?: response.paymentUrl
-                    val paymentId = response.id ?: response.orderId
-                    if (checkoutUrl.isNullOrBlank() || paymentId.isNullOrBlank()) {
-                        throw IllegalStateException("SwiftPay did not return a complete checkout session.")
-                    }
-                    val referenceNo = response.referenceNo
-                        ?.takeIf(String::isNotBlank)
-                        ?: paymentId
-
-                    pendingDepositCheckoutId = paymentId
-                    pendingDepositCheckoutAmount = amount
-                    recordLocalTransaction(
-                        id = paymentId,
-                        amount = amount,
-                        status = "PENDING",
-                        transactionType = "PAYMENT",
-                        referenceNo = referenceNo,
-                        description = "DRPAY wallet deposit"
-                    )
-                    pendingCheckoutId = paymentId
-                    uiState = MiniAppUiState.DepositCheckoutReady(
-                        url = checkoutUrl,
-                        paymentId = paymentId,
-                        referenceNo = referenceNo,
-                        amount = amount
-                    )
-                }
-                .onFailure { throw it }
+            uiState = MiniAppUiState.Idle
         }
     }
 
@@ -1028,12 +966,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                 if (status != null && status in listOf("SUCCESS", "EXECUTED", "PAID", "CAPTURED", "COMPLETED", "APPROVED", "AUTHORIZED")) {
                     threeDSecureTimeoutJob?.cancel()
                     pendingCheckoutId = null
-                    val depositCheckoutId = pendingDepositCheckoutId
-                    val depositCheckoutState = (uiState as? MiniAppUiState.DepositCheckoutReady)
-                        ?.takeIf { it.paymentId == checkoutId }
                     val paymentAmount = response?.amount?.takeIf { it > 0.0 }
-                        ?: pendingDepositCheckoutAmount
-                        ?: depositCheckoutState?.amount
                         ?: 0.0
 
                     recordLocalTransaction(
@@ -1049,29 +982,13 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                         "amount" to paymentAmount
                     ))
 
-                    if (depositCheckoutId == checkoutId) {
-                        pendingDepositCheckoutId = null
-                        pendingDepositCheckoutAmount = null
-                        uiState = MiniAppUiState.DepositCheckoutComplete(
-                            paymentId = checkoutId,
-                            amount = paymentAmount,
-                            success = true,
-                            status = status
-                        )
-                    } else {
-                        uiState = MiniAppUiState.Idle
-                    }
+                    uiState = MiniAppUiState.Idle
                     Log.i("MiniAppViewModel", "✅ Checkout $checkoutId completed successfully via status polling!")
                     break
                 } else if (status != null && status in listOf("FAILED", "DECLINED", "REJECTED", "ERROR", "EXPIRED", "CANCELLED", "CANCELED")) {
                     threeDSecureTimeoutJob?.cancel()
                     pendingCheckoutId = null
-                    val depositCheckoutId = pendingDepositCheckoutId
-                    val depositCheckoutState = (uiState as? MiniAppUiState.DepositCheckoutReady)
-                        ?.takeIf { it.paymentId == checkoutId }
                     val paymentAmount = response?.amount?.takeIf { it > 0.0 }
-                        ?: pendingDepositCheckoutAmount
-                        ?: depositCheckoutState?.amount
                         ?: 0.0
 
                     recordLocalTransaction(
@@ -1082,18 +999,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
 
                     val errorMsg = "Payment $checkoutId failed: $status"
                     bridge?.sendError(errorMsg)
-                    if (depositCheckoutId == checkoutId) {
-                        pendingDepositCheckoutId = null
-                        pendingDepositCheckoutAmount = null
-                        uiState = MiniAppUiState.DepositCheckoutComplete(
-                            paymentId = checkoutId,
-                            amount = paymentAmount,
-                            success = false,
-                            status = status
-                        )
-                    } else {
-                        uiState = MiniAppUiState.Error(errorMsg)
-                    }
+                    uiState = MiniAppUiState.Error(errorMsg)
                     Log.w("MiniAppViewModel", "❌ Checkout $checkoutId failed with status: $status")
                     break
                 }
@@ -1109,16 +1015,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     fun dismissConsent() {
         nfcTimerJob?.cancel()
         threeDSecureTimeoutJob?.cancel()
-        pendingDepositCheckoutId = null
-        pendingDepositCheckoutAmount = null
         pendingCheckoutId = null
         uiState = MiniAppUiState.Idle
-    }
-
-    fun closeDepositCheckout() {
-        if (uiState is MiniAppUiState.DepositCheckoutReady) {
-            uiState = MiniAppUiState.Idle
-        }
     }
 
     fun dismissError() {

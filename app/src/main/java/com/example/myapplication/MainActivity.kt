@@ -474,7 +474,6 @@ fun SwiftPayApp() {
                             val launchScanner = key.initialPath == "scan-qr-page"
                             MiniAppScreen(
                                 initialPath = key.initialPath,
-                                openDepositWizard = key.openDepositWizard,
                                 openQrScanner = launchScanner,
                                 onNavigateHome = { navController.pop() }
                             )

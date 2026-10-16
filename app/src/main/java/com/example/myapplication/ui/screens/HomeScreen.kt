@@ -288,11 +288,6 @@ fun WalletBalanceCard(
                         )
                     }
                 }
-                Text(
-                    "Balance from payment provider",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.88f)
-                )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     when {

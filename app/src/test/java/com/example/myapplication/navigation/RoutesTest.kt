@@ -43,9 +43,9 @@ class RoutesTest {
     }
 
     @Test
-    fun walletTopUpOpensMiniAppWithDepositWizardRequested() {
+    fun walletTopUpOpensTheTopUpMiniApp() {
         val navigationState = AppNavigationState(Route.Wallet)
-        val topUpRoute = Route.MiniApp(initialPath = "topup-page", openDepositWizard = true)
+        val topUpRoute = Route.MiniApp(initialPath = "topup-page")
 
         navigationState.navigate(topUpRoute)
 

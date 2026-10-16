@@ -220,15 +220,6 @@
             object-fit: contain;
         }
 
-        .balance-badge {
-            display: block;
-            margin: 0 0 6px;
-            color: rgba(255,255,255,0.76);
-            font-weight: 700;
-            font-size: 12px;
-            letter-spacing: 0.06em;
-        }
-
         .balance-amount {
             font-size: 36px;
             font-weight: 800;
@@ -928,6 +919,13 @@
             font-size: 12px;
             line-height: 1.45;
         }
+        .collect-transfer-instructions {
+            margin: 18px 0;
+            padding-inline-start: 22px;
+            color: var(--text-main);
+            line-height: 1.55;
+        }
+        .collect-transfer-instructions li + li { margin-top: 8px; }
         .collect-institution-list {
             display: flex;
             flex-direction: column;
@@ -1495,7 +1493,6 @@
                 <img src="drpay_mark.png" alt="">
                 <span>DRPAY</span>
             </h1>
-            <p class="balance-badge">Balance from payment provider</p>
             <div id="balance-display" class="balance-amount" aria-live="polite">&#8369; --.--</div>
         </header>
 
@@ -1646,6 +1643,31 @@
         </div>
     </section>
 
+    <section id="collect-transfer-account-page" class="page" role="dialog" aria-modal="true" aria-labelledby="collect-transfer-account-page-title" aria-hidden="true" inert>
+        <div class="navbar">
+            <button type="button" class="btn-back" onclick="openPage('collect-institution-page')" aria-label="Back to payment methods">&#8249;</button>
+            <h1 id="collect-transfer-account-page-title" class="navbar-title" tabindex="-1">Manual bank transfer</h1>
+        </div>
+        <div class="page-content collect-content">
+            <header class="collect-heading">
+                <p class="collect-eyebrow">TOP UP YOUR WALLET</p>
+                <h2>Transfer to your deposit account</h2>
+                <p>Send money from your bank app to the account below. Your wallet will update after the transfer is confirmed.</p>
+            </header>
+            <div class="api-card">
+                <div class="input-label">DEPOSIT ACCOUNT NUMBER</div>
+                <div id="collect-transfer-account-number" class="api-key-val" aria-live="polite">Loading account number…</div>
+            </div>
+            <ol class="collect-transfer-instructions">
+                <li>Open your bank app and start a bank transfer.</li>
+                <li>Enter the deposit account number shown above.</li>
+                <li>Send the amount you want to add to your wallet.</li>
+            </ol>
+            <p class="collect-note">Only send a transfer from an account you control. Keep your bank confirmation until the deposit appears in your wallet.</p>
+            <button type="button" class="btn-action" onclick="openPage('collect-institution-page')">Back to payment methods</button>
+        </div>
+    </section>
+
     <section id="collect-quote-confirm-page" class="page" role="dialog" aria-modal="true" aria-labelledby="collect-quote-confirm-title" aria-hidden="true" inert>
         <div class="navbar">
             <button type="button" class="btn-back" onclick="backToCollectAmount()" aria-label="Back to amount">&#8249;</button>
@@ -1701,20 +1723,6 @@
                 <input type="number" id="link-amount" class="modern-input" min="0.01" max="1000000" step="0.01" inputmode="decimal" placeholder="0.00">
             </div>
             <button type="button" class="btn-action" onclick="generateLink()">Create payment link</button>
-        </div>
-    </section>
-
-    <section id="deposit-page" class="page" role="dialog" aria-modal="true" aria-labelledby="deposit-page-title" aria-hidden="true" inert>
-        <div class="navbar">
-            <button type="button" class="btn-back" onclick="backToHome()" aria-label="Back to Home">&#8249;</button>
-            <h1 id="deposit-page-title" class="navbar-title" tabindex="-1">Deposit to wallet</h1>
-        </div>
-        <div class="page-content">
-            <div class="api-card">
-                <div class="section-title" style="margin-top:0">Bank transfer guide</div>
-                <p class="channel-desc">View your wallet's inbound account number and follow the deposit steps. This guide does not initiate or confirm a transfer.</p>
-                <button class="btn-action" onclick="startDepositWizard()">View deposit instructions</button>
-            </div>
         </div>
     </section>
 
@@ -2077,7 +2085,6 @@
             }
         });
         function getBalance() { post("get_balance"); }
-        function startDepositWizard() { post("start_deposit_wizard"); }
         function generateLink() { const a = parseFloat(document.getElementById('link-amount').value) || 0; const d = document.getElementById('link-desc').value || "Payment Link"; post("create_payment_link", { currency: "PHP", description: d, amount: a }); }
         function scanQrToSend() { post("scan_qr_to_send"); }
 
@@ -2119,6 +2126,10 @@
         }
         function handleAndroidBack() {
             const activePage = document.querySelector('.page.active');
+            if (activePage?.id === 'collect-transfer-account-page') {
+                openPage('collect-institution-page');
+                return true;
+            }
             if (activePage?.id === 'collect-quote-confirm-page') {
                 backToCollectAmount();
                 return true;
@@ -2244,7 +2255,12 @@
             openPage('collect-quote-confirm-page');
         }
         function showCollectTransferAccount() {
-            post('start_deposit_wizard', { showAccountNumberImmediately: true });
+            document.getElementById('collect-transfer-account-number').textContent = 'Loading account number…';
+            openPage('collect-transfer-account-page');
+            if (!post('get_wallet_deposit_account')) {
+                document.getElementById('collect-transfer-account-number').textContent =
+                    'Account details could not be loaded. Return to payment methods and try again.';
+            }
         }
 
         function sendDisbursement() {
@@ -2290,6 +2306,14 @@
 
         window.onSwiftPayResponse = window.onMayaResponse = function(json) {
             const res = JSON.parse(json);
+            if (res.action === 'get_wallet_deposit_account') {
+                const accountNumber = res.data?.accountNumber;
+                document.getElementById('collect-transfer-account-number').textContent =
+                    res.status === 'success' && typeof accountNumber === 'string' && accountNumber.trim()
+                        ? accountNumber
+                        : res.message || 'Account details could not be loaded. Return to payment methods and try again.';
+                return;
+            }
             if (res.action === 'quote_krw_php_qr') {
                 const amountButton = document.getElementById('topup-submit-btn');
                 amountButton.disabled = false;
