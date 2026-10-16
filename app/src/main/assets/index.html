@@ -121,6 +121,14 @@
             visibility: visible;
         }
 
+        body.embedded-flow #dashboard {
+            display: none;
+        }
+
+        body.embedded-flow .page {
+            transition: none;
+        }
+
         .navbar {
             padding: max(8px, env(safe-area-inset-top)) 16px 0;
             background: var(--bg-gray);
@@ -2097,10 +2105,13 @@
             pendingCollectPayment = null;
             pendingCollectQuote = null;
             selectedCollectPaymentApp = null;
-            if (!post('navigate_home')) {
-                const activePage = document.querySelector('.page.active');
-                if (activePage) closePage(activePage.id);
+            if (post('navigate_home')) return;
+            if (document.body.classList.contains('embedded-flow')) {
+                showNotice('Unable to return to the merchant home. Close and reopen this screen.', true);
+                return;
             }
+            const activePage = document.querySelector('.page.active');
+            if (activePage) closePage(activePage.id);
         }
         function backToCollectAmount() {
             pendingCollectQuote = null;
@@ -2475,6 +2486,12 @@
             document.getElementById(panelId).hidden = false;
         }
         const initialPage = decodeURIComponent(window.location.hash.slice(1));
+        if (
+            initialPage &&
+            document.getElementById(initialPage)?.classList.contains('page')
+        ) {
+            document.body.classList.add('embedded-flow');
+        }
         if (initialPage === 'topup-page') {
             selectedCollectPaymentApp = null;
             pendingCollectPayment = null;
