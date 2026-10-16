@@ -55,14 +55,17 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   const homepage = await fetch(`${baseUrl}/`);
   assert.equal(homepage.status, 200);
   const homepageHtml = await homepage.text();
-  assert.match(homepageHtml, /KRW in\./);
-  assert.match(homepageHtml, /PHP or USDT out\./);
+  assert.match(homepageHtml, /Exchange your Korean Won/);
+  assert.match(homepageHtml, /USDT or Philippine Peso instantly!/);
   assert.match(homepageHtml, /KRW → PHP/);
   assert.match(homepageHtml, /KRW → USDT/);
   assert.match(homepageHtml, /KRW → USDT \(TRC20\)/);
   assert.match(homepageHtml, /without a remittance transfer/);
   assert.match(homepageHtml, /Not available yet/);
   assert.match(homepageHtml, /Fast payout is the goal, but exchange is not available yet/);
+  assert.match(homepageHtml, /PHP payout · concept preview/);
+  assert.match(homepageHtml, /USDT on TRC20 · concept preview/);
+  assert.match(homepageHtml, /Concept previews, not screenshots of the current app/);
 
   const download = await fetch(`${baseUrl}/download`, { redirect: "manual" });
   assert.equal(download.status, 302);
