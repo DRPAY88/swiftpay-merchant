@@ -5,12 +5,14 @@ import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import com.example.myapplication.util.DebugLogger
 import java.util.*
 
 @Serializable
 data class SessionToken(
-    val email: String,
+    @SerialName("email")
+    val identity: String,
     val token: String,
     val deviceId: String,
     val deviceName: String,
@@ -40,17 +42,17 @@ class SessionManager(private val context: Context, private val settingsManager: 
     }
 
     /**
-     * Called after successful OTP verification on any device.
+     * Called after verified sign-in on any device.
      * Stores the session and marks device as active.
      */
-    suspend fun createSession(email: String, isPrimary: Boolean = false) {
+    suspend fun createSession(identity: String, isPrimary: Boolean = false) {
         try {
             val deviceId = getDeviceId()
             val deviceName = getDeviceName()
             val token = UUID.randomUUID().toString()
 
             val session = SessionToken(
-                email = email,
+                identity = identity,
                 token = token,
                 deviceId = deviceId,
                 deviceName = deviceName,
@@ -60,8 +62,8 @@ class SessionManager(private val context: Context, private val settingsManager: 
             // Store session locally for quick access
             settingsManager.saveSessionToken(session)
 
-            DebugLogger.logSessionCreated(email, deviceId, isPrimary)
-            Log.i(TAG, "Session created for $email on $deviceName (Primary: $isPrimary)")
+            DebugLogger.logSessionCreated(identity.logSafeIdentity(), deviceId, isPrimary)
+            Log.i(TAG, "Session created for ${identity.logSafeIdentity()} on $deviceName (Primary: $isPrimary)")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create session", e)
@@ -69,23 +71,23 @@ class SessionManager(private val context: Context, private val settingsManager: 
     }
 
     /**
-     * Check if there's an active session for the email.
+     * Check if there's an active session for the signed-in identity.
      * Called on app startup to auto-login.
      */
-    suspend fun getActiveSession(email: String): SessionToken? {
+    suspend fun getActiveSession(identity: String): SessionToken? {
         return try {
             val sessionToken = settingsManager.getSessionToken().first()
 
-            if (sessionToken != null && sessionToken.email == email) {
+            if (sessionToken != null && sessionToken.identity == identity) {
                 // Check if session has expired
                 if (System.currentTimeMillis() < sessionToken.expiresAt) {
-                    DebugLogger.logSessionRestored(email, sessionToken.deviceId)
-                    Log.i(TAG, "Active session found for $email")
+                    DebugLogger.logSessionRestored(identity.logSafeIdentity(), sessionToken.deviceId)
+                    Log.i(TAG, "Active session found for ${identity.logSafeIdentity()}")
                     return sessionToken
                 } else {
                     // Session expired
                     clearSession()
-                    Log.i(TAG, "Session expired for $email")
+                    Log.i(TAG, "Session expired for ${identity.logSafeIdentity()}")
                 }
             }
 
@@ -128,7 +130,7 @@ class SessionManager(private val context: Context, private val settingsManager: 
                     expiresAt = System.currentTimeMillis() + (30 * 24 * 60 * 60 * 1000) // Extend 30 days
                 )
                 settingsManager.saveSessionToken(refreshed)
-                Log.d(TAG, "Session expiration refreshed for ${current.email}")
+                Log.d(TAG, "Session expiration refreshed for ${current.identity.logSafeIdentity()}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to refresh session", e)
@@ -136,3 +138,5 @@ class SessionManager(private val context: Context, private val settingsManager: 
     }
 }
 
+private fun String.logSafeIdentity(): String =
+    substringAfter('@', missingDelimiterValue = "user").let { domain -> "***@$domain" }

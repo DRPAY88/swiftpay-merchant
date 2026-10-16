@@ -48,7 +48,8 @@ fun ProfileScreen() {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
     val themeMode by settingsManager.themeMode.collectAsState(initial = "SYSTEM")
-    val signedInEmail by settingsManager.loggedInEmail.collectAsState(initial = null)
+    val signedInIdentity by settingsManager.loggedInIdentity.collectAsState(initial = null)
+    val signedInRole by settingsManager.loggedInRole.collectAsState(initial = null)
     val merchantAlias by settingsManager.merchantAlias.collectAsState(initial = null)
     val hasDevicePin = remember(context) { DevicePinManager(context).hasPin() }
     var biometricEnabled by remember(context) {
@@ -182,14 +183,14 @@ fun ProfileScreen() {
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                             Text(
-                                signedInEmail?.takeIf { it.isNotBlank() } ?: "No signed-in account",
+                                signedInIdentity?.takeIf { it.isNotBlank() } ?: "No signed-in account",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = secondaryTextColor,
                                 maxLines = 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         }
-                        val isSignedIn = !signedInEmail.isNullOrBlank()
+                        val isSignedIn = !signedInIdentity.isNullOrBlank()
                         Surface(
                             shape = RoundedCornerShape(50),
                             color = if (isSignedIn) FastPayGreen.copy(alpha = 0.12f)
@@ -205,7 +206,12 @@ fun ProfileScreen() {
                         }
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 18.dp), color = borderColor)
-                    ProfileDetailRow("Merchant email", signedInEmail?.takeIf { it.isNotBlank() } ?: "Not signed in", textColor, secondaryTextColor)
+                    ProfileDetailRow(
+                        if (signedInRole == "customer") "Account email" else "Merchant email",
+                        signedInIdentity?.takeIf { it.isNotBlank() } ?: "Not signed in",
+                        textColor,
+                        secondaryTextColor
+                    )
                     Spacer(Modifier.height(14.dp))
                     ProfileDetailRow("Payment link alias", merchantAlias?.takeIf { it.isNotBlank() } ?: "Not set", textColor, secondaryTextColor)
                     Spacer(Modifier.height(14.dp))

@@ -214,6 +214,8 @@ data class SwiftPayQrRequest(
 @Serializable
 data class SwiftPayQrResponse(
     val id: String? = null,
+    @SerialName("referenceNo")
+    val referenceNo: String? = null,
     @SerialName("payment_id")
     val paymentId: String? = null,
     val checkoutUrl: String? = null,

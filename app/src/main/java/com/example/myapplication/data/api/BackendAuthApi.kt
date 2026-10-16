@@ -19,7 +19,8 @@ data class VerifyOtpBody(val email: String, val code: String)
 data class BackendSessionResponse(
     val accessToken: String,
     val expiresInSeconds: Long,
-    val email: String
+    val email: String? = null,
+    val role: String = "merchant"
 )
 
 @Serializable

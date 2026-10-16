@@ -150,6 +150,74 @@ test("admin store persists merchant status, internal adjustments, and atomic aud
   }
 });
 
+test("email customer wallet balances are isolated, credited once on settlement, and reserve transfers", async () => {
+  const database = newDb();
+  const { Pool } = database.adapters.createPg();
+  const store = createAdminStore("postgresql://test", new Pool());
+  try {
+    await store.initialize(["existing-merchant@example.com"], []);
+    const firstEmail = "first@example.com";
+    const secondEmail = "second@example.com";
+    assert.equal((await store.ensureEmailCustomer(firstEmail)).role, "customer");
+    assert.equal((await store.getUser(firstEmail)).role, "customer");
+    assert.equal((await store.getUser("existing-merchant@example.com")).role, "merchant");
+    assert.equal(await store.ensureEmailCustomer("existing-merchant@example.com"), null);
+    await store.ensureEmailCustomer(secondEmail);
+    await store.createCustomerWalletTopup(firstEmail, "WLT-FIRST", 100);
+    assert.equal(Number(await store.getCustomerWalletBalance(firstEmail)), 0);
+
+    const settledTopup = {
+      eventKey: "payment:wallet-topup-1",
+      eventType: "payment",
+      paymentId: "wallet-topup-1",
+      referenceNo: "WLT-FIRST",
+      status: "EXECUTED",
+      amount: 100,
+      currency: "PHP"
+    };
+    await store.recordWebhookEvent(settledTopup);
+    await store.recordWebhookEvent(settledTopup);
+    assert.equal(Number(await store.getCustomerWalletBalance(firstEmail)), 100);
+    assert.equal(Number(await store.getCustomerWalletBalance(secondEmail)), 0);
+    assert.equal((await store.listCustomerWalletTransactions(secondEmail, 10)).length, 0);
+
+    await store.createCustomerWalletTopup(firstEmail, "WLT-MISMATCH", 50);
+    await store.recordWebhookEvent({
+      eventKey: "payment:wallet-topup-mismatch",
+      eventType: "payment",
+      paymentId: "wallet-topup-mismatch",
+      referenceNo: "WLT-MISMATCH",
+      status: "EXECUTED",
+      amount: 51,
+      currency: "PHP"
+    });
+    assert.equal(Number(await store.getCustomerWalletBalance(firstEmail)), 100);
+    assert.equal((await store.getCustomerWalletTopup(firstEmail, "WLT-MISMATCH")).status, "ERROR");
+
+    await store.reserveCustomerWalletDisbursement(firstEmail, "PAYOUT-FIRST", 60);
+    assert.equal(Number(await store.getCustomerWalletBalance(firstEmail)), 40);
+    await assert.rejects(
+      store.reserveCustomerWalletDisbursement(firstEmail, "PAYOUT-TOO-LARGE", 41),
+      (error) => error.status === 409 && error.message === "insufficient_wallet_balance"
+    );
+
+    await store.recordWebhookEvent({
+      eventKey: "disbursement:PAYOUT-FIRST",
+      eventType: "disbursement",
+      referenceNo: "PAYOUT-FIRST",
+      status: "REJECTED"
+    });
+    assert.equal(Number(await store.getCustomerWalletBalance(firstEmail)), 100);
+    const activity = await store.listCustomerWalletTransactions(firstEmail, 10);
+    assert.equal(activity.length, 3);
+    assert.ok(activity.some(({ kind, status }) => kind === "disbursement" && status === "REJECTED"));
+    assert.ok(activity.some(({ kind, status }) => kind === "topup" && status === "EXECUTED"));
+    assert.ok(activity.some(({ kind, status }) => kind === "topup" && status === "ERROR"));
+  } finally {
+    await store.close();
+  }
+});
+
 test("onboarding is enabled for new merchant accounts and completion is account-wide", async () => {
   const database = newDb();
   const { Pool } = database.adapters.createPg();
@@ -192,6 +260,33 @@ test("onboarding is enabled for new merchant accounts and completion is account-
     assert.deepEqual(await store.getMerchantOnboardingState("new@example.com"), {
       required: false
     });
+  } finally {
+    await store.close();
+  }
+});
+
+test("legacy registration approval cannot change a personal-wallet account into a merchant", async () => {
+  const database = newDb();
+  const { Pool } = database.adapters.createPg();
+  const pool = new Pool();
+  const store = createAdminStore("postgresql://test", pool, {
+    kybEncryptionKey: Buffer.alloc(32, 1)
+  });
+  try {
+    await store.initialize([], ["support@swiftpay.site"]);
+    const email = "customer@example.com";
+    await store.createRegistrationDraft(email);
+    await pool.query(
+      "UPDATE merchant_registrations SET status = 'submitted' WHERE email = $1",
+      [email]
+    );
+    await pool.query("INSERT INTO customer_users (email) VALUES ($1)", [email]);
+
+    await assert.rejects(
+      store.reviewRegistration(email, "approved", "Legacy review", "support@swiftpay.site"),
+      (error) => error.status === 409
+    );
+    assert.equal((await store.getUser(email)).role, "customer");
   } finally {
     await store.close();
   }

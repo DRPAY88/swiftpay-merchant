@@ -8,31 +8,38 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.myapplication.data.api.InternalTransaction
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.security.MessageDigest
 
 private val Context.transactionDataStore: DataStore<Preferences> by preferencesDataStore(name = "transactions")
 
 class TransactionStore(private val context: Context) {
+    private val settingsManager = SettingsManager(context)
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
-    private val transactionListKey = stringPreferencesKey("transaction_list")
     private val listSerializer = ListSerializer(InternalTransaction.serializer())
 
-    val transactions: Flow<List<InternalTransaction>> = context.transactionDataStore.data.map { preferences ->
-        preferences[transactionListKey]?.let { stored ->
-            runCatching { json.decodeFromString(listSerializer, stored) }.getOrDefault(emptyList())
-        } ?: emptyList()
+    val transactions: Flow<List<InternalTransaction>> = combine(
+        settingsManager.loggedInIdentity,
+        context.transactionDataStore.data
+    ) { identity, preferences ->
+        val transactionListKey = transactionListKey(identity)
+            preferences[transactionListKey]?.let { stored ->
+                runCatching { json.decodeFromString(listSerializer, stored) }.getOrDefault(emptyList())
+            } ?: emptyList()
     }
 
     suspend fun record(transaction: InternalTransaction) {
+        val transactionListKey = transactionListKey(settingsManager.loggedInIdentity.first())
         context.transactionDataStore.edit { preferences ->
             val current = preferences[transactionListKey]?.let { stored ->
                 runCatching { json.decodeFromString(listSerializer, stored) }.getOrDefault(emptyList())
@@ -59,6 +66,13 @@ class TransactionStore(private val context: Context) {
 
     companion object {
         private const val MAX_TRANSACTIONS = 100
+
+        private fun transactionListKey(identity: String?) = stringPreferencesKey(
+            "transaction_list_${identity.orEmpty().lowercase(Locale.ROOT).toByteArray().let { bytes ->
+                MessageDigest.getInstance("SHA-256").digest(bytes)
+                    .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            }}"
+        )
 
         fun nowLabel(): String {
             return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())

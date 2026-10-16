@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createJwtVerifier, createOtpAuth, sendOtpEmail } from "../src/auth.js";
+import {
+  createJwtVerifier,
+  createOtpAuth,
+  sendOtpEmail
+} from "../src/auth.js";
 
 test("OTP is allowlisted, one-time, and issues a scoped verifiable session", async () => {
   let now = 1_000_000;
@@ -52,6 +56,41 @@ test("expired OTPs cannot create sessions", async () => {
   await auth.requestOtp("merchant@example.com");
   now += 10 * 60_000;
   assert.equal(await auth.verifyOtp("merchant@example.com", "123456"), null);
+});
+
+test("email OTP creates a personal customer only after a valid code is verified", async () => {
+  const config = {
+    allowedEmails: [],
+    sessionSigningKey: "session-signing-key-that-is-at-least-32-bytes"
+  };
+  const provisioned = [];
+  const sentCodes = [];
+  const auth = createOtpAuth(config, {
+    userStore: {
+      getUser: async () => null,
+      ensureEmailCustomer: async (email) => {
+        provisioned.push(email);
+        return { email, role: "customer", status: "active" };
+      }
+    },
+    codeGenerator: () => "123456",
+    sendEmail: async (email, code) => sentCodes.push({ email, code })
+  });
+
+  await auth.requestOtp("CUSTOMER@example.com");
+  assert.deepEqual(sentCodes, [{ email: "customer@example.com", code: "123456" }]);
+  assert.deepEqual(provisioned, []);
+
+  assert.equal(await auth.verifyOtp("customer@example.com", "000000"), null);
+  assert.deepEqual(provisioned, []);
+  const session = await auth.verifyOtp("customer@example.com", "123456");
+  assert.equal(session.email, "customer@example.com");
+  assert.equal(session.role, "customer");
+  assert.deepEqual(provisioned, ["customer@example.com"]);
+  const principal = await createJwtVerifier(config)(session.accessToken);
+  assert.equal(principal.sub, "customer@example.com");
+  assert.equal(principal.role, "customer");
+  assert.match(principal.scope, /swiftpay:disbursements:write/);
 });
 
 test("OTP sessions receive roles from the active persistent merchant record", async () => {

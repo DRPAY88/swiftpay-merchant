@@ -111,8 +111,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
     var resendTimer by mutableStateOf(0)
-    var registrationAvailable by mutableStateOf(false)
-        private set
     var registrationConsent by mutableStateOf(false)
     var businessName by mutableStateOf("")
     var businessRegistrationNumber by mutableStateOf("")
@@ -130,16 +128,15 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            authService.getRegistrationConfig().onSuccess { settings ->
-                registrationAvailable = settings.enabled && settings.secureStorageAvailable
-            }
-        }
-        viewModelScope.launch {
             val token = settingsManager.backendAccessToken.first()
             if (!token.isNullOrBlank() && !settingsManager.hasDevicePin()) {
                 onboardingAccessToken = token
-                state = LoginState.OnboardingCheck
-                checkOnboardingState()
+                state = if (settingsManager.loggedInRole.first() == "customer") {
+                    LoginState.MpinSetup
+                } else {
+                    LoginState.OnboardingCheck
+                }
+                if (state == LoginState.OnboardingCheck) checkOnboardingState()
             }
         }
     }
@@ -153,12 +150,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onRegisterClick() {
-        if (!registrationAvailable) {
-            errorMessage = "Merchant registration is temporarily unavailable. Please contact support."
-            return
-        }
-        errorMessage = null
-        state = LoginState.RegistrationEmail
+        onLoginClick()
     }
 
     fun requestRegistrationOtp() {
@@ -341,7 +333,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         if (isLoading) return
         val email = username.trim().lowercase()
         if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            errorMessage = "Enter a valid merchant email address"
+            errorMessage = "Enter a valid email address."
             return
         }
 
@@ -352,7 +344,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 authService.requestOtp(email).onSuccess {
                     state = LoginState.Otp(email)
                     startResendTimer()
-                    Toast.makeText(getApplication(), "OTP code sent to email", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(getApplication(), "Email verification code sent", Toast.LENGTH_SHORT).show()
                 }.onFailure { error ->
                     errorMessage = error.message ?: "Unable to send sign-in code"
                 }
@@ -368,7 +360,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onVerifyOtpClick(onSuccess: () -> Unit) {
         if (isLoading) return
-        val currentOtp = (state as? LoginState.Otp)?.email ?: username
+        val currentEmail = (state as? LoginState.Otp)?.email ?: username.trim().lowercase()
         if (otpCode.length < 6) {
             errorMessage = "Please enter a valid 6-digit code"
             return
@@ -378,11 +370,17 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
             isLoading = true
             errorMessage = null
             try {
-                authService.verifyOtp(currentOtp, otpCode).onSuccess { session ->
+                authService.verifyOtp(currentEmail, otpCode).onSuccess { session ->
+                    val identity = session.email
+                        ?: throw IllegalStateException("Sign-in response did not contain a verified email")
                     settingsManager.saveBackendAccessToken(session.accessToken)
-                    settingsManager.setLoggedIn(session.email, true)
+                    settingsManager.setLoggedIn(identity, true, session.role)
                     onboardingAccessToken = session.accessToken
-                    checkOnboardingState()
+                    if (session.role == "customer") {
+                        state = LoginState.MpinSetup
+                    } else {
+                        checkOnboardingState()
+                    }
                 }.onFailure { error ->
                     errorMessage = error.message ?: "Invalid or expired verification code"
                 }
@@ -506,13 +504,13 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     fun onResendOtpClick() {
         if (isLoading || resendTimer > 0) return
 
-        val email = (state as? LoginState.Otp)?.email ?: username
+        val email = (state as? LoginState.Otp)?.email ?: username.trim().lowercase()
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
             try {
                 authService.requestOtp(email).onSuccess {
-                    Toast.makeText(getApplication(), "New sign-in code sent", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(getApplication(), "New verification code sent by email", Toast.LENGTH_SHORT).show()
                     startResendTimer()
                 }.onFailure { error ->
                     errorMessage = error.message ?: "Unable to resend sign-in code"
@@ -552,15 +550,15 @@ fun LoginScreen(
                 username = viewModel.username,
                 isLoading = viewModel.isLoading,
                 errorMessage = viewModel.errorMessage,
-                registrationAvailable = viewModel.registrationAvailable,
                 onUsernameChange = { viewModel.username = it },
                 onLoginClick = { viewModel.onLoginClick() },
-                onRegisterClick = viewModel::onRegisterClick
+                onCreateAccountClick = viewModel::onRegisterClick
             )
             LoginState.WaitingApproval -> WaitingApprovalContent(
                 onCancel = { viewModel.navigateToLanding() }
             )
             is LoginState.Otp -> OtpContent(
+                email = currentState.email,
                 otpCode = viewModel.otpCode,
                 isLoading = viewModel.isLoading,
                 errorMessage = viewModel.errorMessage,
@@ -995,7 +993,7 @@ fun MpinEnrollmentContent(
 
 @Composable
 fun DevicePinScreen(
-    email: String?,
+    identity: String?,
     biometricUnlockEnabled: Boolean,
     onUnlocked: () -> Unit,
     onUseAnotherAccount: () -> Unit
@@ -1039,7 +1037,7 @@ fun DevicePinScreen(
         }
         Spacer(modifier = Modifier.height(20.dp))
         Text("Welcome back", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textColor)
-        Text(email.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f))
+        Text(identity.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f))
         Spacer(modifier = Modifier.height(28.dp))
         if (biometricUnlockEnabled && authenticator?.isAvailable() == true) {
             TextButton(
@@ -1116,10 +1114,9 @@ fun LandingContent(
     username: String,
     isLoading: Boolean,
     errorMessage: String?,
-    registrationAvailable: Boolean,
     onUsernameChange: (String) -> Unit,
     onLoginClick: () -> Unit,
-    onRegisterClick: () -> Unit
+    onCreateAccountClick: () -> Unit
 ) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
@@ -1204,14 +1201,14 @@ fun LandingContent(
                 horizontalAlignment = Alignment.Start
             ) {
                 Text(
-                    "Your business,\nyour payments.",
+                    "Your KRW.\nYour choice.",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     lineHeight = 38.sp
                 )
                 Text(
-                    "Sign in to manage your merchant workspace.",
+                    "Create an account or sign in to manage your personal DRPAY wallet.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color.White.copy(alpha = 0.82f),
                     modifier = Modifier.padding(top = 10.dp)
@@ -1233,13 +1230,13 @@ fun LandingContent(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "Welcome back",
+                            "Get started",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = colorScheme.onSurface
                         )
                         Text(
-                            "Use the email registered to your merchant account.",
+                            "Use your email to continue or create an account.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = colorScheme.onSurfaceVariant
                         )
@@ -1248,10 +1245,10 @@ fun LandingContent(
                         value = username,
                         onValueChange = onUsernameChange,
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Merchant email") },
+                        label = { Text("Email address") },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Rounded.AlternateEmail,
+                                imageVector = Icons.Rounded.Email,
                                 contentDescription = null
                             )
                         },
@@ -1266,7 +1263,7 @@ fun LandingContent(
                         shape = RoundedCornerShape(16.dp)
                     )
                     Text(
-                        "We’ll send a one-time verification code to this email. Entering an email does not create an account.",
+                        "We’ll email you a one-time code. New accounts activate as soon as you verify your email—no KYB or document uploads.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colorScheme.onSurfaceVariant
                     )
@@ -1311,7 +1308,7 @@ fun LandingContent(
                             )
                         } else {
                             Text(
-                                "Continue securely",
+                                "Continue with email",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium
                             )
@@ -1319,19 +1316,17 @@ fun LandingContent(
                             Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null)
                         }
                     }
-                    if (registrationAvailable) {
-                        OutlinedButton(
-                            onClick = onRegisterClick,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp),
-                            enabled = !isLoading,
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Icon(Icons.Rounded.Business, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Apply for a merchant account", fontWeight = FontWeight.SemiBold)
-                        }
+                    OutlinedButton(
+                        onClick = onCreateAccountClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        enabled = !isLoading,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(Icons.Rounded.PersonAdd, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Create a new account", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -1351,11 +1346,7 @@ fun LandingContent(
                 )
                 Spacer(Modifier.width(7.dp))
                 Text(
-                    if (registrationAvailable) {
-                        "Authorized sign-in · New businesses can apply"
-                    } else {
-                        "Merchant access is limited to authorized accounts"
-                    },
+                    "Email verification · Automatic account activation",
                     style = MaterialTheme.typography.labelSmall,
                     color = colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -1955,6 +1946,7 @@ fun CustomTextField(
 
 @Composable
 fun OtpContent(
+    email: String? = null,
     otpCode: String,
     isLoading: Boolean,
     errorMessage: String?,
@@ -2009,7 +2001,7 @@ fun OtpContent(
             text = if (registrationFlow) {
                 "Enter the 6-digit code to continue your merchant application. This does not grant account access."
             } else {
-                "We sent a 6-digit verification code to your email.\nPlease check your inbox."
+                "We sent a 6-digit code to ${email ?: "your email address"}. Verifying signs you in or activates your new account."
             },
             color = secondaryTextColor,
             modifier = Modifier.padding(top = 12.dp),

@@ -174,9 +174,12 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                         walletBalance = details.balance
                         walletAdjustedBalance = details.adjustedBalance
                         walletBalanceError = null
-                        details.accountNumber?.trim()?.takeIf { it.isNotEmpty() }?.let { accountNumber ->
-                            depositAccountNumber = accountNumber
-                            viewModelScope.launch {
+                        val accountNumber = details.accountNumber?.trim()?.takeIf { it.isNotEmpty() }
+                        depositAccountNumber = accountNumber
+                        viewModelScope.launch {
+                            if (accountNumber == null) {
+                                settingsManager.clearDepositAccountNumber()
+                            } else {
                                 settingsManager.saveDepositAccountNumber(accountNumber)
                             }
                         }

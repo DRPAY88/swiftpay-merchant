@@ -1,6 +1,8 @@
 package com.example.myapplication.ui.screens
 
 import android.app.Application
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.*
@@ -10,10 +12,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,7 +42,9 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -47,13 +53,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.api.InternalTransaction
+import com.example.myapplication.data.api.SwiftPayQrResponse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Locale
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -96,7 +105,18 @@ fun WalletScreen(
     var isHistoryLoading by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("All") }
+    var showTopupDialog by remember { mutableStateOf(false) }
+    var topupAmount by remember { mutableStateOf("100") }
+    var topupQr by remember { mutableStateOf<SwiftPayQrResponse?>(null) }
+    var topupStatus by remember { mutableStateOf<String?>(null) }
+    var topupError by remember { mutableStateOf<String?>(null) }
+    var isCreatingTopup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val appContext = viewModel.getApplication<Application>()
+    val settings = remember(appContext) { SettingsManager(appContext) }
+    val signedInIdentity by settings.loggedInIdentity.collectAsState(initial = null)
+    val signedInRole by settings.loggedInRole.collectAsState(initial = null)
+    val isCustomerWallet = signedInRole == "customer"
 
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
 
@@ -126,9 +146,7 @@ fun WalletScreen(
         }
     }
     LaunchedEffect(Unit) {
-        val context = viewModel.getApplication<Application>()
-        val settings = SettingsManager(context)
-        val transactionStore = TransactionStore(context)
+        val transactionStore = TransactionStore(appContext)
         val service = settings.createSwiftPayService()
 
         launch {
@@ -196,9 +214,7 @@ fun WalletScreen(
                                 isHistoryLoading = true
                                 try {
                                     viewModel.refreshBalance()
-                                    val context = viewModel.getApplication<Application>()
-                                    val settings = SettingsManager(context)
-                                    val transactionStore = TransactionStore(context)
+                                    val transactionStore = TransactionStore(appContext)
                                     val service = settings.createSwiftPayService()
                                     localTransactions = transactionStore.transactions.first()
                                     val history = service.getWalletTransactionHistory()
@@ -220,8 +236,6 @@ fun WalletScreen(
             )
         }
     ) { innerPadding ->
-        val appContext = viewModel.getApplication<Application>()
-        val settings = remember { SettingsManager(appContext) }
         val cachedAccountNumber by settings.depositAccountNumber.collectAsState(initial = null)
         val depositAccountNumber = viewModel.depositAccountNumber ?: cachedAccountNumber
 
@@ -238,6 +252,14 @@ fun WalletScreen(
                     selectedFilter = selectedFilter,
                     transactionHistoryError = transactionHistoryError,
                     isHistoryLoading = isHistoryLoading,
+                    showTopupAction = isCustomerWallet,
+                    onTopupClick = {
+                        topupError = null
+                        topupQr = null
+                        topupStatus = null
+                        topupAmount = "100"
+                        showTopupDialog = true
+                    },
                     onFilterSelected = { selectedFilter = it },
                     onTransactionClick = { tx ->
                         scope.launch {
@@ -264,6 +286,145 @@ fun WalletScreen(
             }
         )
     }
+
+    if (showTopupDialog) {
+        WalletTopupDialog(
+            amount = topupAmount,
+            topup = topupQr,
+            status = topupStatus,
+            error = topupError,
+            isLoading = isCreatingTopup,
+            onAmountChange = { topupAmount = it },
+            onCreate = {
+                if (!isCreatingTopup) {
+                    val amount = topupAmount.toDoubleOrNull()
+                    if (amount == null || !amount.isFinite() || amount !in 1.0..100_000.0) {
+                        topupError = "Enter an amount from PHP 1 to PHP 100,000."
+                    } else {
+                        scope.launch {
+                            isCreatingTopup = true
+                            topupError = null
+                            settings.createSwiftPayService().createWalletTopupQr(amount)
+                                .onSuccess { response ->
+                                    topupQr = response
+                                    topupStatus = response.status ?: "PENDING"
+                                }
+                                .onFailure { error ->
+                                    topupError = error.message ?: "Could not create a wallet top-up QR."
+                                    Log.e("WalletScreen", "Wallet top-up QR creation failed", error)
+                                }
+                            isCreatingTopup = false
+                        }
+                    }
+                }
+            },
+            onDismiss = {
+                showTopupDialog = false
+                topupQr = null
+                topupStatus = null
+                topupError = null
+            }
+        )
+    }
+
+    LaunchedEffect(topupQr?.referenceNo) {
+        val referenceNo = topupQr?.referenceNo ?: return@LaunchedEffect
+        val service = settings.createSwiftPayService()
+        repeat(60) {
+            delay(5_000)
+            val result = service.getWalletTopupStatus(referenceNo)
+            val status = result.getOrElse { error ->
+                topupError = error.message ?: "Could not check top-up status. Refresh the wallet to try again."
+                Log.e("WalletScreen", "Wallet top-up status check failed", error)
+                return@LaunchedEffect
+            }
+            topupStatus = status
+            if (status in setOf("EXECUTED", "REJECTED", "CANCELED", "EXPIRED", "ERROR")) {
+                if (status == "EXECUTED") {
+                    viewModel.refreshBalance()
+                    val history = service.getWalletTransactionHistory()
+                    remoteTransactions = history.transactions
+                    transactionHistoryError = history.errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
+                }
+                return@LaunchedEffect
+            }
+        }
+    }
+}
+
+@Composable
+private fun WalletTopupDialog(
+    amount: String,
+    topup: SwiftPayQrResponse?,
+    status: String?,
+    error: String?,
+    isLoading: Boolean,
+    onAmountChange: (String) -> Unit,
+    onCreate: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val qrBitmap = remember(topup?.qrImageBase64) {
+        topup?.qrImageBase64?.let { encoded ->
+            try {
+                val bytes = Base64.decode(encoded, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (topup == null) "Add money" else "Scan to top up") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (topup == null) {
+                    Text("Create a one-time QR Ph payment. Your personal PHP wallet is credited after SwiftPay verifies settlement.")
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = onAmountChange,
+                        label = { Text("Amount (PHP)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
+                } else {
+                    Text("Scan this QR Ph code to pay PHP ${"%.2f".format(Locale.US, topup.amount ?: 0.0)}.")
+                    if (qrBitmap != null) {
+                        Image(
+                            bitmap = qrBitmap,
+                            contentDescription = "QR Ph code to top up your wallet",
+                            modifier = Modifier.fillMaxWidth().height(220.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    } else {
+                        Text("The QR image could not be displayed. Close this dialog and create a new QR.")
+                    }
+                    Text("Wallet credit is added only after the signed SwiftPay settlement webhook confirms payment.")
+                    Text("Status: ${(status ?: "PENDING").lowercase().replaceFirstChar(Char::uppercase)}")
+                }
+                if (!error.isNullOrBlank()) {
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            if (topup == null) {
+                Button(onClick = onCreate, enabled = !isLoading) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Create QR")
+                    }
+                }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
+        dismissButton = {
+            if (topup == null) TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
@@ -275,6 +436,8 @@ fun WalletListContent(
     selectedFilter: String,
     transactionHistoryError: String? = null,
     isHistoryLoading: Boolean = false,
+    showTopupAction: Boolean = false,
+    onTopupClick: () -> Unit = {},
     onFilterSelected: (String) -> Unit,
     onTransactionClick: (InternalTransaction) -> Unit,
     viewModel: MiniAppViewModel? = null
@@ -324,6 +487,16 @@ fun WalletListContent(
             )
         }
         item(key = "wallet-actions") {
+            if (showTopupAction) {
+                FilledTonalButton(
+                    onClick = onTopupClick,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add money")
+                }
+            }
             QuickActionsRow()
         }
         item(key = "transaction-heading") {

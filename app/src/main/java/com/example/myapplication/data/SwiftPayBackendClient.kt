@@ -10,6 +10,8 @@ import com.example.myapplication.data.api.BackendOrderRequest
 import com.example.myapplication.data.api.BackendPushTokenRequest
 import com.example.myapplication.data.api.BackendPaymentLinkRequest
 import com.example.myapplication.data.api.BackendQrPaymentRequest
+import com.example.myapplication.data.api.BackendWalletTopupRequest
+import com.example.myapplication.data.api.BackendWalletActivityTransaction
 import com.example.myapplication.data.api.BackendKrwPhpQrQuoteRequest
 import com.example.myapplication.data.api.BackendKrwPhpQrQuoteResponse
 import com.example.myapplication.data.api.BackendFxPhpQrQuoteRequest
@@ -398,6 +400,7 @@ class SwiftPayService(
             currency = body.currency,
             qrCodeBody = qrCodeValue,
             qrImageBase64 = qrImageBase64,
+            referenceNo = body.referenceNo,
             bankAccountNumber = body.bankAccountNumber,
             instapayBankCode = body.instapayBankCode,
             customerAmountKrw = body.customerAmountKrw,
@@ -408,6 +411,47 @@ class SwiftPayService(
             rateUpdatedAt = body.rateUpdatedAt,
             settlementCurrency = body.settlementCurrency
         )
+    }
+
+    suspend fun createWalletTopupQr(amount: Double): Result<SwiftPayQrResponse> {
+        if (!hasApiKey) return missingSession()
+        if (!amount.isFinite() || amount !in 1.0..100_000.0) {
+            return Result.failure(IllegalArgumentException("Enter a top-up amount between PHP 1 and PHP 100,000."))
+        }
+        return try {
+            val response = api.createWalletTopupQr(BackendWalletTopupRequest(amount))
+            if (!response.isSuccessful) return failure(response)
+            val body = response.body()
+                ?: return Result.failure(IllegalStateException("Empty wallet top-up QR response"))
+            if (
+                body.currency != "PHP" ||
+                body.referenceNo.isBlank() ||
+                kotlin.math.round(body.amount * 100) != kotlin.math.round(amount * 100)
+            ) {
+                return Result.failure(IllegalStateException("Backend returned a top-up QR that does not match the requested PHP amount"))
+            }
+            Result.success(toSwiftPayQrResponse(body))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun getWalletTopupStatus(referenceNo: String): Result<String> {
+        if (!hasApiKey) return missingSession()
+        if (referenceNo.isBlank()) return Result.failure(IllegalArgumentException("A wallet top-up reference is required."))
+        return try {
+            val response = api.getWalletTopupStatus(referenceNo)
+            if (!response.isSuccessful) return failure(response)
+            val body = response.body()
+                ?: return Result.failure(IllegalStateException("Empty wallet top-up status response"))
+            Result.success(body.status)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
     }
 
     suspend fun getWalletBalanceDetails(): Result<BackendWalletBalanceResponse> {
@@ -580,16 +624,26 @@ class SwiftPayService(
     }
 
     suspend fun getWalletTransactionHistory(): WalletTransactionHistory {
-        val disbursements = getInternalTransactions()
-        val deposits = getManualBankDepositTransactions()
-        val payments = getPaymentTransactions()
-        val results = listOf(disbursements, deposits, payments)
-
+        val activity = getAllOffsetPages { limit, offset ->
+            api.getWalletActivity(limit, offset)
+        }.map { entries ->
+            entries.map { it.toInternalTransaction() }
+        }
         return WalletTransactionHistory(
-            transactions = results.flatMap { it.getOrNull().orEmpty() },
-            errors = results.mapNotNull { it.exceptionOrNull()?.message }
+            transactions = activity.getOrNull().orEmpty(),
+            errors = listOfNotNull(activity.exceptionOrNull()?.message)
         )
     }
+
+    private fun BackendWalletActivityTransaction.toInternalTransaction() = InternalTransaction(
+        transactionId = id,
+        amount = amount,
+        status = status.toTransactionStatus(),
+        date = createdAt,
+        transactionType = transactionType,
+        referenceNo = referenceNo,
+        description = description
+    )
 
     suspend fun getTransferInstitutions(): Result<List<BackendTransferInstitution>> {
         if (!hasApiKey) return missingSession()

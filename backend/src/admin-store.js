@@ -65,6 +65,32 @@ export function createAdminStore(
         ADD COLUMN IF NOT EXISTS encrypted_review_note TEXT NOT NULL DEFAULT '';
       ALTER TABLE merchant_registration_documents
         ADD COLUMN IF NOT EXISTS generation INTEGER NOT NULL DEFAULT 1;
+      CREATE TABLE IF NOT EXISTS customer_users (
+        email TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS customer_wallet_transactions (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL REFERENCES customer_users(email),
+        reference_no TEXT NOT NULL,
+        payment_id TEXT,
+        kind TEXT NOT NULL CHECK (kind IN ('topup', 'disbursement')),
+        direction TEXT NOT NULL CHECK (direction IN ('credit', 'debit')),
+        amount NUMERIC(14, 2) NOT NULL CHECK (amount > 0),
+        currency TEXT NOT NULL DEFAULT 'PHP' CHECK (currency = 'PHP'),
+        status TEXT NOT NULL CHECK (status IN ('PENDING', 'EXECUTED', 'REJECTED', 'CANCELED', 'EXPIRED', 'ERROR')),
+        details JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (email, reference_no)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_wallet_payment_id
+        ON customer_wallet_transactions (payment_id)
+        WHERE payment_id IS NOT NULL AND kind = 'topup';
+      CREATE INDEX IF NOT EXISTS customer_wallet_transactions_history
+        ON customer_wallet_transactions (email, created_at DESC);
       UPDATE merchant_users
       SET onboarding_eligible = TRUE
       WHERE onboarding_eligible = FALSE
@@ -110,6 +136,12 @@ export function createAdminStore(
       CREATE TABLE IF NOT EXISTS merchant_push_tokens (
         token TEXT PRIMARY KEY,
         email TEXT NOT NULL REFERENCES merchant_users(email) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS customer_push_tokens (
+        token TEXT PRIMARY KEY,
+        email TEXT NOT NULL REFERENCES customer_users(email) ON DELETE CASCADE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
@@ -169,7 +201,197 @@ export function createAdminStore(
       "SELECT email, role, status, created_by, created_at, updated_at FROM merchant_users WHERE email = $1",
       [email.toLowerCase()]
     );
+    if (result.rows[0]) return result.rows[0];
+    const customer = await pool.query(
+      `SELECT email, 'customer' AS role, status, 'email_verification' AS created_by,
+              created_at, updated_at
+       FROM customer_users WHERE email = $1`,
+      [email.toLowerCase()]
+    );
+    return customer.rows[0] || null;
+  }
+
+  async function ensureEmailCustomer(email) {
+    const result = await pool.query(
+      `INSERT INTO customer_users (email)
+       SELECT $1
+       WHERE NOT EXISTS (SELECT 1 FROM merchant_users WHERE email = $1)
+         AND NOT EXISTS (SELECT 1 FROM merchant_registrations WHERE email = $1)
+       ON CONFLICT (email) DO UPDATE SET updated_at = customer_users.updated_at
+       RETURNING email, 'customer' AS role, status, created_at, updated_at`,
+      [email.toLowerCase()]
+    );
     return result.rows[0] || null;
+  }
+
+  async function getCustomerWalletBalance(email) {
+    const result = await pool.query(
+      `SELECT COALESCE(SUM(
+         CASE
+           WHEN direction = 'credit' AND status = 'EXECUTED' THEN amount
+           WHEN direction = 'debit' AND status IN ('PENDING', 'EXECUTED') THEN -amount
+           ELSE 0
+         END
+       ), 0)::text AS balance
+       FROM customer_wallet_transactions
+       WHERE email = $1`,
+      [email]
+    );
+    return result.rows[0]?.balance ?? "0";
+  }
+
+  async function listCustomerWalletTransactions(email, limit, offset = 0) {
+    const result = await pool.query(
+      `SELECT COALESCE(payment_id, id) AS id, reference_no, payment_id, amount, currency, status, direction, kind, created_at
+       FROM customer_wallet_transactions
+       WHERE email = $1
+       ORDER BY created_at DESC, id DESC
+       LIMIT $2 OFFSET $3`,
+      [email, limit, offset]
+    );
+    return result.rows;
+  }
+
+  async function listCustomerWalletDisbursements(email, limit, offset = 0) {
+    const result = await pool.query(
+      `SELECT id, reference_no, amount, currency, status, created_at
+       FROM customer_wallet_transactions
+       WHERE email = $1 AND kind = 'disbursement'
+       ORDER BY created_at DESC, id DESC
+       LIMIT $2 OFFSET $3`,
+      [email, limit, offset]
+    );
+    return result.rows;
+  }
+
+  async function getCustomerWalletTopup(email, referenceNo) {
+    const result = await pool.query(
+      `SELECT amount, currency, status
+       FROM customer_wallet_transactions
+       WHERE email = $1 AND reference_no = $2 AND kind = 'topup'`,
+      [email, referenceNo]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function getCustomerWalletPaymentStatus(email, paymentId) {
+    const result = await pool.query(
+      `SELECT status
+       FROM customer_wallet_transactions
+       WHERE email = $1 AND (payment_id = $2 OR id = $2)`,
+      [email, paymentId]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function createCustomerWalletTopup(email, referenceNo, amount) {
+    const result = await pool.query(
+      `INSERT INTO customer_wallet_transactions
+         (id, email, reference_no, kind, direction, amount, status)
+       VALUES ($1, $2, $3, 'topup', 'credit', $4, 'PENDING')
+       RETURNING id`,
+      [`topup:${referenceNo}`, email, referenceNo, amount]
+    );
+    return result.rows[0];
+  }
+
+  async function recordCustomerWalletTopupOrder(email, referenceNo, paymentId) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `SELECT payment_id FROM customer_wallet_transactions
+         WHERE email = $1 AND reference_no = $2 AND kind = 'topup'
+         FOR UPDATE`,
+        [email, referenceNo]
+      );
+      if (!result.rowCount) throw new AdminStoreError(404, "wallet_topup_not_found");
+      if (result.rows[0].payment_id && result.rows[0].payment_id !== paymentId) {
+        throw new AdminStoreError(409, "wallet_topup_payment_mismatch");
+      }
+      await client.query(
+        `UPDATE customer_wallet_transactions
+         SET payment_id = COALESCE(payment_id, $3), updated_at = NOW()
+         WHERE email = $1 AND reference_no = $2 AND kind = 'topup'`,
+        [email, referenceNo, paymentId]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function finishCustomerWalletTopup(email, referenceNo, status, details = {}) {
+    await pool.query(
+      `UPDATE customer_wallet_transactions
+       SET status = CASE
+             WHEN status IN ('EXECUTED', 'REJECTED', 'CANCELED', 'EXPIRED', 'ERROR') THEN status
+             ELSE $3
+           END,
+           details = $4::jsonb,
+           updated_at = NOW()
+       WHERE email = $1 AND reference_no = $2 AND kind = 'topup'`,
+      [email, referenceNo, status, JSON.stringify(details)]
+    );
+  }
+
+  async function reserveCustomerWalletDisbursement(email, referenceNo, amount) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const user = await client.query(
+        "SELECT status FROM customer_users WHERE email = $1 FOR UPDATE",
+        [email]
+      );
+      if (!user.rowCount || user.rows[0].status !== "active") {
+        throw new AdminStoreError(401, "unauthorized");
+      }
+      const balance = await client.query(
+        `SELECT COALESCE(SUM(
+           CASE
+             WHEN direction = 'credit' AND status = 'EXECUTED' THEN amount
+             WHEN direction = 'debit' AND status IN ('PENDING', 'EXECUTED') THEN -amount
+             ELSE 0
+           END
+         ), 0) >= $2::numeric AS sufficient
+         FROM customer_wallet_transactions
+         WHERE email = $1`,
+        [email, amount]
+      );
+      if (!balance.rows[0]?.sufficient) {
+        throw new AdminStoreError(409, "insufficient_wallet_balance");
+      }
+      await client.query(
+        `INSERT INTO customer_wallet_transactions
+           (id, email, reference_no, kind, direction, amount, status)
+         VALUES ($1, $2, $3, 'disbursement', 'debit', $4, 'PENDING')`,
+        [`disbursement:${email}:${referenceNo}`, email, referenceNo, amount]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function finishCustomerWalletDisbursement(email, referenceNo, status, details = {}) {
+    await pool.query(
+      `UPDATE customer_wallet_transactions
+       SET status = CASE
+             WHEN status = 'EXECUTED' THEN status
+             WHEN $3 = 'REJECTED' THEN 'REJECTED'
+             ELSE status
+           END,
+           details = $4::jsonb,
+           updated_at = NOW()
+       WHERE email = $1 AND reference_no = $2 AND kind = 'disbursement'`,
+      [email, referenceNo, status, JSON.stringify(details)]
+    );
   }
 
   async function listUsers() {
@@ -536,6 +758,13 @@ export function createAdminStore(
         throw new AdminStoreError(409, "Only submitted applications can be reviewed");
       }
       if (status === "approved") {
+        const customer = await client.query(
+          "SELECT email FROM customer_users WHERE email = $1 FOR UPDATE",
+          [normalizedEmail]
+        );
+        if (customer.rowCount) {
+          throw new AdminStoreError(409, "A personal-wallet account cannot be approved as a merchant");
+        }
         await client.query(
           `INSERT INTO merchant_users (email, role, status, created_by, onboarding_eligible)
            VALUES ($1, 'merchant', 'active', $2, TRUE)
@@ -680,15 +909,19 @@ export function createAdminStore(
       );
       const previousStatus = inserted.rows.length > 0 ? null : existing.rows[0].status;
       const details = { ...existing.rows[0].details, ...event.details };
-      await client.query(
+      const updatedEvent = await client.query(
         `UPDATE swiftpay_webhook_events
          SET payment_id = COALESCE($2, payment_id),
-           status = $3,
+           status = CASE
+             WHEN status IN ('EXECUTED', 'REJECTED', 'CANCELED', 'EXPIRED', 'ERROR') THEN status
+             ELSE $3
+           END,
            details = $4,
            amount = COALESCE($5, amount),
            currency = COALESCE($6, currency),
            received_at = NOW()
-         WHERE event_key = $1`,
+         WHERE event_key = $1
+         RETURNING status`,
         [
           event.eventKey,
           event.paymentId || null,
@@ -698,12 +931,68 @@ export function createAdminStore(
           event.currency ?? event.details?.currency ?? null
         ]
       );
+      const effectiveStatus = updatedEvent.rows[0].status;
       const amount = event.amount ?? event.details?.amount ?? details.amount;
       const currency = event.currency ?? event.details?.currency ?? details.currency;
+      if (event.eventType === "payment") {
+        const topup = await client.query(
+          `SELECT id, email, payment_id, amount, status
+           FROM customer_wallet_transactions
+           WHERE kind = 'topup' AND reference_no = $1
+           FOR UPDATE`,
+          [event.referenceNo]
+        );
+        if (topup.rowCount) {
+          const transaction = topup.rows[0];
+          const paymentMatches = !transaction.payment_id || !event.paymentId || transaction.payment_id === event.paymentId;
+          const amountMatches = amount === undefined || amount === null ||
+            Math.round(Number(amount) * 100) === Math.round(Number(transaction.amount) * 100);
+          const currencyMatches = currency === undefined || currency === null || currency === "PHP";
+          if (paymentMatches && amountMatches && currencyMatches) {
+            await client.query(
+              `UPDATE customer_wallet_transactions
+               SET payment_id = COALESCE(payment_id, $2),
+                   status = CASE
+                     WHEN status IN ('EXECUTED', 'REJECTED', 'CANCELED', 'EXPIRED', 'ERROR') THEN status
+                     ELSE $3
+                   END,
+                   updated_at = NOW()
+               WHERE id = $1`,
+              [transaction.id, event.paymentId || null, effectiveStatus]
+            );
+          } else if (transaction.status === "PENDING") {
+            await client.query(
+              `UPDATE customer_wallet_transactions
+               SET status = 'ERROR',
+                   details = '{"settlementMismatch":true}'::jsonb,
+                   updated_at = NOW()
+               WHERE id = $1`,
+              [transaction.id]
+            );
+          }
+        }
+      } else if (event.eventType === "disbursement") {
+        const reservationStatus = effectiveStatus === "EXECUTED"
+          ? "EXECUTED"
+          : effectiveStatus === "REJECTED" ? "REJECTED" : "PENDING";
+        await client.query(
+          `UPDATE customer_wallet_transactions
+           SET status = CASE
+                 WHEN status = 'EXECUTED' THEN status
+                 WHEN $2 = 'REJECTED' THEN 'REJECTED'
+                 WHEN $2 = 'EXECUTED' THEN 'EXECUTED'
+                 ELSE status
+               END,
+               details = $3::jsonb,
+               updated_at = NOW()
+           WHERE kind = 'disbursement' AND reference_no = $1`,
+          [event.referenceNo, reservationStatus, JSON.stringify(event.details || {})]
+        );
+      }
       if (
         event.notifyIncoming &&
         event.eventType === "payment" &&
-        event.status === "EXECUTED" &&
+        effectiveStatus === "EXECUTED" &&
         previousStatus !== "EXECUTED" &&
         event.paymentId
       ) {
@@ -727,6 +1016,16 @@ export function createAdminStore(
   async function upsertPushToken(email, token) {
     const user = await getUser(email);
     if (!user || user.status !== "active") throw new AdminStoreError(401, "unauthorized");
+    if (user.role === "customer") {
+      await pool.query(
+        `INSERT INTO customer_push_tokens (token, email)
+         VALUES ($1, $2)
+         ON CONFLICT (token) DO UPDATE
+         SET email = EXCLUDED.email, updated_at = NOW()`,
+        [token, email.toLowerCase()]
+      );
+      return;
+    }
     await pool.query(
       `INSERT INTO merchant_push_tokens (token, email)
        VALUES ($1, $2)
@@ -737,6 +1036,14 @@ export function createAdminStore(
   }
 
   async function deletePushToken(email, token) {
+    const user = await getUser(email.toLowerCase());
+    if (user?.role === "customer") {
+      await pool.query(
+        "DELETE FROM customer_push_tokens WHERE email = $1 AND token = $2",
+        [email.toLowerCase(), token]
+      );
+      return;
+    }
     await pool.query(
       "DELETE FROM merchant_push_tokens WHERE email = $1 AND token = $2",
       [email.toLowerCase(), token]
@@ -754,7 +1061,11 @@ export function createAdminStore(
   }
 
   async function removePushToken(token) {
-    await pool.query("DELETE FROM merchant_push_tokens WHERE token = $1", [token]);
+    await pool.query(
+      "DELETE FROM merchant_push_tokens WHERE token = $1",
+      [token]
+    );
+    await pool.query("DELETE FROM customer_push_tokens WHERE token = $1", [token]);
   }
 
   async function claimIncomingPaymentPushes(limit = 10) {
@@ -884,6 +1195,17 @@ export function createAdminStore(
   return {
     initialize,
     getUser,
+    ensureEmailCustomer,
+    getCustomerWalletBalance,
+    listCustomerWalletTransactions,
+    listCustomerWalletDisbursements,
+    getCustomerWalletTopup,
+    getCustomerWalletPaymentStatus,
+    createCustomerWalletTopup,
+    recordCustomerWalletTopupOrder,
+    finishCustomerWalletTopup,
+    reserveCustomerWalletDisbursement,
+    finishCustomerWalletDisbursement,
     listUsers,
     createMerchant,
     setMerchantStatus,

@@ -36,7 +36,8 @@ class SettingsManager(val context: Context) {
         val MERCHANT_ALIAS = stringPreferencesKey("merchant_alias")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val IS_LOGGED_IN = stringPreferencesKey("is_logged_in")
-        val LOGGED_IN_EMAIL = stringPreferencesKey("logged_in_email")
+        val LOGGED_IN_IDENTITY = stringPreferencesKey("logged_in_email")
+        val LOGGED_IN_ROLE = stringPreferencesKey("logged_in_role")
         val SESSION_TOKEN = stringPreferencesKey("session_token")
         val DEPOSIT_ACCOUNT_NUMBER = stringPreferencesKey("deposit_account_number")
     }
@@ -48,6 +49,12 @@ class SettingsManager(val context: Context) {
     suspend fun saveDepositAccountNumber(accountNumber: String) {
         context.dataStore.edit { preferences ->
             preferences[DEPOSIT_ACCOUNT_NUMBER] = accountNumber
+        }
+    }
+
+    suspend fun clearDepositAccountNumber() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(DEPOSIT_ACCOUNT_NUMBER)
         }
     }
 
@@ -85,24 +92,35 @@ class SettingsManager(val context: Context) {
         preferences[IS_LOGGED_IN] == "true"
     }
 
-    val loggedInEmail: Flow<String?> = context.dataStore.data.map { preferences ->
-        preferences[LOGGED_IN_EMAIL]
+    val loggedInIdentity: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[LOGGED_IN_IDENTITY]
     }
 
-    suspend fun setLoggedIn(email: String, loggedIn: Boolean) {
+    val loggedInRole: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[LOGGED_IN_ROLE]
+    }
+
+    suspend fun setLoggedIn(identity: String, loggedIn: Boolean, role: String? = null) {
         context.dataStore.edit { preferences ->
             preferences[IS_LOGGED_IN] = if (loggedIn) "true" else "false"
             if (loggedIn) {
+                if (preferences[LOGGED_IN_IDENTITY] != identity) {
+                    preferences.remove(DEPOSIT_ACCOUNT_NUMBER)
+                }
                 clearLegacySwiftPayKeys(preferences)
                 preferences.remove(WALLET_BALANCE)
             }
             if (loggedIn) {
-                preferences[LOGGED_IN_EMAIL] = email
-                DebugLogger.logLoginSuccess(email)
+                preferences[LOGGED_IN_IDENTITY] = identity
+                if (role != null) preferences[LOGGED_IN_ROLE] = role
+                DebugLogger.logLoginSuccess(identity.logSafeIdentity())
             } else {
-                preferences.remove(LOGGED_IN_EMAIL)
-                DebugLogger.logLogout(email)
+                preferences.remove(LOGGED_IN_IDENTITY)
+                preferences.remove(LOGGED_IN_ROLE)
+                preferences.remove(DEPOSIT_ACCOUNT_NUMBER)
+                DebugLogger.logLogout(identity.logSafeIdentity())
             }
+
         }
     }
 
@@ -111,8 +129,10 @@ class SettingsManager(val context: Context) {
         devicePinManager.clear()
         context.dataStore.edit { preferences ->
             preferences[IS_LOGGED_IN] = "false"
-            preferences.remove(LOGGED_IN_EMAIL)
+            preferences.remove(LOGGED_IN_IDENTITY)
+            preferences.remove(LOGGED_IN_ROLE)
             preferences.remove(WALLET_BALANCE)
+            preferences.remove(DEPOSIT_ACCOUNT_NUMBER)
             clearLegacySwiftPayKeys(preferences)
         }
     }
@@ -173,3 +193,6 @@ class SettingsManager(val context: Context) {
         }
     }
 }
+
+private fun String.logSafeIdentity(): String =
+    substringAfter('@', missingDelimiterValue = "user").let { domain -> "***@$domain" }

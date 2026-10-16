@@ -32,7 +32,10 @@ export function createOtpAuth(config, {
   async function getActiveUser(email) {
     if (userStore) {
       const user = await userStore.getUser(email);
-      return user?.status === "active" ? user : null;
+      if (user) return user.status === "active" ? user : null;
+      return userStore.ensureEmailCustomer
+        ? { email, role: "customer", status: "active", isNewCustomer: true }
+        : null;
     }
     return allowedEmails.has(email) ? { email, role: "merchant", status: "active" } : null;
   }
@@ -64,7 +67,7 @@ export function createOtpAuth(config, {
   async function verifyOtp(emailValue, code) {
     const email = emailValue.trim().toLowerCase();
     const challenge = challenges.get(email);
-    const user = await getActiveUser(email);
+    let user = await getActiveUser(email);
     if (!user || !challenge || challenge.expiresAt <= now() || challenge.attempts >= 5) {
       challenges.delete(email);
       return null;
@@ -74,6 +77,10 @@ export function createOtpAuth(config, {
     const submittedHash = createHmac("sha256", key).update(`${email}:${code}`).digest();
     if (!timingSafeEqual(challenge.codeHash, submittedHash)) return null;
     challenges.delete(email);
+    if (user.isNewCustomer) {
+      user = await userStore.ensureEmailCustomer(email);
+      if (!user || user.status !== "active") return null;
+    }
 
     const expiresInSeconds = user.role === "super_admin" ? 60 * 60 : 8 * 60 * 60;
     const accessToken = await new SignJWT({
@@ -162,10 +169,10 @@ export function createOtpAuth(config, {
 
 export async function sendOtpEmail(config, email, code, fetchImpl = fetch, purpose = "sign-in") {
   const registration = purpose === "registration";
-  const subject = registration ? "Verify your SwiftPay merchant application" : "Your SwiftPay sign-in code";
+  const subject = registration ? "Verify your SwiftPay merchant application" : "Your DRPAY verification code";
   const message = registration
     ? `Your SwiftPay merchant registration verification code is ${code}. It expires in 10 minutes.`
-    : `Your SwiftPay sign-in code is ${code}. It expires in 10 minutes.`;
+    : `Your DRPAY verification code is ${code}. Use it to sign in or create your account. It expires in 10 minutes.`;
   const response = await fetchImpl("https://api.resend.com/emails", {
     method: "POST",
     headers: {

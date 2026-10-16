@@ -26,19 +26,40 @@ before(async () => {
     config,
     userStore: store,
     requestOtp: async () => {},
-    verifyOtp: async () => null,
+    verifyOtp: async (email) => {
+      await store.ensureEmailCustomer(email);
+      return {
+        accessToken: "customer-token",
+        expiresInSeconds: 8 * 60 * 60,
+        email,
+        role: "customer"
+      };
+    },
     verifyAccessToken: async (token) => {
       if (token === "admin-token") return { sub: "support@swiftpay.site", scope };
       if (token === "merchant-token") return { sub: "merchant@example.com", scope };
+      if (token === "customer-token") return { sub: "customer@example.com", scope };
+      if (token === "second-customer-token") return { sub: "second-customer@example.com", scope };
       if (token === "onboarding-merchant-token") return { sub: "onboarding@example.com", scope };
       if (token === "registration-token") {
         return { sub: "applicant@example.com", role: "registration_applicant", scope: "kyb:submit" };
       }
       throw new Error("invalid token");
     },
-    fetchImpl: async (url) => {
+    fetchImpl: async (url, options = {}) => {
       if (url.pathname.endsWith("/disbursements/send")) {
         return new Response(JSON.stringify({ id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01" }), { status: 200 });
+      }
+      if (url.pathname.endsWith("/bootstrap/qrph")) {
+        const request = JSON.parse(options.body);
+        return Response.json({
+          paymentId: "wallet-topup-payment-1",
+          paymentStatus: "PENDING",
+          referenceNo: request.x_reference_no,
+          amount: request.x_amount,
+          currency: request.x_currency,
+          qrCode: "test-qr-payload"
+        });
       }
       return new Response(JSON.stringify({ balance: 75, number: "000123" }), { status: 200 });
     },
@@ -71,14 +92,17 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   const homepage = await fetch(`${baseUrl}/`);
   assert.equal(homepage.status, 200);
   const homepageHtml = await homepage.text();
-  assert.match(homepageHtml, /Exchange your Korean Won/);
-  assert.match(homepageHtml, /USDT or Philippine Peso instantly!/);
+  assert.match(homepageHtml, /Korean Won in\./);
+  assert.match(homepageHtml, /Philippine pesos or USDT on TRC20/);
   assert.match(homepageHtml, /KRW → PHP/);
   assert.match(homepageHtml, /KRW → USDT/);
   assert.match(homepageHtml, /KRW → USDT \(TRC20\)/);
-  assert.match(homepageHtml, /without a remittance transfer/);
+  assert.match(homepageHtml, /without a separate remittance transfer/);
   assert.match(homepageHtml, /Not available yet/);
-  assert.match(homepageHtml, /Fast payout is the goal, but exchange is not available yet/);
+  assert.match(homepageHtml, /Direct KRW exchange is planned, but not available in the current app/);
+  assert.match(homepageHtml, /Create an account with email verification/);
+  assert.match(homepageHtml, /manage your own wallet and activity/);
+  assert.match(homepageHtml, /no KYB or document submission/);
   assert.match(homepageHtml, /PHP payout · concept preview/);
   assert.match(homepageHtml, /USDT on TRC20 · concept preview/);
   assert.match(homepageHtml, /Concept previews, not screenshots of the current app/);
@@ -108,7 +132,7 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.equal(download.status, 302);
   assert.equal(
     download.headers.get("location"),
-    "https://github.com/stden16/swiftpay-merchant/releases/download/v1.0.15/SwiftPay-Merchant-v1.0.15.apk"
+    "https://github.com/stden16/swiftpay-merchant/releases/download/v1.0.17/SwiftPay-Merchant-v1.0.17.apk"
   );
 
   const page = await fetch(`${baseUrl}/admin/`);
@@ -599,4 +623,125 @@ test("super admins can record verified manual bank deposits for merchant wallet 
   });
 
   assert.ok((await store.listAudit(10)).some((entry) => entry.action === "manual_bank_deposit.recorded"));
+});
+
+test("email customers receive isolated wallet balances and only settled QR top-ups can fund transfers", async () => {
+  const anonymousRequest = await fetch(`${baseUrl}/v1/auth/request-otp`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "customer@example.com" })
+  });
+  assert.equal(anonymousRequest.status, 202);
+
+  const verified = await fetch(`${baseUrl}/v1/auth/verify-otp`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "customer@example.com", code: "123456" })
+  });
+  assert.equal(verified.status, 200);
+  assert.deepEqual(await verified.json(), {
+    accessToken: "customer-token",
+    expiresInSeconds: 8 * 60 * 60,
+    email: "customer@example.com",
+    role: "customer"
+  });
+
+  await store.ensureEmailCustomer("second-customer@example.com");
+  const customerHeaders = {
+    authorization: "Bearer customer-token",
+    "content-type": "application/json"
+  };
+  const secondCustomerHeaders = {
+    authorization: "Bearer second-customer-token",
+    "content-type": "application/json"
+  };
+  const emptyBalance = await fetch(`${baseUrl}/v1/wallet/balance`, {
+    headers: customerHeaders
+  });
+  assert.equal(emptyBalance.status, 200);
+  assert.deepEqual(await emptyBalance.json(), {
+    balance: 0,
+    adjustedBalance: 0,
+    accountNumber: null,
+    currency: "PHP"
+  });
+
+  const createdQr = await fetch(`${baseUrl}/v1/wallet/topups/qrph`, {
+    method: "POST",
+    headers: customerHeaders,
+    body: JSON.stringify({ amount: 125 })
+  });
+  assert.equal(createdQr.status, 201);
+  const qr = await createdQr.json();
+  assert.equal(qr.amount, 125);
+  assert.equal(qr.currency, "PHP");
+  assert.equal(qr.status, "PENDING");
+  assert.match(qr.referenceNo, /^WLT-/);
+  assert.equal(Number(await store.getCustomerWalletBalance("customer@example.com")), 0);
+
+  await store.recordWebhookEvent({
+    eventKey: `payment:${qr.paymentId}`,
+    eventType: "payment",
+    paymentId: qr.paymentId,
+    referenceNo: qr.referenceNo,
+    status: "EXECUTED",
+    amount: 125,
+    currency: "PHP"
+  });
+  const settledStatus = await fetch(`${baseUrl}/v1/wallet/topups/${encodeURIComponent(qr.referenceNo)}`, {
+    headers: customerHeaders
+  });
+  assert.equal((await settledStatus.json()).status, "EXECUTED");
+
+  const fundedBalance = await fetch(`${baseUrl}/v1/wallet/balance`, {
+    headers: customerHeaders
+  });
+  assert.equal((await fundedBalance.json()).balance, 125);
+  const isolatedHistory = await fetch(`${baseUrl}/v1/wallet/activity`, {
+    headers: customerHeaders
+  });
+  assert.equal(isolatedHistory.status, 200);
+  assert.deepEqual((await isolatedHistory.json()).map(({ amount, transactionType }) => [amount, transactionType]), [
+    [125, "WALLET_TOP_UP"]
+  ]);
+  const otherHistory = await fetch(`${baseUrl}/v1/wallet/activity`, {
+    headers: secondCustomerHeaders
+  });
+  assert.deepEqual(await otherHistory.json(), []);
+
+  const transfer = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers: customerHeaders,
+    body: JSON.stringify({
+      amount: 50,
+      referenceNo: "CUSTOMER-PAYOUT-1",
+      channel: "INSTAPAY",
+      institutionCode: "TESTBANK",
+      recipientInformation: { accountNumber: "1234567890", fullName: "Jane Doe" }
+    })
+  });
+  assert.equal(transfer.status, 202);
+  assert.equal(Number(await store.getCustomerWalletBalance("customer@example.com")), 75);
+  const unfundedTransfer = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers: secondCustomerHeaders,
+    body: JSON.stringify({
+      amount: 1,
+      referenceNo: "CUSTOMER-PAYOUT-2",
+      channel: "INSTAPAY",
+      institutionCode: "TESTBANK",
+      recipientInformation: { accountNumber: "0987654321", fullName: "John Doe" }
+    })
+  });
+  assert.equal(unfundedTransfer.status, 409);
+  assert.deepEqual(await unfundedTransfer.json(), { error: "insufficient_wallet_balance" });
+
+  const hiddenMerchantDeposits = await fetch(`${baseUrl}/v1/wallet/manual-deposits`, {
+    headers: customerHeaders
+  });
+  assert.deepEqual(await hiddenMerchantDeposits.json(), []);
+  const blockedPaymentHistory = await fetch(`${baseUrl}/v1/wallet/payment-transactions`, {
+    headers: customerHeaders
+  });
+  assert.equal(blockedPaymentHistory.status, 403);
 });

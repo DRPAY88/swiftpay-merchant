@@ -207,7 +207,7 @@ fun SwiftPayApp() {
     val isLoggedInFlag by settings.isLoggedIn.collectAsState(initial = false)
     val backendAccessToken by settings.backendAccessToken.collectAsState(initial = null)
     val isLoggedIn = isLoggedInFlag && !backendAccessToken.isNullOrBlank()
-    val loggedInEmail by settings.loggedInEmail.collectAsState(initial = null)
+    val loggedInIdentity by settings.loggedInIdentity.collectAsState(initial = null)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
@@ -355,7 +355,7 @@ fun SwiftPayApp() {
                     }
                     Route.DeviceLock -> NavEntry(key) {
                         DevicePinScreen(
-                            email = loggedInEmail,
+                            identity = loggedInIdentity,
                             biometricUnlockEnabled = settings.isBiometricUnlockEnabled(),
                             onUnlocked = {
                                 isDeviceUnlocked = true
