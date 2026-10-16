@@ -67,6 +67,7 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /USDT on TRC20 · concept preview/);
   assert.match(homepageHtml, /Concept previews, not screenshots of the current app/);
   assert.match(homepageHtml, /id="promo"/);
+  assert.match(homepageHtml, /DRPAY IN 15 SECONDS/);
   assert.match(homepageHtml, /src="\/drpay-promo\.mp4"/);
   assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg"/);
 

@@ -32,7 +32,7 @@ The Render blueprint configures `OTP_FROM_EMAIL` as `SwiftPay <login@swiftpay.si
 
 The marketing site is served from `backend/public/marketing/` at `/`; the protected admin console remains at `/admin/`. The site's download button uses `/download`, which redirects to the current published Android APK release. Update that redirect and the displayed version in `backend/src/app.js` and `backend/public/marketing/index.html` when publishing a new APK.
 
-The marketing page also serves an 18-second vertical promotional video at `/drpay-promo.mp4` with its poster image at `/drpay-promo-poster.jpg`. Keep the video's availability messaging aligned with the current product: direct KRW-to-PHP or KRW-to-USDT exchange is not available in the current app.
+The marketing page also serves a 15-second vertical promotional video at `/drpay-promo.mp4` with its poster image at `/drpay-promo-poster.jpg`. Keep the video's availability messaging aligned with the current product: direct KRW-to-PHP or KRW-to-USDT exchange is not available in the current app.
 
 The Render blueprint sets `PUBLIC_BASE_URL` to `https://denpay.cc` so generated payment links use the custom domain. To connect it:
 
