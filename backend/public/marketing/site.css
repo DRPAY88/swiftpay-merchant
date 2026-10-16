@@ -518,6 +518,90 @@ h1 span,
   letter-spacing: 0.25px;
 }
 
+.promo-video-section {
+  overflow: hidden;
+  color: white;
+  background:
+    radial-gradient(ellipse at 18% 50%, rgba(36, 109, 182, 0.25), transparent 42%),
+    linear-gradient(130deg, #071a38, #102e56);
+}
+
+.promo-video-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 370px);
+  align-items: center;
+  gap: clamp(44px, 9vw, 124px);
+  padding-block: 82px;
+}
+
+.promo-video-copy .eyebrow {
+  color: #8cb9e9;
+}
+
+.promo-video-copy h2 {
+  margin-bottom: 20px;
+  font-size: clamp(40px, 5vw, 60px);
+  letter-spacing: -2.8px;
+  line-height: 1.1;
+}
+
+.promo-video-copy h2 span {
+  color: #58c9f4;
+}
+
+.promo-video-copy > p:not(.eyebrow) {
+  max-width: 520px;
+  color: #bfd0e4;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.promo-video-copy .promo-video-disclaimer {
+  margin-block: 25px;
+  padding: 13px 16px;
+  color: #dce9f7;
+  background: rgba(255, 255, 255, 0.07);
+  border-left: 3px solid var(--green);
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.promo-video-disclaimer strong {
+  color: white;
+}
+
+.promo-video-download {
+  display: inline-block;
+  color: #d8e8fb;
+}
+
+.promo-video-card {
+  width: 100%;
+  margin: 0;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(205, 225, 247, 0.2);
+  border-radius: 17px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.25);
+}
+
+.promo-video-card video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  background: #06142b;
+  border-radius: 10px;
+}
+
+.promo-video-card figcaption {
+  padding: 11px 5px 2px;
+  color: #c0d0e4;
+  font-size: 11px;
+  text-align: center;
+}
+
 .trust-strip {
   background: #f7f9fc;
   border-block: 1px solid #edf1f6;
@@ -1475,6 +1559,11 @@ h1 span,
     gap: 30px;
   }
 
+  .promo-video-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    gap: 32px;
+  }
+
   .fx-copy {
     max-width: 580px;
   }
@@ -1596,6 +1685,26 @@ h1 span,
 
   .fx-layout {
     gap: 22px;
+  }
+
+  .promo-video-layout {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding-block: 62px;
+  }
+
+  .promo-video-copy h2 {
+    font-size: 40px;
+    letter-spacing: -2px;
+  }
+
+  .promo-video-copy > p:not(.eyebrow) {
+    font-size: 14px;
+  }
+
+  .promo-video-card {
+    width: min(100%, 340px);
+    margin-inline: auto;
   }
 
   .fx-copy h2 {

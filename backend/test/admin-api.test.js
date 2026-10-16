@@ -66,6 +66,18 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /PHP payout · concept preview/);
   assert.match(homepageHtml, /USDT on TRC20 · concept preview/);
   assert.match(homepageHtml, /Concept previews, not screenshots of the current app/);
+  assert.match(homepageHtml, /id="promo"/);
+  assert.match(homepageHtml, /src="\/drpay-promo\.mp4"/);
+  assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg"/);
+
+  const promoVideo = await fetch(`${baseUrl}/drpay-promo.mp4`, { method: "HEAD" });
+  assert.equal(promoVideo.status, 200);
+  assert.equal(promoVideo.headers.get("content-type"), "video/mp4");
+  assert.ok(Number(promoVideo.headers.get("content-length")) > 100_000);
+
+  const promoPoster = await fetch(`${baseUrl}/drpay-promo-poster.jpg`, { method: "HEAD" });
+  assert.equal(promoPoster.status, 200);
+  assert.equal(promoPoster.headers.get("content-type"), "image/jpeg");
 
   const download = await fetch(`${baseUrl}/download`, { redirect: "manual" });
   assert.equal(download.status, 302);
