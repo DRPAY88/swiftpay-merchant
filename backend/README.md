@@ -37,7 +37,7 @@ Phone-authenticated customer records and ledgers from the earlier sign-in flow a
 
 ## Marketing site and custom domain
 
-The marketing site is served from `backend/public/marketing/` at `/`; the protected admin console remains at `/admin/`. The site's download button uses `/download`, which redirects to the current published Android APK release. Update that redirect and the displayed version in `backend/src/app.js` and `backend/public/marketing/index.html` when publishing a new APK.
+The marketing site is served from `backend/public/marketing/` at `/`; the protected admin console remains at `/admin/`. The site's download button uses `/download`, which redirects to the versioned APK in that public directory. When publishing a new APK, add the signed release APK there, then update the redirect in `backend/src/app.js` and the displayed version in `backend/public/marketing/index.html`.
 
 The marketing page also serves a 15-second vertical promotional video at `/drpay-promo.mp4` with its poster image at `/drpay-promo-poster.jpg`. Keep the video's availability messaging aligned with the current product: direct KRW-to-PHP or KRW-to-USDT exchange is not available in the current app.
 

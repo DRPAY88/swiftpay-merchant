@@ -128,7 +128,7 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.equal((homepageHtml.match(/id="how-it-works"/g) || []).length, 1);
   assert.match(homepageHtml, /DRPAY IN 15 SECONDS/);
   assert.match(homepageHtml, /earlier DRPAY interface/);
-  assert.match(homepageHtml, /Version 1\.0\.18/);
+  assert.match(homepageHtml, /Version 1\.0\.20/);
   assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=2"/);
   assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=2"/);
   assert.match(homepageHtml, /id="market-rates"/);
@@ -151,10 +151,11 @@ test("admin dashboard is served while its APIs require a signed super-admin role
 
   const download = await fetch(`${baseUrl}/download`, { redirect: "manual" });
   assert.equal(download.status, 302);
-  assert.equal(
-    download.headers.get("location"),
-    "https://github.com/stden16/swiftpay-merchant/releases/download/v1.0.18/SwiftPay-Merchant-v1.0.18.apk"
-  );
+  assert.equal(download.headers.get("location"), "/SwiftPay-Merchant-v1.0.20.apk");
+  const apk = await fetch(`${baseUrl}/SwiftPay-Merchant-v1.0.20.apk`, { method: "HEAD" });
+  assert.equal(apk.status, 200);
+  assert.equal(apk.headers.get("content-type"), "application/vnd.android.package-archive");
+  assert.ok(Number(apk.headers.get("content-length")) > 40_000_000);
 
   const page = await fetch(`${baseUrl}/admin/`);
   assert.equal(page.status, 200);
