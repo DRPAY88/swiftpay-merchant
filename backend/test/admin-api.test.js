@@ -109,8 +109,10 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   const homepage = await fetch(`${baseUrl}/`);
   assert.equal(homepage.status, 200);
   const homepageHtml = await homepage.text();
-  assert.match(homepageHtml, /Korean Won in\./);
-  assert.match(homepageHtml, /PHP in your wallet/);
+  assert.match(homepageHtml, /Collect in KRW\./);
+  assert.match(homepageHtml, /Track PHP clearly/);
+  assert.match(homepageHtml, /KRW QR PAYMENTS · PERSONAL PHP WALLET/);
+  assert.match(homepageHtml, /PHP appears in your personal wallet only after SwiftPay confirms settlement/);
   assert.match(homepageHtml, /KRW → PHP/);
   assert.match(homepageHtml, /KRW → USDT/);
   assert.match(homepageHtml, /KRW → USDT \(TRC20\)/);
@@ -119,17 +121,19 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /Create an account with email verification/);
   assert.match(homepageHtml, /manage your own wallet and activity/);
   assert.match(homepageHtml, /no KYB or document submission/);
-  assert.match(homepageHtml, /PHP payout · concept preview/);
-  assert.match(homepageHtml, /USDT on TRC20 · concept preview/);
-  assert.match(homepageHtml, /Concept previews, not screenshots of the current app/);
+  assert.match(homepageHtml, /Create a KRW QR payment/);
+  assert.match(homepageHtml, /Settlement must be verified first/);
+  assert.match(homepageHtml, /app-managed ledger over pooled provider funds/);
   assert.match(homepageHtml, /id="promo"/);
+  assert.equal((homepageHtml.match(/id="how-it-works"/g) || []).length, 1);
   assert.match(homepageHtml, /DRPAY IN 15 SECONDS/);
+  assert.match(homepageHtml, /earlier DRPAY interface/);
   assert.match(homepageHtml, /Version 1\.0\.18/);
   assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=2"/);
   assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=2"/);
   assert.match(homepageHtml, /id="market-rates"/);
   assert.match(homepageHtml, /Reference estimate only—not a DRPAY offer/);
-  assert.match(homepageHtml, /href="\/site\.css\?v=2"/);
+  assert.match(homepageHtml, /href="\/site\.css\?v=3"/);
   assert.match(homepageHtml, /src="\/rates\.js\?v=3"/);
 
   const ratesScript = await fetch(`${baseUrl}/rates.js`);

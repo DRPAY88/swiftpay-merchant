@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#071a38">
-  <meta name="description" content="Create a DRPAY account with email verification. Pay Korean Won by QR and receive settled PHP in your personal wallet. USDT exchange is not available yet.">
+  <meta name="description" content="Create a DRPAY account, pay by KRW QR, and track PHP credited to your personal wallet after verified settlement.">
   <link rel="canonical" href="https://denpay.cc/">
-  <title>DRPAY — KRW to PHP or USDT</title>
+  <title>DRPAY — KRW QR payments, clearly tracked</title>
   <link rel="icon" href="/checkout-assets/drpay_mark.png" type="image/png">
-  <link rel="stylesheet" href="/site.css?v=2">
+  <link rel="stylesheet" href="/site.css?v=3">
   <script src="/rates.js?v=3" defer></script>
 </head>
 <body>
@@ -20,10 +20,10 @@
         <span>DRPAY</span>
       </a>
       <div class="nav-links">
-        <a href="#promo">Watch video</a>
-        <a href="#screenshots">How it works</a>
-        <a href="#features">Features</a>
-        <a class="button button-small" href="/download">Create account</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#currencies">Reference rates</a>
+        <a href="#faq">FAQ</a>
+        <a class="button button-small" href="/download">Download app</a>
       </div>
     </nav>
   </header>
@@ -31,17 +31,17 @@
   <main id="main">
     <section class="hero shell">
       <div class="hero-copy">
-        <p class="eyebrow"><span class="eyebrow-dot"></span> YOUR ACCOUNT. YOUR WALLET.</p>
-        <h1>Korean Won in.<br><span>PHP in your wallet.</span></h1>
-        <p class="hero-description">Pay in Korean Won with a QR payment and receive the verified PHP settlement in your own DRPAY wallet. USDT exchange is not available yet.</p>
+        <p class="eyebrow"><span class="eyebrow-dot"></span> KRW QR PAYMENTS · PERSONAL PHP WALLET</p>
+        <h1>Collect in KRW.<br><span>Track PHP clearly.</span></h1>
+        <p class="hero-description">Create a Korean Won QR payment, then follow its status in DRPAY. PHP appears in your personal wallet only after SwiftPay confirms settlement.</p>
         <div class="hero-actions">
           <a class="button" href="/download">
             <span class="button-icon" aria-hidden="true">↓</span>
-            Create account
+            Download for Android
           </a>
-          <a class="text-link" href="#screenshots">See sample screens <span aria-hidden="true">→</span></a>
+          <a class="text-link" href="#how-it-works">See how it works <span aria-hidden="true">→</span></a>
         </div>
-        <p class="download-note">KRW QR payments can fund your personal PHP wallet after SwiftPay verifies settlement.</p>
+        <p class="download-note">No wallet credit for pending or unverified payments.</p>
       </div>
 
       <div class="hero-art" aria-label="DRPAY app overview illustration">
@@ -53,7 +53,7 @@
           <div class="app-card-top">
             <div class="app-mark"><img src="/checkout-assets/drpay_mark.png" alt="" width="32" height="32"></div>
             <div><span class="app-label">YOUR DRPAY ACCOUNT</span><strong>DRPAY</strong></div>
-            <span class="status-dot" aria-label="Available"></span>
+            <span class="status-dot" aria-hidden="true"></span>
           </div>
           <div class="app-card-rule"></div>
           <p class="app-section-label">YOUR ACCOUNT</p>
@@ -74,8 +74,15 @@
           </div>
           <div class="app-card-bottom"><span class="bottom-line"></span><span class="bottom-line short"></span><span class="bottom-line"></span></div>
         </div>
-        <div class="floating-note"><span class="note-check" aria-hidden="true">✓</span><span><strong>Your own wallet</strong><small>Personal account activity</small></span></div>
         <div class="hero-caption">A simpler way to manage your wallet.</div>
+      </div>
+    </section>
+
+    <section class="trust-strip" aria-label="How DRPAY works">
+      <div class="shell trust-items">
+        <span><i class="trust-icon icon-wallet" aria-hidden="true"></i> Pay with a KRW QR</span>
+        <span><i class="trust-icon icon-activity" aria-hidden="true"></i> Wait for verified settlement</span>
+        <span><i class="trust-icon icon-mobile" aria-hidden="true"></i> Track your PHP wallet</span>
       </div>
     </section>
 
@@ -84,12 +91,12 @@
         <div class="promo-video-copy">
           <p class="eyebrow">DRPAY IN 15 SECONDS</p>
           <h2>See the DRPAY<br><span>journey.</span></h2>
-          <p>See the steps: create a Korean Won payment, review the amount, then explore PHP or USDT checkout.</p>
+          <p>A quick look at the earlier DRPAY interface. The note below explains what is currently available.</p>
           <p class="promo-video-disclaimer"><strong>The video predates personal KRW wallet top-ups.</strong> PHP is credited after verified settlement; direct USDT exchange is not available.</p>
           <a class="text-link promo-video-download" href="/drpay-promo.mp4" download>Download the promo video <span aria-hidden="true">↓</span></a>
         </div>
         <figure class="promo-video-card">
-          <video controls playsinline preload="metadata" poster="/drpay-promo-poster.jpg?v=2" aria-label="DRPAY promotional video showing merchant payment tools, a separate PHP and USDT checkout, and the future direct exchange goal">
+          <video controls playsinline preload="metadata" poster="/drpay-promo-poster.jpg?v=2" aria-label="Earlier DRPAY promotional video. See the description for current feature availability.">
             <source src="/drpay-promo.mp4?v=2" type="video/mp4">
             Your browser does not support MP4 video playback.
           </video>
@@ -98,20 +105,12 @@
       </div>
     </section>
 
-    <section class="trust-strip" aria-label="App highlights">
-      <div class="shell trust-items">
-        <span><i class="trust-icon icon-wallet" aria-hidden="true"></i> Start with KRW</span>
-        <span><i class="trust-icon icon-activity" aria-hidden="true"></i> Receive verified PHP</span>
-        <span><i class="trust-icon icon-mobile" aria-hidden="true"></i> Personal wallet activity</span>
-      </div>
-    </section>
-
     <section class="fx-section" id="currencies">
       <div class="section shell fx-layout">
         <div class="fx-copy">
-          <p class="eyebrow">ONE SIMPLE CHOICE</p>
-          <h2>How would you<br><span>like to receive?</span></h2>
-          <p>Use Korean Won to add verified PHP to your personal wallet. Direct USDT exchange is not available yet.</p>
+          <p class="eyebrow">A CLEAR PAYMENT FLOW</p>
+          <h2>From KRW QR to<br><span>your PHP wallet.</span></h2>
+          <p>Make a QR payment, wait for provider confirmation, then review the PHP settlement in your account.</p>
         </div>
         <div class="fx-showcase" aria-label="Choose a currency to receive from Korean won">
           <article class="fx-option">
@@ -184,78 +183,39 @@
       </div>
     </section>
 
-    <section class="screen-samples section shell" id="screenshots">
+    <section class="screen-samples section shell" id="how-it-works">
       <div class="section-heading">
-        <p class="eyebrow">A SIMPLE EXCHANGE FLOW</p>
-        <h2>Choose your payout.<br><span>Preview the flow.</span></h2>
-        <p>Pick a destination and follow a clear exchange flow.</p>
+        <p class="eyebrow">SIMPLE BY DESIGN</p>
+        <h2>From QR payment to<br><span>your wallet ledger.</span></h2>
+        <p>Know what happens at each step, with wallet credits tied to confirmed settlement.</p>
       </div>
-      <div class="screen-grid">
-        <article class="screen-sample">
-          <div class="sample-heading">
-            <span class="sample-number">01</span>
-            <div><h3>Receive Philippine Pesos</h3><p>KRW → PHP</p></div>
-          </div>
-          <div class="phone-frame">
-            <div class="phone-notch"></div>
-            <div class="phone-screen">
-              <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
-              <div class="phone-nav"><span aria-hidden="true">‹</span><strong>Exchange</strong><span>?</span></div>
-              <p class="phone-eyebrow">YOU SEND</p>
-              <div class="phone-currency-box">
-                <div><strong>KRW</strong><small>Korean Won</small></div>
-                <span class="phone-amount">Enter amount</span>
-              </div>
-              <div class="phone-swap" aria-hidden="true">↓</div>
-              <p class="phone-eyebrow">YOU RECEIVE</p>
-              <div class="phone-currency-box receive-box">
-                <div><strong>PHP</strong><small>Philippine Peso</small></div>
-                <span class="phone-amount">See your quote</span>
-              </div>
-              <div class="phone-recipient"><span class="recipient-icon" aria-hidden="true">✓</span><span><strong>Receive directly</strong><small>Choose an eligible payout method</small></span></div>
-              <div class="phone-cta">Continue</div>
-              <p class="phone-legal">Review the rate and fees before confirming.</p>
-            </div>
-          </div>
-          <p class="sample-caption">PHP payout · concept preview</p>
+      <div class="flow-grid">
+        <article class="flow-card">
+          <span class="flow-number">01</span>
+          <span class="flow-icon flow-icon-blue" aria-hidden="true">₩</span>
+          <h3>Create a KRW QR payment</h3>
+          <p>Enter the payment amount and generate a QR code in the app.</p>
         </article>
-
-        <article class="screen-sample">
-          <div class="sample-heading">
-            <span class="sample-number sample-number-green">02</span>
-            <div><h3>Receive USDT</h3><p>KRW → USDT · TRC20</p></div>
-          </div>
-          <div class="phone-frame">
-            <div class="phone-notch"></div>
-            <div class="phone-screen">
-              <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
-              <div class="phone-nav"><span aria-hidden="true">‹</span><strong>Exchange</strong><span>?</span></div>
-              <p class="phone-eyebrow">YOU SEND</p>
-              <div class="phone-currency-box">
-                <div><strong>KRW</strong><small>Korean Won</small></div>
-                <span class="phone-amount">Enter amount</span>
-              </div>
-              <div class="phone-swap phone-swap-green" aria-hidden="true">↓</div>
-              <p class="phone-eyebrow">YOU RECEIVE</p>
-              <div class="phone-currency-box receive-box">
-                <div><strong>USDT</strong><small>TRON · TRC20</small></div>
-                <span class="phone-amount">See your quote</span>
-              </div>
-              <div class="phone-recipient"><span class="recipient-icon recipient-icon-green" aria-hidden="true">₮</span><span><strong>Your TRC20 wallet</strong><small>Confirm the wallet address</small></span></div>
-              <div class="phone-cta phone-cta-green">Continue</div>
-              <p class="phone-legal">Review the rate and fees before confirming.</p>
-            </div>
-          </div>
-          <p class="sample-caption">USDT on TRC20 · concept preview</p>
+        <article class="flow-card">
+          <span class="flow-number">02</span>
+          <span class="flow-icon flow-icon-green" aria-hidden="true">✓</span>
+          <h3>Wait for confirmation</h3>
+          <p>A pending payment is not a wallet credit. Settlement must be verified first.</p>
+        </article>
+        <article class="flow-card">
+          <span class="flow-number">03</span>
+          <span class="flow-icon flow-icon-violet" aria-hidden="true">₱</span>
+          <h3>Review your PHP wallet</h3>
+          <p>Once confirmed, the PHP amount is reflected in your account balance and activity.</p>
         </article>
       </div>
-      <p class="samples-note">Concept previews, not screenshots of the current app. The current app supports KRW QR payments settled to a personal PHP wallet; USDT conversion is not available yet.</p>
+      <p class="samples-note">Your DRPAY wallet is an app-managed ledger over pooled provider funds—not a separate bank or virtual account. Direct KRW-to-USDT exchange is not available yet.</p>
     </section>
 
     <section class="section shell" id="features">
       <div class="section-heading">
-        <p class="eyebrow">MADE FOR YOUR BUSINESS</p>
-        <h2>Your money tools.<br><span>In one app.</span></h2>
+        <p class="eyebrow">YOUR ACCOUNT, AT A GLANCE</p>
+        <h2>Keep your payment activity<br><span>easy to follow.</span></h2>
         <p>Create an account with email verification, then manage your own wallet and activity in DRPAY.</p>
       </div>
       <div class="feature-grid">
@@ -277,7 +237,7 @@
       </div>
     </section>
 
-    <section class="steps-section" id="how-it-works">
+    <section class="steps-section" id="getting-started">
       <div class="section shell">
         <div class="section-heading steps-heading">
           <p class="eyebrow">GETTING STARTED</p>
@@ -307,9 +267,9 @@
       <div class="download-panel">
         <div class="download-content">
           <p class="eyebrow">YOUR BUSINESS, IN YOUR POCKET</p>
-          <h2>Make your next move<br>with <span>DRPAY.</span></h2>
-          <p>Download DRPAY, verify your email, and manage your own wallet in the app.</p>
-          <a class="button button-light" href="/download"><span class="button-icon" aria-hidden="true">↓</span> Create your account</a>
+          <h2>Your payments.<br><span>Clearer in DRPAY.</span></h2>
+          <p>Download DRPAY, verify your email, and keep your wallet balance and payment activity together.</p>
+          <a class="button button-light" href="/download"><span class="button-icon" aria-hidden="true">↓</span> Download for Android</a>
           <p class="download-note download-note-light">Version 1.0.18 <span aria-hidden="true">·</span> Android 7.0 or newer</p>
         </div>
         <div class="download-art" aria-hidden="true">
@@ -322,7 +282,7 @@
       <p class="availability-note">Create an account with email verification—no KYB or document submission. Direct KRW-to-PHP or KRW-to-USDT exchange is not live yet. Wallet top-ups are credited after confirmed settlement; your app balance is an internal ledger over pooled provider funds, not a separate bank account.</p>
     </section>
 
-    <section class="faq-section">
+    <section class="faq-section" id="faq">
       <div class="section shell faq-layout">
         <div class="section-heading">
           <p class="eyebrow">GOOD TO KNOW</p>
