@@ -28,6 +28,19 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Locale
+
+private fun normalizePaymentAppName(rawName: String?): String? =
+    rawName
+        ?.trim()
+        ?.replace("\\s+".toRegex(), "")
+        ?.uppercase(Locale.ROOT)
+        ?.let { normalized ->
+            when (normalized) {
+                "ALIPAY", "TOSS", "KAKAO", "KBANK", "GCASH", "MAYA", "QRPH" -> normalized
+                else -> null
+            }
+        }
 
 sealed interface MiniAppUiState {
     object Idle : MiniAppUiState
@@ -343,7 +356,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onGenerateDynamicQr(amount: Double, currency: String = "PHP", paymentAppName: String? = null) {
-        if (paymentAppName != null && paymentAppName !in setOf("Alipay", "Toss", "Kakao", "KBank", "GCash", "Maya", "QR Ph")) {
+        val normalizedPaymentApp = normalizePaymentAppName(paymentAppName)
+        if (paymentAppName != null && normalizedPaymentApp == null) {
             bridge?.sendError("Unsupported QR Ph payment app", action = "generate_dynamic_qr")
             return
         }
@@ -423,7 +437,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onGenerateQuotedKrwPhpQr(quoteToken: String, paymentAppName: String? = null) {
-        if (paymentAppName != null && paymentAppName !in setOf("Alipay", "Toss", "Kakao", "KBank", "GCash", "Maya", "QR Ph")) {
+        val normalizedPaymentApp = normalizePaymentAppName(paymentAppName)
+        if (paymentAppName != null && normalizedPaymentApp == null) {
             bridge?.sendError("Unsupported QR Ph payment app", action = "generate_quoted_krw_php_qr")
             return
         }
@@ -439,7 +454,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onGenerateQuotedFxPhpQr(quoteToken: String, paymentAppName: String? = null) {
-        if (paymentAppName != null && paymentAppName !in setOf("Alipay", "Toss", "Kakao", "KBank", "GCash", "Maya", "QR Ph")) {
+        val normalizedPaymentApp = normalizePaymentAppName(paymentAppName)
+        if (paymentAppName != null && normalizedPaymentApp == null) {
             bridge?.sendError("Unsupported QR Ph payment app", action = "generate_quoted_fx_php_qr")
             return
         }
@@ -623,12 +639,23 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             )
             result.onSuccess { response ->
                 val id = response.disbursementId ?: response.id ?: "DISB${System.currentTimeMillis()}"
-                recordLocalTransaction(id, -amount, "PENDING")
+                val recordedLocally = recordAcceptedDisbursement(
+                    id = id,
+                    amount = -amount,
+                    status = "PENDING",
+                    transactionType = "DISBURSEMENT",
+                    referenceNo = response.referenceNo,
+                    description = "QR_P2P transfer"
+                )
                 bridge?.sendResponse(
                     mapOf(
                         "status" to "pending",
                         "disbursementId" to id,
-                        "message" to "QR_P2P transfer submitted. Check its status before treating it as complete."
+                        "message" to if (recordedLocally) {
+                            "QR_P2P transfer submitted. Check its status before treating it as complete."
+                        } else {
+                            "SwiftPay accepted the QR_P2P transfer, but this device could not save it to transaction history. Check its status before retrying."
+                        }
                     )
                 )
                 uiState = MiniAppUiState.Idle
@@ -665,7 +692,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
 
                 val status = normalizePaymentStatus(response.status)
                 val transferId = response.disbursementId ?: response.id
-                recordLocalTransaction(
+                val recordedLocally = recordAcceptedDisbursement(
                     id = transferId ?: "DISB${System.currentTimeMillis()}",
                     amount = -amount,
                     status = status,
@@ -673,14 +700,18 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                     referenceNo = response.referenceNo,
                     description = "Transfer to $recipientName ($bankCode)"
                 )
+                val message = when {
+                    !recordedLocally ->
+                        "SwiftPay accepted the transfer, but this device could not save it to transaction history. Verify its status before retrying."
+                    status == "SUCCESS" ->
+                        "Transfer of ₱${"%.2f".format(amount)} to $recipientName ($bankCode) completed."
+                    else ->
+                        "Transfer submitted for processing. Check transaction status before treating it as complete."
+                }
                 bridge?.sendResponse(mapOf(
                     "status" to status.lowercase(),
                     "disbursementId" to (transferId ?: ""),
-                    "message" to if (status == "SUCCESS") {
-                        "Transfer of ₱${"%.2f".format(amount)} to $recipientName ($bankCode) completed."
-                    } else {
-                        "Transfer submitted for processing. Check transaction status before treating it as complete."
-                    }
+                    "message" to message
                 ), action = "send_disbursement")
                 uiState = MiniAppUiState.Idle
             }.onFailure { error ->
@@ -853,6 +884,31 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
         )
 
     }
+
+    private suspend fun recordAcceptedDisbursement(
+        id: String,
+        amount: Double,
+        status: String,
+        transactionType: String,
+        referenceNo: String?,
+        description: String
+    ): Boolean =
+        try {
+            recordLocalTransaction(
+                id = id,
+                amount = amount,
+                status = status,
+                transactionType = transactionType,
+                referenceNo = referenceNo,
+                description = description
+            )
+            true
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.e("MiniAppViewModel", "SwiftPay accepted a transfer but local history could not be updated", error)
+            false
+        }
 
     private fun normalizePaymentStatus(rawStatus: String?): String {
         val s = rawStatus?.uppercase() ?: return "PENDING"

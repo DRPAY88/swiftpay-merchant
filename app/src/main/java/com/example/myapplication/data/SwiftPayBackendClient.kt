@@ -48,6 +48,7 @@ import okhttp3.OkHttpClient
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -71,6 +72,18 @@ private fun BackendKrwPhpQrQuoteResponse.matchesAmount(amountKrw: Int): Boolean 
         ratePhpPerKrw.isFinite() &&
         ratePhpPerKrw > 0.0 &&
         quoteToken.isNotBlank()
+
+private fun normalizePaymentAppName(rawName: String?): String? =
+    rawName
+        ?.trim()
+        ?.replace("\\s+".toRegex(), "")
+        ?.uppercase(Locale.ROOT)
+        ?.let { normalized ->
+            when (normalized) {
+                "TOSS", "KAKAO", "KBANK", "GCASH", "MAYA", "ALIPAY", "QRPH" -> normalized
+                else -> null
+            }
+        }
 
 class SwiftPayService(
     private val backendBaseUrl: String = BuildConfig.PAYMENT_BACKEND_URL,
@@ -330,12 +343,14 @@ class SwiftPayService(
         paymentApp: String
     ): Result<SwiftPayQrResponse> {
         if (!hasApiKey) return missingSession()
-        if (quote.quoteToken.isBlank() || paymentApp !in setOf("TOSS", "KAKAO", "KBANK")) {
+        val normalizedPaymentApp = normalizePaymentAppName(paymentApp)
+            ?: return Result.failure(IllegalArgumentException("A valid KRW quote and Korean payment app are required."))
+        if (quote.quoteToken.isBlank() || normalizedPaymentApp !in setOf("TOSS", "KAKAO", "KBANK")) {
             return Result.failure(IllegalArgumentException("A valid KRW quote and Korean payment app are required."))
         }
         return try {
             val response = api.createWalletKrwTopupQr(
-                BackendWalletKrwTopupRequest(quote.quoteToken, paymentApp)
+                BackendWalletKrwTopupRequest(quote.quoteToken, normalizedPaymentApp)
             )
             if (!response.isSuccessful) return failure(response)
             val body = response.body()
