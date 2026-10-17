@@ -3,6 +3,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 export const FX_PHP_QUOTE_TTL_MS = 5 * 60 * 1000;
 export const KRW_PHP_QUOTE_TTL_MS = FX_PHP_QUOTE_TTL_MS;
 const MAX_FX_RATE_AGE_MS = 26 * 60 * 60 * 1000;
+const MAX_REFERENCE_RATE_AGE_MS = 4 * 24 * 60 * 60 * 1000;
 const MAX_USDT_RATE_AGE_MS = 5 * 60 * 1000;
 const FX_CURRENCIES = new Set(["KRW", "USD", "EUR", "CNY"]);
 
@@ -72,77 +73,157 @@ export function getLatestKrwPhpRate(apiKey, fetchImpl = fetch, now = Date.now())
     .then(({ phpPerUnit, updatedAt }) => ({ phpPerKrw: phpPerUnit, updatedAt }));
 }
 
+async function getLatestFallbackKrwRates(fetchImpl, now) {
+  let response;
+  try {
+    response = await fetchImpl(
+      "https://api.frankfurter.dev/v1/latest?base=KRW&symbols=PHP,USD",
+      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
+    );
+  } catch {
+    throw new FxQuoteError(503, "Reference rates are temporarily unavailable from the primary and fallback FX services");
+  }
+
+  if (!response.ok) {
+    throw new FxQuoteError(503, "Reference rates are temporarily unavailable from the primary and fallback FX services");
+  }
+
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    throw new FxQuoteError(502, "The fallback reference rate service returned an invalid response");
+  }
+
+  const updatedAt = Date.parse(`${body?.date}T00:00:00.000Z`);
+  const phpPerKrw = body?.rates?.PHP;
+  const usdPerKrw = body?.rates?.USD;
+  if (
+    !Number.isFinite(updatedAt) ||
+    updatedAt > now + 60_000 ||
+    now - updatedAt > MAX_REFERENCE_RATE_AGE_MS ||
+    typeof phpPerKrw !== "number" ||
+    !Number.isFinite(phpPerKrw) ||
+    phpPerKrw <= 0 ||
+    typeof usdPerKrw !== "number" ||
+    !Number.isFinite(usdPerKrw) ||
+    usdPerKrw <= 0
+  ) {
+    throw new FxQuoteError(502, "The fallback reference rate service returned missing or stale KRW rates");
+  }
+
+  return {
+    phpPerKrw,
+    usdPerKrw,
+    updatedAt: new Date(updatedAt).toISOString()
+  };
+}
+
+async function getLatestUsdtUsdRate(fetchImpl, now) {
+  let response;
+  try {
+    response = await fetchImpl(
+      "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd&include_last_updated_at=true",
+      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
+    );
+  } catch (error) {
+    if (error instanceof TypeError || error?.name === "AbortError" || error?.name === "TimeoutError") {
+      return null;
+    }
+    throw error;
+  }
+  if (!response.ok) return null;
+
+  let body;
+  try {
+    body = await response.json();
+  } catch (error) {
+    if (error instanceof SyntaxError) return null;
+    throw error;
+  }
+
+  const usdPerUsdt = body?.tether?.usd;
+  const updatedAt = Number(body?.tether?.last_updated_at) * 1000;
+  if (
+    typeof usdPerUsdt !== "number" ||
+    !Number.isFinite(usdPerUsdt) ||
+    usdPerUsdt <= 0 ||
+    !Number.isFinite(updatedAt) ||
+    updatedAt > now + 60_000 ||
+    now - updatedAt > MAX_USDT_RATE_AGE_MS
+  ) {
+    return null;
+  }
+
+  return { usdPerUsdt, updatedAt: new Date(updatedAt).toISOString() };
+}
+
 export async function getLatestMarketingKrwRates(
   apiKey,
   fxFetchImpl = fetch,
   marketFetchImpl = fetch,
-  now = Date.now()
+  now = Date.now(),
+  fallbackFetchImpl = fetch
 ) {
-  const krwPhpRate = await getLatestPhpRate("KRW", apiKey, fxFetchImpl, now);
-  let usdtRate = null;
-  const [usdPhpResult, marketResult] = await Promise.allSettled([
-    getLatestPhpRate("USD", apiKey, fxFetchImpl, now),
-    (async () => {
-      try {
-        return await marketFetchImpl(
-          "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd&include_last_updated_at=true",
-          { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
-        );
-      } catch (error) {
-        if (error instanceof TypeError || error?.name === "AbortError" || error?.name === "TimeoutError") {
-          return null;
-        }
-        throw error;
-      }
-    })()
+  let phpPerKrw;
+  let usdPerKrw = null;
+  let fxUpdatedAt;
+  let source;
+  let fxUsdRequest = null;
+
+  try {
+    const krwPhpRate = await getLatestPhpRate("KRW", apiKey, fxFetchImpl, now);
+    phpPerKrw = krwPhpRate.phpPerUnit;
+    fxUpdatedAt = krwPhpRate.updatedAt;
+    source = "CurrencyAPI";
+    fxUsdRequest = getLatestPhpRate("USD", apiKey, fxFetchImpl, now);
+  } catch (error) {
+    if (!(error instanceof FxQuoteError)) throw error;
+    const fallbackRates = await getLatestFallbackKrwRates(fallbackFetchImpl, now);
+    phpPerKrw = fallbackRates.phpPerKrw;
+    usdPerKrw = fallbackRates.usdPerKrw;
+    fxUpdatedAt = fallbackRates.updatedAt;
+    source = "Frankfurter";
+  }
+
+  const [usdPhpResult, usdtUsdResult] = await Promise.allSettled([
+    fxUsdRequest,
+    getLatestUsdtUsdRate(marketFetchImpl, now)
   ]);
   if (usdPhpResult.status === "rejected" && !(usdPhpResult.reason instanceof FxQuoteError)) {
     throw usdPhpResult.reason;
   }
-  if (marketResult.status === "rejected") {
-    throw marketResult.reason;
+  if (usdtUsdResult.status === "rejected") {
+    throw usdtUsdResult.reason;
+  }
+  if (usdPerKrw == null && fxUsdRequest && usdPhpResult.status === "fulfilled") {
+    usdPerKrw = phpPerKrw / usdPhpResult.value.phpPerUnit;
   }
 
-  if (usdPhpResult.status === "fulfilled" && marketResult.value?.ok) {
-    const response = marketResult.value;
-    let body;
-    try {
-      body = await response.json();
-    } catch (error) {
-      if (!(error instanceof SyntaxError)) throw error;
+  let usdtRate = null;
+  const usdtUsdRate = usdtUsdResult.value;
+  if (usdPerKrw != null && usdtUsdRate) {
+    const usdtPerKrw = usdPerKrw / usdtUsdRate.usdPerUsdt;
+    if (!Number.isFinite(usdtPerKrw) || usdtPerKrw <= 0) {
+      throw new FxQuoteError(502, "The rate services returned an invalid KRW/USDT conversion");
     }
-
-    const usdPerUsdt = body?.tether?.usd;
-    const usdtUpdatedAt = Number(body?.tether?.last_updated_at) * 1000;
-    if (
-      typeof usdPerUsdt === "number" &&
-      Number.isFinite(usdPerUsdt) &&
-      usdPerUsdt > 0 &&
-      Number.isFinite(usdtUpdatedAt) &&
-      usdtUpdatedAt <= now + 60_000 &&
-      now - usdtUpdatedAt <= MAX_USDT_RATE_AGE_MS
-    ) {
-      const usdtPerKrw = krwPhpRate.phpPerUnit / usdPhpResult.value.phpPerUnit / usdPerUsdt;
-      if (!Number.isFinite(usdtPerKrw) || usdtPerKrw <= 0) {
-        throw new FxQuoteError(502, "The rate services returned an invalid KRW/USDT conversion");
-      }
-      usdtRate = {
-        perKrw: usdtPerKrw,
-        fxUpdatedAt: krwPhpRate.updatedAt,
-        usdFxUpdatedAt: usdPhpResult.value.updatedAt,
-        usdtUsdUpdatedAt: new Date(usdtUpdatedAt).toISOString()
-      };
-    }
-  } else {
-    marketResult.value?.body?.cancel();
+    usdtRate = {
+      perKrw: usdtPerKrw,
+      fxUpdatedAt,
+      usdFxUpdatedAt: usdPhpResult.status === "fulfilled" && usdPhpResult.value
+        ? usdPhpResult.value.updatedAt
+        : fxUpdatedAt,
+      usdtUsdUpdatedAt: usdtUsdRate.updatedAt
+    };
   }
 
   return {
     retrievedAt: new Date(now).toISOString(),
+    source,
     rates: {
       PHP: {
-        perKrw: krwPhpRate.phpPerUnit,
-        updatedAt: krwPhpRate.updatedAt
+        perKrw: phpPerKrw,
+        updatedAt: fxUpdatedAt
       },
       ...(usdtRate ? { USDT: usdtRate } : {})
     }

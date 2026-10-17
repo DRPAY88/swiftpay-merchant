@@ -114,6 +114,53 @@ test("marketing reference rates remain available for PHP when USDT providers fai
   assert.equal("USDT" in rates.rates, false);
 });
 
+test("marketing reference rates fall back to daily Frankfurter data when CurrencyAPI is unavailable", async () => {
+  let fallbackUrl;
+  const rates = await getLatestMarketingKrwRates(
+    "test-key",
+    async () => new Response("{}", { status: 429 }),
+    async () => Response.json({
+      tether: { usd: 1.001, last_updated_at: Math.floor((now - 30_000) / 1000) }
+    }),
+    now,
+    async (url) => {
+      fallbackUrl = url.toString();
+      return Response.json({
+        base: "KRW",
+        date: new Date(now).toISOString().slice(0, 10),
+        rates: { PHP: 0.04, USD: 0.0007 }
+      });
+    }
+  );
+
+  assert.equal(
+    fallbackUrl,
+    "https://api.frankfurter.dev/v1/latest?base=KRW&symbols=PHP,USD"
+  );
+  assert.equal(rates.source, "Frankfurter");
+  assert.equal(rates.rates.PHP.perKrw, 0.04);
+  assert.equal(rates.rates.PHP.updatedAt, new Date(now).toISOString().slice(0, 10) + "T00:00:00.000Z");
+  assert.equal(rates.rates.USDT.perKrw, 0.0007 / 1.001);
+});
+
+test("marketing fallback rejects stale daily rates", async () => {
+  const staleDate = new Date(now - 5 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+  await assert.rejects(
+    getLatestMarketingKrwRates(
+      "test-key",
+      async () => new Response("{}", { status: 429 }),
+      async () => new Response("{}", { status: 429 }),
+      now,
+      async () => Response.json({
+        base: "KRW",
+        date: staleDate,
+        rates: { PHP: 0.04, USD: 0.0007 }
+      })
+    ),
+    (error) => error instanceof FxQuoteError && error.status === 502 && /stale KRW rates/.test(error.message)
+  );
+});
+
 test("marketing reference rates reject stale or unavailable USDT market prices without losing PHP", async () => {
   const fxFetch = async (url) => Response.json({
     meta: { last_updated_at: new Date(now).toISOString() },

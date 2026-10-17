@@ -17,6 +17,8 @@ let server;
 let baseUrl;
 let marketRateRequestCount = 0;
 let qrPaymentSequence = 0;
+let fxResponseStatus = 200;
+let apiClock = Date.now();
 
 before(async () => {
   const database = newDb();
@@ -78,14 +80,20 @@ before(async () => {
       return Response.json({
         meta: { last_updated_at: new Date().toISOString() },
         data: { PHP: { code: "PHP", value } }
-      });
+      }, { status: fxResponseStatus });
     },
+    referenceRateFetchImpl: async () => Response.json({
+      base: "KRW",
+      date: new Date(apiClock).toISOString().slice(0, 10),
+      rates: { PHP: 0.041, USD: 0.00071 }
+    }),
     marketRateFetchImpl: async () => {
       marketRateRequestCount += 1;
       return Response.json({
         tether: { usd: 1.002, last_updated_at: Math.floor(Date.now() / 1000) }
       });
-    }
+    },
+    clock: () => apiClock
   });
   server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
@@ -122,7 +130,7 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /id="market-rates"/);
   assert.match(homepageHtml, /Reference estimate only—not a DRPAY offer/);
   assert.match(homepageHtml, /href="\/site\.css\?v=2"/);
-  assert.match(homepageHtml, /src="\/rates\.js\?v=2"/);
+  assert.match(homepageHtml, /src="\/rates\.js\?v=3"/);
 
   const ratesScript = await fetch(`${baseUrl}/rates.js`);
   assert.equal(ratesScript.status, 200);
@@ -178,6 +186,22 @@ test("public marketing rates are sourced, cached, and labeled as reference value
   const cachedResponse = await fetch(`${baseUrl}/api/marketing/rates`);
   assert.equal(cachedResponse.status, 200);
   assert.equal(marketRateRequestCount, 1);
+});
+
+test("public marketing rates fall back when CurrencyAPI has reached its request limit", async () => {
+  apiClock += 60_001;
+  fxResponseStatus = 429;
+  try {
+    const response = await fetch(`${baseUrl}/api/marketing/rates`);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.source, "Frankfurter");
+    assert.equal(result.rates.PHP.perKrw, 0.041);
+    assert.equal(result.rates.USDT.perKrw, 0.00071 / 1.002);
+  } finally {
+    fxResponseStatus = 200;
+    apiClock += 60_001;
+  }
 });
 
 test("admin merchant lifecycle suspends, removes, and reactivates sign-in access", async () => {

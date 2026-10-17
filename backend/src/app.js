@@ -434,6 +434,7 @@ export function createApp({
   config,
   fetchImpl = fetch,
   fxFetchImpl = fetch,
+  referenceRateFetchImpl = fetch,
   marketRateFetchImpl = fetch,
   verifyAccessToken,
   requestOtp,
@@ -472,7 +473,8 @@ export function createApp({
           config.currencyApiKey,
           fxFetchImpl,
           marketRateFetchImpl,
-          clock()
+          clock(),
+          referenceRateFetchImpl
         );
         marketingRates = result;
         marketingRatesLoadedAt = clock();

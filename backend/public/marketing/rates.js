@@ -10,6 +10,7 @@
   const updated = document.getElementById("market-rates-updated");
   let rates = null;
   let isStale = false;
+  let isFallbackRates = false;
 
   function setStatus(message, state) {
     status.textContent = message;
@@ -42,7 +43,11 @@
       usdtEstimate.textContent = "—";
       if (rates) {
         setStatus(
-          isStale ? "Showing last available rates" : "Enter a positive KRW amount",
+          isStale
+            ? "Showing last available rates"
+            : isFallbackRates
+              ? "Daily reference rates"
+              : "Enter a positive KRW amount",
           isStale ? "stale" : "input"
         );
       }
@@ -53,7 +58,13 @@
       ? `≈ ${formatEstimate(amount * rates.USDT.perKrw, "USDT")}`
       : "USDT rate unavailable";
     setStatus(
-      isStale ? "Showing last available rates" : rates.USDT ? "Indicative rates" : "PHP estimate only",
+      isStale
+        ? "Showing last available rates"
+        : isFallbackRates
+          ? "Indicative rates · daily reference source"
+          : rates.USDT
+            ? "Indicative rates"
+            : "PHP estimate only",
       isStale ? "stale" : rates.USDT ? "live" : "partial"
     );
   }
@@ -82,13 +93,17 @@
 
       rates = result.rates;
       isStale = false;
+      isFallbackRates = result.source === "Frankfurter";
+      const sourceLabel = result.source === "Frankfurter"
+        ? "Frankfurter daily reference"
+        : "CurrencyAPI";
       phpRate.textContent = `₩1 = ${formatRate(rates.PHP.perKrw, "PHP")} PHP`;
       usdtRate.textContent = rates.USDT
         ? `₩1 ≈ ${formatRate(rates.USDT.perKrw, "USDT")} USDT`
         : "USDT rate unavailable";
-      updated.textContent = `Last checked ${formatTime(result.retrievedAt)} · KRW/PHP data: ${formatTime(rates.PHP.updatedAt)}${
+      updated.textContent = `Source: ${sourceLabel} · Last checked ${formatTime(result.retrievedAt)} · KRW/PHP data: ${formatTime(rates.PHP.updatedAt)}${
         rates.USDT
-          ? ` · USD/PHP data: ${formatTime(rates.USDT.usdFxUpdatedAt)} · USDT/USD data: ${formatTime(rates.USDT.usdtUsdUpdatedAt)}`
+          ? ` · USD FX data: ${formatTime(rates.USDT.usdFxUpdatedAt)} · USDT/USD data: ${formatTime(rates.USDT.usdtUsdUpdatedAt)}`
           : ""
       }`;
       status.dataset.state = "";
