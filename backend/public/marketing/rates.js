@@ -9,6 +9,7 @@
   const usdtEstimate = document.getElementById("market-rates-usdt-estimate");
   const updated = document.getElementById("market-rates-updated");
   let rates = null;
+  let isStale = false;
 
   function setStatus(message, state) {
     status.textContent = message;
@@ -39,16 +40,26 @@
     if (!rates || !Number.isFinite(amount) || amount <= 0) {
       phpEstimate.textContent = "—";
       usdtEstimate.textContent = "—";
-      if (rates) setStatus("Enter a positive KRW amount", "input");
+      if (rates) {
+        setStatus(
+          isStale ? "Showing last available rates" : "Enter a positive KRW amount",
+          isStale ? "stale" : "input"
+        );
+      }
       return;
     }
-    setStatus("Indicative rates", "live");
     phpEstimate.textContent = formatEstimate(amount * rates.PHP.perKrw, "PHP");
-    usdtEstimate.textContent = `≈ ${formatEstimate(amount * rates.USDT.perKrw, "USDT")}`;
+    usdtEstimate.textContent = rates.USDT
+      ? `≈ ${formatEstimate(amount * rates.USDT.perKrw, "USDT")}`
+      : "USDT rate unavailable";
+    setStatus(
+      isStale ? "Showing last available rates" : rates.USDT ? "Indicative rates" : "PHP estimate only",
+      isStale ? "stale" : rates.USDT ? "live" : "partial"
+    );
   }
 
   async function refreshRates() {
-    setStatus("Updating rates…", "loading");
+    if (!rates) setStatus("Updating rates…", "loading");
     try {
       const response = await fetch("/api/marketing/rates", {
         headers: { Accept: "application/json" },
@@ -58,25 +69,43 @@
       const result = await response.json();
       if (
         !Number.isFinite(result?.rates?.PHP?.perKrw) ||
-        result.rates.PHP.perKrw <= 0 ||
-        !Number.isFinite(result?.rates?.USDT?.perKrw) ||
-        result.rates.USDT.perKrw <= 0
+        result.rates.PHP.perKrw <= 0
       ) {
         throw new Error("Rate response was invalid");
       }
+      if (
+        result.rates.USDT &&
+        (!Number.isFinite(result.rates.USDT.perKrw) || result.rates.USDT.perKrw <= 0)
+      ) {
+        throw new Error("USDT rate response was invalid");
+      }
 
       rates = result.rates;
+      isStale = false;
       phpRate.textContent = `₩1 = ${formatRate(rates.PHP.perKrw, "PHP")} PHP`;
-      usdtRate.textContent = `₩1 ≈ ${formatRate(rates.USDT.perKrw, "USDT")} USDT`;
-      updated.textContent = `Last checked ${formatTime(result.retrievedAt)} · FX data: ${formatTime(rates.PHP.updatedAt)} / ${formatTime(rates.USDT.usdFxUpdatedAt)} · USDT/USD data: ${formatTime(rates.USDT.usdtUsdUpdatedAt)}`;
+      usdtRate.textContent = rates.USDT
+        ? `₩1 ≈ ${formatRate(rates.USDT.perKrw, "USDT")} USDT`
+        : "USDT rate unavailable";
+      updated.textContent = `Last checked ${formatTime(result.retrievedAt)} · KRW/PHP data: ${formatTime(rates.PHP.updatedAt)}${
+        rates.USDT
+          ? ` · USD/PHP data: ${formatTime(rates.USDT.usdFxUpdatedAt)} · USDT/USD data: ${formatTime(rates.USDT.usdtUsdUpdatedAt)}`
+          : ""
+      }`;
+      status.dataset.state = "";
       renderEstimates();
     } catch {
-      rates = null;
-      phpRate.textContent = "Rate unavailable";
-      usdtRate.textContent = "Rate unavailable";
-      updated.textContent = "";
-      setStatus("Rates unavailable", "error");
-      renderEstimates();
+      if (rates) {
+        isStale = true;
+        setStatus("Showing last available rates", "stale");
+        if (!updated.textContent.includes("Refresh failed;")) {
+          updated.textContent += " · Refresh failed; these values may be outdated.";
+        }
+      } else {
+        phpRate.textContent = "Rate unavailable";
+        usdtRate.textContent = "Rate unavailable";
+        updated.textContent = "";
+        setStatus("Rates unavailable", "error");
+      }
     }
   }
 

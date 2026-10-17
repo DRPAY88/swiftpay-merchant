@@ -233,7 +233,7 @@ h1 span,
 .download-note {
   margin: 19px 0 0;
   color: #7c8ba0;
-  font-size: 12px;
+  font-size: 8px;
 }
 
 .download-note span {
@@ -378,7 +378,7 @@ h1 span,
 
 .feature-row small {
   color: #8795a8;
-  font-size: 10px;
+  font-size: 8px;
 }
 
 .feature-symbol {
@@ -800,7 +800,7 @@ h1 span,
   gap: 10px;
   margin: 15px 2px;
   color: #98a5b5;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 1px;
 }
@@ -888,7 +888,7 @@ h1 span,
 .market-rates-heading .eyebrow {
   margin-bottom: 3px;
   color: #52759a;
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.9px;
 }
 
@@ -915,7 +915,7 @@ h1 span,
   border: 1px solid #e4e9ef;
   border-radius: 999px;
   box-shadow: 0 1px 2px rgba(27, 53, 82, 0.04);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
@@ -943,7 +943,9 @@ h1 span,
 }
 
 .market-rates-status[data-state="error"],
-.market-rates-status[data-state="input"] {
+.market-rates-status[data-state="input"],
+.market-rates-status[data-state="partial"],
+.market-rates-status[data-state="stale"] {
   color: #966b24;
   background: #fff7e8;
   border-color: #f3e8cb;
@@ -963,7 +965,7 @@ h1 span,
   gap: 10px;
   margin-bottom: 7px;
   color: #506783;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.7px;
   line-height: 1.4;
@@ -971,7 +973,7 @@ h1 span,
 
 .market-rates-label small {
   color: #91a0b2;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -1056,7 +1058,7 @@ h1 span,
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
@@ -1146,7 +1148,7 @@ h1 span,
 
 .market-rate-card-heading small {
   color: #8998aa;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.3px;
 }
@@ -1178,7 +1180,7 @@ h1 span,
   min-height: 12px;
   margin-top: 5px;
   color: #8191a5;
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -1186,7 +1188,7 @@ h1 span,
 .market-rates-updated {
   margin: 11px 0 0;
   color: #78899e;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.55;
   font-variant-numeric: tabular-nums;
 }
@@ -1224,14 +1226,14 @@ h1 span,
 .market-rates-notice p {
   margin: 0;
   color: #786b50;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.6;
 }
 
 .market-rates-sources {
   margin: 8px 0 0;
   color: #8291a4;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.7;
 }
 
@@ -2163,23 +2165,31 @@ h1 span,
   }
 
   .market-rates-heading .eyebrow {
-    font-size: 7px;
+    font-size: 10px;
   }
 
   .market-rates-status {
     max-width: 112px;
     gap: 5px;
     padding-inline: 7px;
-    font-size: 7px;
+    font-size: 11px;
   }
 
   .market-rates-status[data-state="error"],
-  .market-rates-status[data-state="input"] {
+  .market-rates-status[data-state="input"],
+  .market-rates-status[data-state="partial"],
+  .market-rates-status[data-state="stale"] {
     max-width: 112px;
+  }
+
+  .market-rates-label,
+  .market-rates-label small {
+    font-size: 11px;
   }
 
   .market-rates-intro {
     margin-left: 42px;
+    font-size: 12px;
   }
 
   .market-rates-results {
@@ -2196,21 +2206,24 @@ h1 span,
   }
 
   .market-rate-card-heading strong {
-    font-size: 9px;
+    font-size: 12px;
   }
 
+  .market-rate-card-heading small {
+    font-size: 10px;
+  }
   .market-rate-amount {
     font-size: clamp(15px, 4.7vw, 20px);
   }
 
   .market-rate-unit,
   .market-rates-updated {
-    font-size: 8px;
+    font-size: 11px;
   }
 
   .market-rates-notice p,
   .market-rates-sources {
-    font-size: 8px;
+    font-size: 11px;
   }
 
   .fx-option {
@@ -2219,7 +2232,7 @@ h1 span,
 
   .fx-tag {
     padding: 5px 6px;
-    font-size: 7px;
+    font-size: 10px;
     letter-spacing: 0.35px;
   }
 

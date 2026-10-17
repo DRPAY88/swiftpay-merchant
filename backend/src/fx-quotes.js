@@ -78,47 +78,63 @@ export async function getLatestMarketingKrwRates(
   marketFetchImpl = fetch,
   now = Date.now()
 ) {
-  const [krwPhpRate, usdPhpRate] = await Promise.all([
-    getLatestPhpRate("KRW", apiKey, fxFetchImpl, now),
-    getLatestPhpRate("USD", apiKey, fxFetchImpl, now)
+  const krwPhpRate = await getLatestPhpRate("KRW", apiKey, fxFetchImpl, now);
+  let usdtRate = null;
+  const [usdPhpResult, marketResult] = await Promise.allSettled([
+    getLatestPhpRate("USD", apiKey, fxFetchImpl, now),
+    (async () => {
+      try {
+        return await marketFetchImpl(
+          "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd&include_last_updated_at=true",
+          { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
+        );
+      } catch (error) {
+        if (error instanceof TypeError || error?.name === "AbortError" || error?.name === "TimeoutError") {
+          return null;
+        }
+        throw error;
+      }
+    })()
   ]);
-
-  let response;
-  try {
-    response = await marketFetchImpl(
-      "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd&include_last_updated_at=true",
-      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
-    );
-  } catch {
-    throw new FxQuoteError(503, "The USDT market rate service is temporarily unavailable");
+  if (usdPhpResult.status === "rejected" && !(usdPhpResult.reason instanceof FxQuoteError)) {
+    throw usdPhpResult.reason;
   }
-  if (!response.ok) {
-    throw new FxQuoteError(503, "The USDT market rate service could not provide a rate; try again later");
+  if (marketResult.status === "rejected") {
+    throw marketResult.reason;
   }
 
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    throw new FxQuoteError(502, "The USDT market rate service returned an invalid response");
-  }
+  if (usdPhpResult.status === "fulfilled" && marketResult.value?.ok) {
+    const response = marketResult.value;
+    let body;
+    try {
+      body = await response.json();
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+    }
 
-  const usdPerUsdt = body?.tether?.usd;
-  const usdtUpdatedAt = Number(body?.tether?.last_updated_at) * 1000;
-  if (
-    typeof usdPerUsdt !== "number" ||
-    !Number.isFinite(usdPerUsdt) ||
-    usdPerUsdt <= 0 ||
-    !Number.isFinite(usdtUpdatedAt) ||
-    usdtUpdatedAt > now + 60_000 ||
-    now - usdtUpdatedAt > MAX_USDT_RATE_AGE_MS
-  ) {
-    throw new FxQuoteError(502, "The USDT market rate service returned a missing or stale price");
-  }
-
-  const usdtPerKrw = krwPhpRate.phpPerUnit / usdPhpRate.phpPerUnit / usdPerUsdt;
-  if (!Number.isFinite(usdtPerKrw) || usdtPerKrw <= 0) {
-    throw new FxQuoteError(502, "The rate services returned an invalid KRW/USDT conversion");
+    const usdPerUsdt = body?.tether?.usd;
+    const usdtUpdatedAt = Number(body?.tether?.last_updated_at) * 1000;
+    if (
+      typeof usdPerUsdt === "number" &&
+      Number.isFinite(usdPerUsdt) &&
+      usdPerUsdt > 0 &&
+      Number.isFinite(usdtUpdatedAt) &&
+      usdtUpdatedAt <= now + 60_000 &&
+      now - usdtUpdatedAt <= MAX_USDT_RATE_AGE_MS
+    ) {
+      const usdtPerKrw = krwPhpRate.phpPerUnit / usdPhpResult.value.phpPerUnit / usdPerUsdt;
+      if (!Number.isFinite(usdtPerKrw) || usdtPerKrw <= 0) {
+        throw new FxQuoteError(502, "The rate services returned an invalid KRW/USDT conversion");
+      }
+      usdtRate = {
+        perKrw: usdtPerKrw,
+        fxUpdatedAt: krwPhpRate.updatedAt,
+        usdFxUpdatedAt: usdPhpResult.value.updatedAt,
+        usdtUsdUpdatedAt: new Date(usdtUpdatedAt).toISOString()
+      };
+    }
+  } else {
+    marketResult.value?.body?.cancel();
   }
 
   return {
@@ -128,12 +144,7 @@ export async function getLatestMarketingKrwRates(
         perKrw: krwPhpRate.phpPerUnit,
         updatedAt: krwPhpRate.updatedAt
       },
-      USDT: {
-        perKrw: usdtPerKrw,
-        fxUpdatedAt: krwPhpRate.updatedAt,
-        usdFxUpdatedAt: usdPhpRate.updatedAt,
-        usdtUsdUpdatedAt: new Date(usdtUpdatedAt).toISOString()
-      }
+      ...(usdtRate ? { USDT: usdtRate } : {})
     }
   };
 }

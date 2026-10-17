@@ -92,7 +92,10 @@ fun ProfileScreen() {
     val textColor = MaterialTheme.colorScheme.onSurface
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
     val borderColor = MaterialTheme.colorScheme.outlineVariant
-    val accountName = merchantAlias?.takeIf { it.isNotBlank() } ?: "Merchant account"
+    val isCustomer = signedInRole == "customer"
+    val accountName = if (isCustomer) "Personal wallet" else {
+        merchantAlias?.takeIf { it.isNotBlank() } ?: "Merchant account"
+    }
     val canEnableBiometrics = hasDevicePin && biometricAuthenticator?.isAvailable() == true
 
     fun onBiometricToggle(enabled: Boolean) {
@@ -213,8 +216,10 @@ fun ProfileScreen() {
                         secondaryTextColor
                     )
                     Spacer(Modifier.height(14.dp))
-                    ProfileDetailRow("Payment link alias", merchantAlias?.takeIf { it.isNotBlank() } ?: "Not set", textColor, secondaryTextColor)
-                    Spacer(Modifier.height(14.dp))
+                    if (!isCustomer) {
+                        ProfileDetailRow("Payment link alias", merchantAlias?.takeIf { it.isNotBlank() } ?: "Not set", textColor, secondaryTextColor)
+                        Spacer(Modifier.height(14.dp))
+                    }
                     ProfileDetailRow("App version", "${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})", textColor, secondaryTextColor)
                 }
             }

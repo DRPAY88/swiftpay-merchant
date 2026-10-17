@@ -32,6 +32,12 @@ data class BackendQrPaymentRequest(
 data class BackendWalletTopupRequest(val amount: Double)
 
 @Serializable
+data class BackendWalletKrwTopupRequest(
+    val quoteToken: String,
+    val paymentApp: String
+)
+
+@Serializable
 data class BackendKrwPhpQrQuoteRequest(val amountKrw: Int)
 
 @Serializable
@@ -287,6 +293,12 @@ interface SwiftPayBackendApi {
 
     @POST("v1/wallet/topups/qrph")
     suspend fun createWalletTopupQr(@Body request: BackendWalletTopupRequest): Response<BackendQrPaymentResponse>
+
+    @POST("v1/wallet/topups/qrph/quote")
+    suspend fun getWalletKrwPhpTopupQuote(@Body request: BackendKrwPhpQrQuoteRequest): Response<BackendKrwPhpQrQuoteResponse>
+
+    @POST("v1/wallet/topups/qrph")
+    suspend fun createWalletKrwTopupQr(@Body request: BackendWalletKrwTopupRequest): Response<BackendQrPaymentResponse>
 
     @GET("v1/wallet/topups/{referenceNo}")
     suspend fun getWalletTopupStatus(@Path("referenceNo") referenceNo: String): Response<BackendWalletTopupStatus>

@@ -8,6 +8,7 @@ const config = {
   swiftPayBaseUrl: new URL("https://provider.example/api/"),
   swiftPayAccessKey: "A".repeat(32),
   swiftPaySecretKey: "S".repeat(32),
+  sessionSigningKey: "test-session-signing-key-with-sufficient-length",
   currencyApiKey: "test-currency-key"
 };
 const scope = "swiftpay:payments:read swiftpay:payments:write swiftpay:disbursements:read swiftpay:disbursements:write";
@@ -15,6 +16,7 @@ let store;
 let server;
 let baseUrl;
 let marketRateRequestCount = 0;
+let qrPaymentSequence = 0;
 
 before(async () => {
   const database = newDb();
@@ -40,6 +42,7 @@ before(async () => {
       if (token === "merchant-token") return { sub: "merchant@example.com", scope };
       if (token === "customer-token") return { sub: "customer@example.com", scope };
       if (token === "second-customer-token") return { sub: "second-customer@example.com", scope };
+      if (token === "krw-customer-token") return { sub: "krw-customer@example.com", scope };
       if (token === "onboarding-merchant-token") return { sub: "onboarding@example.com", scope };
       if (token === "registration-token") {
         return { sub: "applicant@example.com", role: "registration_applicant", scope: "kyb:submit" };
@@ -53,12 +56,18 @@ before(async () => {
       if (url.pathname.endsWith("/bootstrap/qrph")) {
         const request = JSON.parse(options.body);
         return Response.json({
-          paymentId: "wallet-topup-payment-1",
+          paymentId: `wallet-topup-payment-${++qrPaymentSequence}`,
           paymentStatus: "PENDING",
           referenceNo: request.x_reference_no,
           amount: request.x_amount,
           currency: request.x_currency,
           qrCode: "test-qr-payload"
+        });
+      }
+      if (url.pathname.endsWith("/payments/qrph/image")) {
+        return new Response(Buffer.from("test-qr-image"), {
+          status: 200,
+          headers: { "content-type": "image/png" }
         });
       }
       return new Response(JSON.stringify({ balance: 75, number: "000123" }), { status: 200 });
@@ -93,13 +102,12 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.equal(homepage.status, 200);
   const homepageHtml = await homepage.text();
   assert.match(homepageHtml, /Korean Won in\./);
-  assert.match(homepageHtml, /Philippine pesos or USDT on TRC20/);
+  assert.match(homepageHtml, /PHP in your wallet/);
   assert.match(homepageHtml, /KRW → PHP/);
   assert.match(homepageHtml, /KRW → USDT/);
   assert.match(homepageHtml, /KRW → USDT \(TRC20\)/);
-  assert.match(homepageHtml, /without a separate remittance transfer/);
-  assert.match(homepageHtml, /Not available yet/);
-  assert.match(homepageHtml, /Direct KRW exchange is planned, but not available in the current app/);
+  assert.match(homepageHtml, /PHP wallet top-ups available/);
+  assert.match(homepageHtml, /USDT conversion is not available yet/);
   assert.match(homepageHtml, /Create an account with email verification/);
   assert.match(homepageHtml, /manage your own wallet and activity/);
   assert.match(homepageHtml, /no KYB or document submission/);
@@ -108,6 +116,7 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /Concept previews, not screenshots of the current app/);
   assert.match(homepageHtml, /id="promo"/);
   assert.match(homepageHtml, /DRPAY IN 15 SECONDS/);
+  assert.match(homepageHtml, /Version 1\.0\.18/);
   assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=2"/);
   assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=2"/);
   assert.match(homepageHtml, /id="market-rates"/);
@@ -132,7 +141,7 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.equal(download.status, 302);
   assert.equal(
     download.headers.get("location"),
-    "https://github.com/stden16/swiftpay-merchant/releases/download/v1.0.17/SwiftPay-Merchant-v1.0.17.apk"
+    "https://github.com/stden16/swiftpay-merchant/releases/download/v1.0.18/SwiftPay-Merchant-v1.0.18.apk"
   );
 
   const page = await fetch(`${baseUrl}/admin/`);
@@ -677,6 +686,7 @@ test("email customers receive isolated wallet balances and only settled QR top-u
   assert.equal(qr.currency, "PHP");
   assert.equal(qr.status, "PENDING");
   assert.match(qr.referenceNo, /^WLT-/);
+  assert.equal(qr.qrImageBase64, Buffer.from("test-qr-image").toString("base64"));
   assert.equal(Number(await store.getCustomerWalletBalance("customer@example.com")), 0);
 
   await store.recordWebhookEvent({
@@ -708,6 +718,56 @@ test("email customers receive isolated wallet balances and only settled QR top-u
     headers: secondCustomerHeaders
   });
   assert.deepEqual(await otherHistory.json(), []);
+
+  await store.ensureEmailCustomer("krw-customer@example.com");
+  const krwCustomerHeaders = {
+    authorization: "Bearer krw-customer-token",
+    "content-type": "application/json"
+  };
+  const quoteResponse = await fetch(`${baseUrl}/v1/wallet/topups/qrph/quote`, {
+    method: "POST",
+    headers: krwCustomerHeaders,
+    body: JSON.stringify({ amountKrw: 100_000 })
+  });
+  assert.equal(quoteResponse.status, 200);
+  const quote = await quoteResponse.json();
+  assert.equal(quote.customerAmountKrw, 100_000);
+  assert.equal(quote.settlementAmountPhp, 4_000);
+  assert.equal(quote.settlementCurrency, "PHP");
+
+  const krwTopupResponse = await fetch(`${baseUrl}/v1/wallet/topups/qrph`, {
+    method: "POST",
+    headers: krwCustomerHeaders,
+    body: JSON.stringify({ quoteToken: quote.quoteToken, paymentApp: "TOSS" })
+  });
+  assert.equal(krwTopupResponse.status, 201);
+  const krwTopup = await krwTopupResponse.json();
+  assert.equal(krwTopup.amount, 4_000);
+  assert.equal(krwTopup.currency, "PHP");
+  assert.equal(krwTopup.customerAmountKrw, 100_000);
+  assert.equal(krwTopup.settlementCurrency, "PHP");
+  assert.equal(Number(await store.getCustomerWalletBalance("krw-customer@example.com")), 0);
+  const replayedQuote = await fetch(`${baseUrl}/v1/wallet/topups/qrph`, {
+    method: "POST",
+    headers: krwCustomerHeaders,
+    body: JSON.stringify({ quoteToken: quote.quoteToken, paymentApp: "TOSS" })
+  });
+  assert.equal(replayedQuote.status, 409);
+
+  await store.recordWebhookEvent({
+    eventKey: `payment:${krwTopup.paymentId}`,
+    eventType: "payment",
+    paymentId: krwTopup.paymentId,
+    referenceNo: krwTopup.referenceNo,
+    status: "EXECUTED",
+    amount: 4_000,
+    currency: "PHP"
+  });
+  assert.equal(Number(await store.getCustomerWalletBalance("krw-customer@example.com")), 4_000);
+  const krwWalletActivity = await fetch(`${baseUrl}/v1/wallet/activity`, {
+    headers: krwCustomerHeaders
+  });
+  assert.equal((await krwWalletActivity.json())[0].description, "KRW exchange (₩100,000)");
 
   const transfer = await fetch(`${baseUrl}/v1/disbursements`, {
     method: "POST",

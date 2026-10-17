@@ -11,6 +11,7 @@ import com.example.myapplication.data.api.BackendPushTokenRequest
 import com.example.myapplication.data.api.BackendPaymentLinkRequest
 import com.example.myapplication.data.api.BackendQrPaymentRequest
 import com.example.myapplication.data.api.BackendWalletTopupRequest
+import com.example.myapplication.data.api.BackendWalletKrwTopupRequest
 import com.example.myapplication.data.api.BackendWalletActivityTransaction
 import com.example.myapplication.data.api.BackendKrwPhpQrQuoteRequest
 import com.example.myapplication.data.api.BackendKrwPhpQrQuoteResponse
@@ -62,6 +63,15 @@ data class WalletTransactionHistory(
 internal fun hasCompleteRecipientName(value: String): Boolean =
     value.trim().split(Regex("\\s+")).count { it.isNotBlank() } >= 2
 
+private fun BackendKrwPhpQrQuoteResponse.matchesAmount(amountKrw: Int): Boolean =
+    customerAmountKrw == amountKrw &&
+        settlementCurrency == "PHP" &&
+        settlementAmountPhp.isFinite() &&
+        settlementAmountPhp > 0.0 &&
+        ratePhpPerKrw.isFinite() &&
+        ratePhpPerKrw > 0.0 &&
+        quoteToken.isNotBlank()
+
 class SwiftPayService(
     private val backendBaseUrl: String = BuildConfig.PAYMENT_BACKEND_URL,
     private val accessToken: String? = null
@@ -91,13 +101,13 @@ class SwiftPayService(
     }
 
     private fun missingSession() = Result.failure<Nothing>(
-        IllegalStateException("Sign in with an authorized merchant account to continue")
+        IllegalStateException("Sign in with an authorized account to continue")
     )
 
     private fun <T> failure(response: Response<T>) = Result.failure<Nothing>(
         IllegalStateException(
             if (response.code() == 401) {
-                "Your merchant session has expired. Sign out and sign in again to restore wallet and transfer access."
+                "Your session has expired. Sign out and sign in again to restore wallet and transfer access."
             } else {
                 runCatching {
                     val rawBody = response.errorBody()?.string().orEmpty()
@@ -283,18 +293,64 @@ class SwiftPayService(
             if (!response.isSuccessful) return failure(response)
             val quote = response.body()
                 ?: return Result.failure(IllegalStateException("Empty KRW-to-PHP quote response"))
-            if (
-                quote.customerAmountKrw != amountKrw ||
-                quote.settlementCurrency != "PHP" ||
-                !quote.settlementAmountPhp.isFinite() ||
-                quote.settlementAmountPhp <= 0.0 ||
-                !quote.ratePhpPerKrw.isFinite() ||
-                quote.ratePhpPerKrw <= 0.0 ||
-                quote.quoteToken.isBlank()
-            ) {
+            if (!quote.matchesAmount(amountKrw)) {
                 return Result.failure(IllegalStateException("Backend returned an invalid KRW-to-PHP quote"))
             }
             Result.success(quote)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun getWalletKrwPhpTopupQuote(amountKrw: Int): Result<BackendKrwPhpQrQuoteResponse> {
+        if (!hasApiKey) return missingSession()
+        if (amountKrw !in 1..1_000_000) {
+            return Result.failure(IllegalArgumentException("Enter a KRW amount between ₩1 and ₩1,000,000."))
+        }
+        return try {
+            val response = api.getWalletKrwPhpTopupQuote(BackendKrwPhpQrQuoteRequest(amountKrw))
+            if (!response.isSuccessful) return failure(response)
+            val quote = response.body()
+                ?: return Result.failure(IllegalStateException("Empty personal-wallet KRW quote response"))
+            if (!quote.matchesAmount(amountKrw)) {
+                return Result.failure(IllegalStateException("Backend returned an invalid personal-wallet KRW quote"))
+            }
+            Result.success(quote)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun createWalletKrwTopupQr(
+        quote: BackendKrwPhpQrQuoteResponse,
+        paymentApp: String
+    ): Result<SwiftPayQrResponse> {
+        if (!hasApiKey) return missingSession()
+        if (quote.quoteToken.isBlank() || paymentApp !in setOf("TOSS", "KAKAO", "KBANK")) {
+            return Result.failure(IllegalArgumentException("A valid KRW quote and Korean payment app are required."))
+        }
+        return try {
+            val response = api.createWalletKrwTopupQr(
+                BackendWalletKrwTopupRequest(quote.quoteToken, paymentApp)
+            )
+            if (!response.isSuccessful) return failure(response)
+            val body = response.body()
+                ?: return Result.failure(IllegalStateException("Empty personal-wallet KRW QR response"))
+            if (
+                body.currency != "PHP" ||
+                body.referenceNo.isBlank() ||
+                body.customerAmountKrw != quote.customerAmountKrw ||
+                body.settlementCurrency != "PHP" ||
+                !body.amount.isFinite() ||
+                kotlin.math.round(body.amount * 100) != kotlin.math.round(quote.settlementAmountPhp * 100)
+            ) {
+                return Result.failure(IllegalStateException("Backend returned a QR payment that does not match the KRW quote"))
+            }
+            Result.success(toSwiftPayQrResponse(body))
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {

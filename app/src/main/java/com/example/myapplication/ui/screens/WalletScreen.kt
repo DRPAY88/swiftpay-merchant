@@ -57,6 +57,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.api.InternalTransaction
+import com.example.myapplication.data.api.BackendKrwPhpQrQuoteResponse
 import com.example.myapplication.data.api.SwiftPayQrResponse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -107,6 +108,9 @@ fun WalletScreen(
     var selectedFilter by remember { mutableStateOf("All") }
     var showTopupDialog by remember { mutableStateOf(false) }
     var topupAmount by remember { mutableStateOf("100") }
+    var topupCurrency by remember { mutableStateOf("PHP") }
+    var selectedPaymentApp by remember { mutableStateOf("TOSS") }
+    var krwTopupQuote by remember { mutableStateOf<BackendKrwPhpQrQuoteResponse?>(null) }
     var topupQr by remember { mutableStateOf<SwiftPayQrResponse?>(null) }
     var topupStatus by remember { mutableStateOf<String?>(null) }
     var topupError by remember { mutableStateOf<String?>(null) }
@@ -258,6 +262,8 @@ fun WalletScreen(
                         topupQr = null
                         topupStatus = null
                         topupAmount = "100"
+                        topupCurrency = "PHP"
+                        krwTopupQuote = null
                         showTopupDialog = true
                     },
                     onFilterSelected = { selectedFilter = it },
@@ -290,21 +296,63 @@ fun WalletScreen(
     if (showTopupDialog) {
         WalletTopupDialog(
             amount = topupAmount,
+            currency = topupCurrency,
+            paymentApp = selectedPaymentApp,
+            quote = krwTopupQuote,
             topup = topupQr,
             status = topupStatus,
             error = topupError,
             isLoading = isCreatingTopup,
-            onAmountChange = { topupAmount = it },
+            onAmountChange = {
+                topupAmount = it
+                krwTopupQuote = null
+            },
+            onCurrencyChange = {
+                topupCurrency = it
+                topupAmount = if (it == "KRW") "100000" else "100"
+                krwTopupQuote = null
+                topupError = null
+            },
+            onPaymentAppChange = { selectedPaymentApp = it },
+            onGetQuote = {
+                if (!isCreatingTopup) {
+                    val amountKrw = topupAmount.toIntOrNull()
+                    if (amountKrw == null || amountKrw !in 1..1_000_000) {
+                        topupError = "Enter a whole KRW amount from ₩1 to ₩1,000,000."
+                    } else {
+                        scope.launch {
+                            isCreatingTopup = true
+                            topupError = null
+                            settings.createSwiftPayService().getWalletKrwPhpTopupQuote(amountKrw)
+                                .onSuccess { krwTopupQuote = it }
+                                .onFailure { error ->
+                                    topupError = error.message ?: "Could not get a KRW-to-PHP quote."
+                                    Log.e("WalletScreen", "Personal-wallet KRW quote failed", error)
+                                }
+                            isCreatingTopup = false
+                        }
+                    }
+                }
+            },
             onCreate = {
                 if (!isCreatingTopup) {
+                    val quote = krwTopupQuote
                     val amount = topupAmount.toDoubleOrNull()
-                    if (amount == null || !amount.isFinite() || amount !in 1.0..100_000.0) {
+                    if (topupCurrency == "KRW" && quote == null) {
+                        topupError = "Get a live KRW-to-PHP quote before creating the payment QR."
+                    } else if (topupCurrency == "PHP" && (amount == null || !amount.isFinite() || amount !in 1.0..100_000.0)) {
                         topupError = "Enter an amount from PHP 1 to PHP 100,000."
                     } else {
                         scope.launch {
                             isCreatingTopup = true
                             topupError = null
-                            settings.createSwiftPayService().createWalletTopupQr(amount)
+                            val service = settings.createSwiftPayService()
+                            val result = if (topupCurrency == "KRW" && quote != null) {
+                                service.createWalletKrwTopupQr(quote, selectedPaymentApp)
+                            } else {
+                                service.createWalletTopupQr(amount!!)
+                            }
+                            result
                                 .onSuccess { response ->
                                     topupQr = response
                                     topupStatus = response.status ?: "PENDING"
@@ -323,6 +371,7 @@ fun WalletScreen(
                 topupQr = null
                 topupStatus = null
                 topupError = null
+                krwTopupQuote = null
             }
         )
     }
@@ -355,11 +404,17 @@ fun WalletScreen(
 @Composable
 private fun WalletTopupDialog(
     amount: String,
+    currency: String,
+    paymentApp: String,
+    quote: BackendKrwPhpQrQuoteResponse?,
     topup: SwiftPayQrResponse?,
     status: String?,
     error: String?,
     isLoading: Boolean,
     onAmountChange: (String) -> Unit,
+    onCurrencyChange: (String) -> Unit,
+    onPaymentAppChange: (String) -> Unit,
+    onGetQuote: () -> Unit,
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -376,20 +431,68 @@ private fun WalletTopupDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (topup == null) "Add money" else "Scan to top up") },
+        title = { Text(if (topup != null) "Scan to top up" else if (currency == "KRW") "Exchange KRW" else "Add money") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 if (topup == null) {
-                    Text("Create a one-time QR Ph payment. Your personal PHP wallet is credited after SwiftPay verifies settlement.")
+                    Text("Choose a payment currency. Your personal PHP wallet is credited only after SwiftPay verifies settlement.")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = currency == "KRW",
+                            onClick = { onCurrencyChange("KRW") },
+                            label = { Text("KRW → PHP") }
+                        )
+                        FilterChip(
+                            selected = currency == "PHP",
+                            onClick = { onCurrencyChange("PHP") },
+                            label = { Text("PHP top-up") }
+                        )
+                    }
                     OutlinedTextField(
                         value = amount,
                         onValueChange = onAmountChange,
-                        label = { Text("Amount (PHP)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        label = { Text(if (currency == "KRW") "Amount (KRW)" else "Amount (PHP)") },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = if (currency == "KRW") KeyboardType.Number else KeyboardType.Decimal
+                        ),
                         singleLine = true
                     )
+                    if (currency == "KRW") {
+                        Text("Pay in KRW with one of these Korean payment apps:")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("TOSS", "KAKAO", "KBANK").forEach { app ->
+                                FilterChip(
+                                    selected = paymentApp == app,
+                                    onClick = { onPaymentAppChange(app) },
+                                    label = {
+                                        Text(
+                                            when (app) {
+                                                "TOSS" -> "Toss"
+                                                "KAKAO" -> "Kakao"
+                                                else -> "KBank"
+                                            }
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                        if (quote != null) {
+                            Text("₩${quote.customerAmountKrw.toLocaleAmount()} → PHP ${"%.2f".format(Locale.US, quote.settlementAmountPhp)}")
+                            Text("Rate: 1 KRW = PHP ${"%.6f".format(Locale.US, quote.ratePhpPerKrw)} · quote valid for 5 minutes")
+                        }
+                    }
                 } else {
-                    Text("Scan this QR Ph code to pay PHP ${"%.2f".format(Locale.US, topup.amount ?: 0.0)}.")
+                    if (topup.customerAmountKrw != null) {
+                        Text(
+                            "Pay ₩${topup.customerAmountKrw.toLocaleAmount()} using ${paymentApp.displayPaymentApp()}. " +
+                                "PHP ${"%.2f".format(Locale.US, topup.amount ?: 0.0)} is credited after SwiftPay confirms settlement."
+                        )
+                    } else {
+                        Text("Scan this QR Ph code to pay PHP ${"%.2f".format(Locale.US, topup.amount ?: 0.0)}.")
+                    }
                     if (qrBitmap != null) {
                         Image(
                             bitmap = qrBitmap,
@@ -410,11 +513,18 @@ private fun WalletTopupDialog(
         },
         confirmButton = {
             if (topup == null) {
-                Button(onClick = onCreate, enabled = !isLoading) {
+                val action = if (currency == "KRW" && quote == null) onGetQuote else onCreate
+                val label = when {
+                    isLoading -> null
+                    currency == "KRW" && quote == null -> "Get live quote"
+                    currency == "KRW" -> "Create KRW QR"
+                    else -> "Create QR"
+                }
+                Button(onClick = action, enabled = !isLoading) {
                     if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Create QR")
+                        Text(label.orEmpty())
                     }
                 }
             } else {
@@ -422,9 +532,24 @@ private fun WalletTopupDialog(
             }
         },
         dismissButton = {
-            if (topup == null) TextButton(onClick = onDismiss) { Text("Cancel") }
+            if (topup == null) {
+                Row {
+                    if (currency == "KRW" && quote != null) {
+                        TextButton(onClick = onGetQuote, enabled = !isLoading) { Text("Refresh quote") }
+                    }
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                }
+            }
         }
     )
+}
+
+private fun Int.toLocaleAmount(): String = String.format(Locale.US, "%,d", this)
+
+private fun String.displayPaymentApp(): String = when (this) {
+    "KAKAO" -> "Kakao"
+    "KBANK" -> "KBank"
+    else -> "Toss"
 }
 
 @Composable
@@ -494,7 +619,7 @@ fun WalletListContent(
                 ) {
                     Icon(Icons.Rounded.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Add money")
+                    Text("Exchange KRW / add money")
                 }
             }
             QuickActionsRow()

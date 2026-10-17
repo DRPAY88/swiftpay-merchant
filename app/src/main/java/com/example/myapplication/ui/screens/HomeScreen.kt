@@ -61,8 +61,11 @@ fun HomeScreen(
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
     val merchantAlias by settingsManager.merchantAlias.collectAsState(initial = null)
-    val merchantName = merchantAlias?.takeIf { it.isNotBlank() }
-        ?: "Merchant account"
+    val signedInRole by settingsManager.loggedInRole.collectAsState(initial = null)
+    val isCustomer = signedInRole == "customer"
+    val merchantName = if (isCustomer) "Personal wallet" else {
+        merchantAlias?.takeIf { it.isNotBlank() } ?: "Merchant account"
+    }
     val transactionStore = remember { TransactionStore(context) }
     var balance by remember { mutableStateOf<Double?>(null) }
     var balanceError by remember { mutableStateOf<String?>(null) }
@@ -135,6 +138,7 @@ fun HomeScreen(
             )
             Spacer(modifier = Modifier.height(24.dp))
             QuickActionsSection(
+                isCustomer = isCustomer,
                 onCollect = { onLaunchMiniApp("topup-page") },
                 onTransfer = { onLaunchMiniApp("disbursement-page") },
                 onPaymentLink = { onLaunchMiniApp("payment-link-page") },
@@ -144,7 +148,9 @@ fun HomeScreen(
                 onTransactionsClick = onNavigateToWallet
             )
             Spacer(modifier = Modifier.height(22.dp))
-            MerchantToolsBanner(onCreatePaymentLink = { onLaunchMiniApp("payment-link-page") })
+            if (!isCustomer) {
+                MerchantToolsBanner(onCreatePaymentLink = { onLaunchMiniApp("payment-link-page") })
+            }
             Spacer(modifier = Modifier.height(24.dp))
             TransactionHistorySection(
                 transactions = recentTransactions,
@@ -330,6 +336,7 @@ fun WalletBalanceCard(
 
 @Composable
 fun QuickActionsSection(
+    isCustomer: Boolean,
     onCollect: () -> Unit,
     onTransfer: () -> Unit,
     onPaymentLink: () -> Unit,
@@ -349,24 +356,33 @@ fun QuickActionsSection(
             modifier = Modifier.semantics { heading() }
         )
         Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickAction(Icons.Rounded.Payments, "Collect payment", actionSurface, onCollect, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.Send, "Send money", actionSurface, onTransfer, Modifier.weight(1f))
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickAction(Icons.Rounded.Link, "Payment link", actionSurface, onPaymentLink, Modifier.weight(1f))
-            QuickAction(Icons.Rounded.QrCodeScanner, "Scan QR code", scheme.secondaryContainer, onScanQr, Modifier.weight(1f))
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickAction(Icons.Rounded.Terminal, "API docs", scheme.secondaryContainer, onDeveloperDocs, Modifier.weight(1f))
-            QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Transactions", actionSurface, onTransactionsClick, Modifier.weight(1f))
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickAction(Icons.Rounded.Person, "Profile", actionSurface, onProfileClick, Modifier.weight(1f))
-            Spacer(Modifier.weight(1f))
+        if (isCustomer) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickAction(Icons.Rounded.AddCard, "Add money & activity", actionSurface, onTransactionsClick, Modifier.weight(1f))
+                QuickAction(Icons.AutoMirrored.Rounded.Send, "Send money", actionSurface, onTransfer, Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            QuickAction(Icons.Rounded.Person, "Profile", actionSurface, onProfileClick, Modifier.fillMaxWidth())
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickAction(Icons.Rounded.Payments, "Collect payment", actionSurface, onCollect, Modifier.weight(1f))
+                QuickAction(Icons.AutoMirrored.Rounded.Send, "Send money", actionSurface, onTransfer, Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickAction(Icons.Rounded.Link, "Payment link", actionSurface, onPaymentLink, Modifier.weight(1f))
+                QuickAction(Icons.Rounded.QrCodeScanner, "Scan QR code", scheme.secondaryContainer, onScanQr, Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickAction(Icons.Rounded.Terminal, "API docs", scheme.secondaryContainer, onDeveloperDocs, Modifier.weight(1f))
+                QuickAction(Icons.AutoMirrored.Rounded.ReceiptLong, "Transactions", actionSurface, onTransactionsClick, Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickAction(Icons.Rounded.Person, "Profile", actionSurface, onProfileClick, Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
+            }
         }
     }
 }

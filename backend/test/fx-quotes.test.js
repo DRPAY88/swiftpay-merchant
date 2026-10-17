@@ -95,21 +95,40 @@ test("marketing reference rates combine KRW/PHP and live USDT/USD prices", async
   assert.equal(rates.rates.USDT.usdtUsdUpdatedAt, new Date(now - 30_000).toISOString());
 });
 
-test("marketing reference rates reject stale or unavailable USDT market prices", async () => {
+test("marketing reference rates remain available for PHP when USDT providers fail", async () => {
+  const fxFetch = async (url) => {
+    const currency = new URL(url).searchParams.get("base_currency");
+    if (currency === "USD") return new Response("{}", { status: 429 });
+    return Response.json({
+      meta: { last_updated_at: new Date(now).toISOString() },
+      data: { PHP: { code: "PHP", value: 0.04 } }
+    });
+  };
+  const rates = await getLatestMarketingKrwRates(
+    "test-key",
+    fxFetch,
+    async () => new Response("{}", { status: 429 }),
+    now
+  );
+  assert.equal(rates.rates.PHP.perKrw, 0.04);
+  assert.equal("USDT" in rates.rates, false);
+});
+
+test("marketing reference rates reject stale or unavailable USDT market prices without losing PHP", async () => {
   const fxFetch = async (url) => Response.json({
     meta: { last_updated_at: new Date(now).toISOString() },
     data: { PHP: { code: "PHP", value: new URL(url).searchParams.get("base_currency") === "KRW" ? 0.04 : 58 } }
   });
-  await assert.rejects(
-    getLatestMarketingKrwRates("test-key", fxFetch, async () => Response.json({
+  const staleUsdt = await getLatestMarketingKrwRates(
+    "test-key",
+    fxFetch,
+    async () => Response.json({
       tether: { usd: 1, last_updated_at: Math.floor((now - 6 * 60 * 1000) / 1000) }
-    }), now),
-    (error) => error instanceof FxQuoteError && error.status === 502 && /stale/.test(error.message)
+    }),
+    now
   );
-  await assert.rejects(
-    getLatestMarketingKrwRates("test-key", fxFetch, async () => new Response("{}", { status: 429 }), now),
-    (error) => error instanceof FxQuoteError && error.status === 503
-  );
+  assert.equal(staleUsdt.rates.PHP.perKrw, 0.04);
+  assert.equal("USDT" in staleUsdt.rates, false);
 });
 
 test("KRW/PHP quote is rounded to cents, bound to the merchant, and expires after five minutes", () => {

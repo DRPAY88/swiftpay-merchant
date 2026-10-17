@@ -153,6 +153,11 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         onLoginClick()
     }
 
+    fun onResumeMerchantApplication() {
+        errorMessage = null
+        state = LoginState.RegistrationEmail
+    }
+
     fun requestRegistrationOtp() {
         if (isLoading) return
         val email = username.trim().lowercase()
@@ -552,7 +557,8 @@ fun LoginScreen(
                 errorMessage = viewModel.errorMessage,
                 onUsernameChange = { viewModel.username = it },
                 onLoginClick = { viewModel.onLoginClick() },
-                onCreateAccountClick = viewModel::onRegisterClick
+                onCreateAccountClick = viewModel::onRegisterClick,
+                onResumeMerchantApplication = viewModel::onResumeMerchantApplication
             )
             LoginState.WaitingApproval -> WaitingApprovalContent(
                 onCancel = { viewModel.navigateToLanding() }
@@ -1116,7 +1122,8 @@ fun LandingContent(
     errorMessage: String?,
     onUsernameChange: (String) -> Unit,
     onLoginClick: () -> Unit,
-    onCreateAccountClick: () -> Unit
+    onCreateAccountClick: () -> Unit,
+    onResumeMerchantApplication: () -> Unit
 ) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
@@ -1327,6 +1334,13 @@ fun LandingContent(
                         Icon(Icons.Rounded.PersonAdd, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Create a new account", fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(
+                        onClick = onResumeMerchantApplication,
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Resume a merchant application")
                     }
                 }
             }

@@ -242,7 +242,7 @@ export function createAdminStore(
 
   async function listCustomerWalletTransactions(email, limit, offset = 0) {
     const result = await pool.query(
-      `SELECT COALESCE(payment_id, id) AS id, reference_no, payment_id, amount, currency, status, direction, kind, created_at
+      `SELECT COALESCE(payment_id, id) AS id, reference_no, payment_id, amount, currency, status, direction, kind, details, created_at
        FROM customer_wallet_transactions
        WHERE email = $1
        ORDER BY created_at DESC, id DESC
@@ -266,7 +266,7 @@ export function createAdminStore(
 
   async function getCustomerWalletTopup(email, referenceNo) {
     const result = await pool.query(
-      `SELECT amount, currency, status
+      `SELECT amount, currency, status, details
        FROM customer_wallet_transactions
        WHERE email = $1 AND reference_no = $2 AND kind = 'topup'`,
       [email, referenceNo]
@@ -284,13 +284,13 @@ export function createAdminStore(
     return result.rows[0] || null;
   }
 
-  async function createCustomerWalletTopup(email, referenceNo, amount) {
+  async function createCustomerWalletTopup(email, referenceNo, amount, details = {}) {
     const result = await pool.query(
       `INSERT INTO customer_wallet_transactions
-         (id, email, reference_no, kind, direction, amount, status)
-       VALUES ($1, $2, $3, 'topup', 'credit', $4, 'PENDING')
+         (id, email, reference_no, kind, direction, amount, status, details)
+       VALUES ($1, $2, $3, 'topup', 'credit', $4, 'PENDING', $5::jsonb)
        RETURNING id`,
-      [`topup:${referenceNo}`, email, referenceNo, amount]
+      [`topup:${referenceNo}`, email, referenceNo, amount, JSON.stringify(details)]
     );
     return result.rows[0];
   }
@@ -331,7 +331,7 @@ export function createAdminStore(
              WHEN status IN ('EXECUTED', 'REJECTED', 'CANCELED', 'EXPIRED', 'ERROR') THEN status
              ELSE $3
            END,
-           details = $4::jsonb,
+           details = details || $4::jsonb,
            updated_at = NOW()
        WHERE email = $1 AND reference_no = $2 AND kind = 'topup'`,
       [email, referenceNo, status, JSON.stringify(details)]

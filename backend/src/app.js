@@ -578,7 +578,7 @@ export function createApp({
   const webhookLimiter = rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: "draft-8", legacyHeaders: false });
   app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
   app.get("/download", (_req, res) => {
-    res.redirect(302, "https://github.com/stden16/swiftpay-merchant/releases/download/v1.0.17/SwiftPay-Merchant-v1.0.17.apk");
+    res.redirect(302, "https://github.com/stden16/swiftpay-merchant/releases/download/v1.0.18/SwiftPay-Merchant-v1.0.18.apk");
   });
   app.get("/checkout/:code", asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);
@@ -1280,12 +1280,40 @@ export function createApp({
       currency: transaction.currency,
       status: transaction.status,
       transactionType: transaction.kind === "topup" ? "WALLET_TOP_UP" : "DISBURSEMENT",
-      description: transaction.kind === "topup" ? "Wallet top-up" : "Bank transfer",
+      description: transaction.kind === "topup" && Number.isInteger(Number(transaction.details?.customerAmountKrw))
+        ? `KRW exchange (₩${Number(transaction.details.customerAmountKrw).toLocaleString("en-US")})`
+        : transaction.kind === "topup" ? "Wallet top-up" : "Bank transfer",
       createdAt: transaction.created_at
     })));
   }));
 
   const walletTopupLimiter = rateLimit({ windowMs: 60_000, limit: 3, standardHeaders: "draft-8", legacyHeaders: false });
+  const walletTopupQuoteLimiter = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false });
+  app.post("/v1/wallet/topups/qrph/quote", walletTopupQuoteLimiter, requireScope("swiftpay:payments:write"), requireCustomer, asyncRoute(async (req, res) => {
+    const request = parse(krwPhpQuoteRequestSchema, req.body);
+    const rate = await getLatestPhpRate("KRW", config.currencyApiKey, fxFetchImpl);
+    const quote = createFxPhpQuote({
+      amount: request.amountKrw,
+      currency: "KRW",
+      phpPerUnit: rate.phpPerUnit,
+      rateUpdatedAt: rate.updatedAt,
+      subject: req.principal.sub,
+      signingKey: config.sessionSigningKey
+    });
+    if (quote.amountPhp > 100_000) {
+      throw new FxQuoteError(400, "The PHP wallet top-up exceeds the PHP 100,000 limit");
+    }
+    res.json({
+      quoteToken: quote.quoteToken,
+      customerAmountKrw: quote.customerAmount,
+      settlementAmountPhp: quote.amountPhp,
+      ratePhpPerKrw: quote.phpPerUnit,
+      rateUpdatedAt: quote.rateUpdatedAt,
+      expiresAt: new Date(quote.expiresAt).toISOString(),
+      settlementCurrency: "PHP"
+    });
+  }));
+
   app.post("/v1/wallet/topups/qrph", walletTopupLimiter, requireScope("swiftpay:payments:write"), requireCustomer, asyncRoute(async (req, res) => {
     if (
       !userStore?.createCustomerWalletTopup ||
@@ -1294,17 +1322,47 @@ export function createApp({
     ) {
       throw new SwiftPayError(503, "Personal wallet top-ups are unavailable");
     }
-    const input = parse(z.object({
-      amount: z.number().finite().min(1).max(100_000)
-    }).strict(), req.body);
-    const referenceNo = `WLT-${randomUUID()}`;
-    await userStore.createCustomerWalletTopup(req.principal.sub, referenceNo, input.amount);
+    const request = parse(z.union([
+      z.object({
+        amount: z.number().finite().min(1).max(100_000)
+      }).strict(),
+      z.object({
+        quoteToken: z.string().min(1).max(2048),
+        paymentApp: z.enum(["TOSS", "KAKAO", "KBANK"]).optional()
+      }).strict()
+    ]), req.body);
+    const quote = "quoteToken" in request
+      ? verifyFxPhpQuote(request.quoteToken, req.principal.sub, config.sessionSigningKey)
+      : null;
+    if (quote && quote.customerCurrency !== "KRW") {
+      throw new FxQuoteError(400, "Personal-wallet QR top-ups currently support KRW quotes only");
+    }
+    const amountPhp = quote ? quote.amountPhp : request.amount;
+    if (amountPhp > 100_000) {
+      throw new FxQuoteError(400, "The PHP wallet top-up exceeds the PHP 100,000 limit");
+    }
+    const referenceNo = quote ? `WLT-${quote.quoteId}` : `WLT-${randomUUID()}`;
+    const details = quote ? {
+      customerAmountKrw: quote.customerAmount,
+      customerCurrency: quote.customerCurrency,
+      ratePhpPerKrw: quote.phpPerUnit,
+      rateUpdatedAt: quote.rateUpdatedAt,
+      paymentApp: request.paymentApp ?? null
+    } : {};
+    try {
+      await userStore.createCustomerWalletTopup(req.principal.sub, referenceNo, amountPhp, details);
+    } catch (error) {
+      if (quote && error?.code === "23505") {
+        throw new SwiftPayError(409, "This KRW quote has already been used");
+      }
+      throw error;
+    }
     let bootstrap;
     try {
       bootstrap = await requestProvider("bootstrap/qrph?type=P2M", {
         method: "POST",
         body: buildQrPayload({
-          amount: input.amount,
+          amount: amountPhp,
           referenceNo,
           currency: "PHP",
           rejectDuplicatedPayments: true
@@ -1331,7 +1389,7 @@ export function createApp({
     if (
       !providerPayment.success ||
       !Number.isFinite(Number(providerPayment.data.amount)) ||
-      Math.round(Number(providerPayment.data.amount) * 100) !== Math.round(input.amount * 100) ||
+      Math.round(Number(providerPayment.data.amount) * 100) !== Math.round(amountPhp * 100) ||
       providerPayment.data.referenceNo !== referenceNo ||
       (providerPayment.data.currency && providerPayment.data.currency !== "PHP")
     ) {
@@ -1339,6 +1397,16 @@ export function createApp({
     }
     const payment = providerPayment.data;
     await userStore.recordCustomerWalletTopupOrder(req.principal.sub, referenceNo, payment.paymentId);
+    let qrImageBase64 = null;
+    try {
+      const image = await requestProvider("payments/qrph/image?type=P2M", {
+        paymentToken: payment.paymentId,
+        responseType: "bytes"
+      });
+      qrImageBase64 = image.data.toString("base64");
+    } catch (error) {
+      console.warn("SwiftPay QR image unavailable for customer wallet top-up", error.message);
+    }
     res.status(201).json({
       paymentId: payment.paymentId,
       referenceNo,
@@ -1346,9 +1414,18 @@ export function createApp({
       amount: Number(payment.amount),
       currency: "PHP",
       qrCode: payment.qrCode,
-      qrImageBase64: null,
+      qrImageBase64,
       bankAccountNumber: payment.bankAccountNumber ?? null,
-      instapayBankCode: payment.instapayBankCode ?? null
+      instapayBankCode: payment.instapayBankCode ?? null,
+      ...(quote ? {
+        customerAmountKrw: quote.customerAmount,
+        ratePhpPerKrw: quote.phpPerUnit,
+        customerAmount: quote.customerAmount,
+        customerCurrency: "KRW",
+        ratePhpPerUnit: quote.phpPerUnit,
+        rateUpdatedAt: quote.rateUpdatedAt,
+        settlementCurrency: "PHP"
+      } : {})
     });
   }));
 
