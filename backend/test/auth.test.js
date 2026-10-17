@@ -58,7 +58,7 @@ test("expired OTPs cannot create sessions", async () => {
   assert.equal(await auth.verifyOtp("merchant@example.com", "123456"), null);
 });
 
-test("email OTP creates a personal customer only after a valid code is verified", async () => {
+test("email OTP provisions new signups as internal merchants while preserving existing customer roles", async () => {
   const config = {
     allowedEmails: [],
     sessionSigningKey: "session-signing-key-that-is-at-least-32-bytes"
@@ -67,30 +67,37 @@ test("email OTP creates a personal customer only after a valid code is verified"
   const sentCodes = [];
   const auth = createOtpAuth(config, {
     userStore: {
-      getUser: async () => null,
-      ensureEmailCustomer: async (email) => {
+      getUser: async (email) => email === "existing-customer@example.com"
+        ? { email, role: "customer", status: "active" }
+        : null,
+      ensureSelfServiceMerchant: async (email) => {
         provisioned.push(email);
-        return { email, role: "customer", status: "active" };
+        return { email, role: "merchant", status: "active", wallet_mode: "internal" };
       }
     },
     codeGenerator: () => "123456",
     sendEmail: async (email, code) => sentCodes.push({ email, code })
   });
 
-  await auth.requestOtp("CUSTOMER@example.com");
-  assert.deepEqual(sentCodes, [{ email: "customer@example.com", code: "123456" }]);
+  await auth.requestOtp("NEW-MERCHANT@example.com");
+  assert.deepEqual(sentCodes, [{ email: "new-merchant@example.com", code: "123456" }]);
   assert.deepEqual(provisioned, []);
 
-  assert.equal(await auth.verifyOtp("customer@example.com", "000000"), null);
+  assert.equal(await auth.verifyOtp("new-merchant@example.com", "000000"), null);
   assert.deepEqual(provisioned, []);
-  const session = await auth.verifyOtp("customer@example.com", "123456");
-  assert.equal(session.email, "customer@example.com");
-  assert.equal(session.role, "customer");
-  assert.deepEqual(provisioned, ["customer@example.com"]);
+  const session = await auth.verifyOtp("new-merchant@example.com", "123456");
+  assert.equal(session.email, "new-merchant@example.com");
+  assert.equal(session.role, "merchant");
+  assert.deepEqual(provisioned, ["new-merchant@example.com"]);
   const principal = await createJwtVerifier(config)(session.accessToken);
-  assert.equal(principal.sub, "customer@example.com");
-  assert.equal(principal.role, "customer");
+  assert.equal(principal.sub, "new-merchant@example.com");
+  assert.equal(principal.role, "merchant");
   assert.match(principal.scope, /swiftpay:disbursements:write/);
+
+  await auth.requestOtp("existing-customer@example.com");
+  const existingCustomer = await auth.verifyOtp("existing-customer@example.com", "123456");
+  assert.equal(existingCustomer.role, "customer");
+  assert.deepEqual(provisioned, ["new-merchant@example.com"]);
 });
 
 test("OTP sessions receive roles from the active persistent merchant record", async () => {

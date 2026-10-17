@@ -33,8 +33,9 @@ export function createOtpAuth(config, {
     if (userStore) {
       const user = await userStore.getUser(email);
       if (user) return user.status === "active" ? user : null;
-      return userStore.ensureEmailCustomer
-        ? { email, role: "customer", status: "active", isNewCustomer: true }
+      if (await userStore.getRegistrationStatus?.(email)) return null;
+      return userStore.ensureSelfServiceMerchant
+        ? { email, role: "merchant", status: "active", wallet_mode: "internal", isNewMerchant: true }
         : null;
     }
     return allowedEmails.has(email) ? { email, role: "merchant", status: "active" } : null;
@@ -77,8 +78,8 @@ export function createOtpAuth(config, {
     const submittedHash = createHmac("sha256", key).update(`${email}:${code}`).digest();
     if (!timingSafeEqual(challenge.codeHash, submittedHash)) return null;
     challenges.delete(email);
-    if (user.isNewCustomer) {
-      user = await userStore.ensureEmailCustomer(email);
+    if (user.isNewMerchant) {
+      user = await userStore.ensureSelfServiceMerchant(email) || await userStore.getUser(email);
       if (!user || user.status !== "active") return null;
     }
 

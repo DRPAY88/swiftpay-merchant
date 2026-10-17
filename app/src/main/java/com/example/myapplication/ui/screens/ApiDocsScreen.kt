@@ -84,7 +84,7 @@ fun ApiDocsScreen() {
             DocSection(
                 title = "3. Hosted checkout",
                 icon = Icons.Rounded.Description,
-                content = "Create a PHP order with a unique reference. SwiftPay hosts the enabled payment methods, including available banks and e-wallets; the app can embed this secure checkout for wallet deposits. Card details stay on SwiftPay's page.",
+                content = "Pooled merchant/operator accounts can create a PHP order with a unique reference. Self-service internal merchants should use QR Ph collections instead; hosted orders are not yet connected to their isolated ledger. Card details stay on SwiftPay's page.",
                 code = "POST /v1/payments/orders\n{\n  \"amount\": 100.00,\n  \"referenceNo\": \"INV-1001\",\n  \"currency\": \"PHP\",\n  \"details\": {}\n}",
                 cardColor = cardColor,
                 textColor = textColor
@@ -93,7 +93,7 @@ fun ApiDocsScreen() {
             DocSection(
                 title = "4. Payment links",
                 icon = Icons.Rounded.Description,
-                content = "Create a fixed-amount DRPAY checkout page in PHP, USD, or EUR and share its public URL. Alipay, Naver Pay, Kakao Pay, and Toss Bank shortcuts use the same QR Ph flow; customers must use an app that supports QR Ph. Foreign-currency QR prices settle in PHP.",
+                content = "Pooled merchant/operator accounts can create a fixed-amount DRPAY checkout page in PHP, USD, or EUR and share its public URL. Internal merchants cannot use provider-wide payment links until their settlements can be assigned to their ledger. Foreign-currency QR prices settle in PHP.",
                 code = "POST /v1/payment-links\n{\n  \"amount\": 50.00,\n  \"currency\": \"PHP\",\n  \"description\": \"Invoice 1002\"\n}",
                 cardColor = cardColor,
                 textColor = textColor
@@ -111,7 +111,7 @@ fun ApiDocsScreen() {
             DocSection(
                 title = "6. QR Ph and verified callbacks",
                 icon = Icons.Rounded.Security,
-                content = "QR Ph settles in PHP. KRW, USD, EUR, and CNY customer prices use a short-lived signed FX quote to lock the PHP amount. Configure the SwiftPay callback URL in the Merchant Portal; verified terminal callbacks take precedence over polling.",
+                content = "Internal merchant collections are credited only after a signed SwiftPay callback matches the payment ID, reference, amount, and PHP currency. KRW, USD, EUR, and CNY customer prices use a short-lived signed FX quote to lock PHP settlement. Configure the callback URL in the Merchant Portal.",
                 code = "POST /v1/payments/qrph/quote\nPOST /v1/payments/qrph\nPOST /v1/webhooks/swiftpay",
                 cardColor = cardColor,
                 textColor = textColor

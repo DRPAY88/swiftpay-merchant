@@ -372,6 +372,7 @@ test("super admins control onboarding and merchants can complete it once", async
     });
     assert.equal((await reviewed.json()).status, "approved");
     assert.equal((await store.getUser("applicant@example.com")).status, "active");
+    assert.equal((await store.getUser("applicant@example.com")).wallet_mode, "internal");
 
     const deleted = await fetch(`${baseUrl}/v1/admin/registrations/applicant%40example.com`, {
       method: "DELETE",
@@ -696,7 +697,8 @@ test("email customers receive isolated wallet balances and only settled QR top-u
     balance: 0,
     adjustedBalance: 0,
     accountNumber: null,
-    currency: "PHP"
+    currency: "PHP",
+    walletMode: "personal"
   });
 
   const createdQr = await fetch(`${baseUrl}/v1/wallet/topups/qrph`, {

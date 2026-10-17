@@ -394,6 +394,7 @@ function createAuthMiddleware(verifyAccessToken, userStore) {
       const user = await userStore.getUser(req.principal.sub.toLowerCase());
       if (user?.status === "active") {
         req.principal.role = user.role;
+        req.principal.walletMode = user.wallet_mode || null;
       } else {
         if (req.principal.role !== "registration_applicant" || !principalHasScope(req.principal, "kyb:submit")) {
           return res.status(401).json({ error: "unauthorized" });
@@ -426,6 +427,13 @@ function requireCustomer(req, res, next) {
 function requireMerchantPrincipal(req, res, next) {
   if (req.principal?.role === "customer") {
     return res.status(403).json({ error: "merchant_account_required" });
+  }
+  next();
+}
+
+function requirePooledMerchantPrincipal(req, res, next) {
+  if (req.principal?.role === "merchant" && req.principal.walletMode === "internal") {
+    return res.status(403).json({ error: "internal_merchant_wallet_supports_qrph_only" });
   }
   next();
 }
@@ -811,6 +819,7 @@ export function createApp({
         paymentId: paymentEvent.data.x_payment_id,
         referenceNo: paymentEvent.data.x_reference_no,
         status: paymentEvent.data.x_payment_status,
+        verifiedWebhook: true,
         notifyIncoming: Boolean(pushNotificationService),
         details
       });
@@ -834,6 +843,7 @@ export function createApp({
       eventType: "disbursement",
       referenceNo: disbursementEvent.data.x_merchant_reference_no,
       status: disbursementEvent.data.x_disbursement_status,
+      verifiedWebhook: true,
       details
     });
     res.status(200).json({ status: "accepted" });
@@ -968,7 +978,8 @@ export function createApp({
   }));
 
   app.get("/v1/wallet/manual-deposits", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
-    if (req.principal.role === "customer") return res.json([]);
+    if (req.principal.role === "customer" ||
+        (req.principal.role === "merchant" && req.principal.walletMode === "internal")) return res.json([]);
     const limit = z.coerce.number().int().min(1).max(200).catch(100).parse(req.query.limit);
     const offset = z.coerce.number().int().min(0).max(2_147_483_647).catch(0).parse(req.query.offset);
     const deposits = await userStore.listManualBankDeposits(limit, offset);
@@ -983,7 +994,8 @@ export function createApp({
   }));
 
   app.get("/v1/wallet/payment-transactions", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
-    if (req.principal.role === "customer") {
+    if (req.principal.role === "customer" ||
+        (req.principal.role === "merchant" && req.principal.walletMode === "internal")) {
       return res.status(403).json({ error: "personal_wallet_activity_required" });
     }
     if (!userStore?.listPaymentWebhookTransactions) {
@@ -1059,7 +1071,7 @@ export function createApp({
     });
   }));
 
-  app.post("/v1/payments/orders", requireScope("swiftpay:payments:write"), requireMerchantPrincipal, asyncRoute(async (req, res) => {
+  app.post("/v1/payments/orders", requireScope("swiftpay:payments:write"), requireMerchantPrincipal, requirePooledMerchantPrincipal, asyncRoute(async (req, res) => {
     const input = parse(orderSchema, req.body);
     const payload = buildOrderPayload(input, config);
     const result = await requestProvider("orders", { method: "POST", body: payload });
@@ -1081,6 +1093,11 @@ export function createApp({
       const status = await userStore?.getCustomerWalletPaymentStatus?.(req.principal.sub, token);
       if (!status) return res.status(404).json({ error: "payment_not_found" });
       return res.json({ paymentId: token, status: status.status, source: "personal_wallet" });
+    }
+    if (req.principal.role === "merchant" && req.principal.walletMode === "internal") {
+      const status = await userStore?.getMerchantWalletPaymentStatus?.(req.principal.sub, token);
+      if (!status) return res.status(404).json({ error: "payment_not_found" });
+      return res.json({ paymentId: token, status: status.status, source: "merchant_wallet" });
     }
     const webhookStatus = await userStore?.getPaymentWebhookStatus?.(token);
     if (webhookStatus) {
@@ -1135,10 +1152,32 @@ export function createApp({
           rejectDuplicatedPayments: request.rejectDuplicatedPayments
         }
       : request;
-    const bootstrap = await requestProvider("bootstrap/qrph?type=P2M", {
-      method: "POST",
-      body: buildQrPayload(input, config)
-    });
+    const isInternalMerchant = req.principal.role === "merchant" && req.principal.walletMode === "internal";
+    if (isInternalMerchant && !userStore?.createMerchantWalletCollection) {
+      throw new SwiftPayError(503, "Merchant wallet collection storage is unavailable");
+    }
+    if (isInternalMerchant) {
+      await userStore.createMerchantWalletCollection(req.principal.sub, input.referenceNo, input.amount, quote ? {
+        customerAmount: quote.customerAmount,
+        customerCurrency: quote.customerCurrency,
+        ratePhpPerUnit: quote.phpPerUnit,
+        rateUpdatedAt: quote.rateUpdatedAt
+      } : {});
+    }
+    let bootstrap;
+    try {
+      bootstrap = await requestProvider("bootstrap/qrph?type=P2M", {
+        method: "POST",
+        body: buildQrPayload(input, config)
+      });
+    } catch (error) {
+      if (isInternalMerchant && error instanceof SwiftPayError && error.status < 500) {
+        await userStore.finishMerchantWalletCollection(req.principal.sub, input.referenceNo, "REJECTED", {
+          providerOutcome: "rejected"
+        });
+      }
+      throw error;
+    }
     const providerPayment = z.object({
       paymentId: z.string().min(1),
       paymentStatus: z.string().min(1),
@@ -1154,13 +1193,38 @@ export function createApp({
     }
 
     const payment = providerPayment.data;
+    if (payment.referenceNo !== input.referenceNo) {
+      if (isInternalMerchant) {
+        await userStore.finishMerchantWalletCollection(req.principal.sub, input.referenceNo, "ERROR", {
+          settlementMismatch: true
+        });
+      }
+      throw new SwiftPayError(502, "SwiftPay returned a QR Ph payment with a different reference");
+    }
     if (payment.currency && payment.currency !== input.currency) {
+      if (isInternalMerchant) {
+        await userStore.finishMerchantWalletCollection(req.principal.sub, input.referenceNo, "ERROR", {
+          settlementMismatch: true
+        });
+      }
       throw new SwiftPayError(502, "SwiftPay returned a QR Ph payment in a different currency");
     }
-    if (quote && Math.round(Number(payment.amount) * 100) !== Math.round(quote.amountPhp * 100)) {
+    const expectedAmount = quote?.amountPhp ?? input.amount;
+    if (Math.round(Number(payment.amount) * 100) !== Math.round(expectedAmount * 100)) {
+      if (isInternalMerchant) {
+        await userStore.finishMerchantWalletCollection(req.principal.sub, input.referenceNo, "ERROR", {
+          settlementMismatch: true
+        });
+      }
       throw new SwiftPayError(502, "SwiftPay returned a PHP QR amount that does not match the locked quote");
     }
-    if (userStore?.recordWebhookEvent) {
+    if (isInternalMerchant) {
+      await userStore.recordMerchantWalletCollectionOrder(
+        req.principal.sub,
+        input.referenceNo,
+        payment.paymentId
+      );
+    } else if (userStore?.recordWebhookEvent) {
       await userStore.recordWebhookEvent({
         eventKey: `payment:${payment.paymentId}`,
         eventType: "payment",
@@ -1198,8 +1262,8 @@ export function createApp({
       currency: payment.currency || input.currency,
       qrCode: payment.qrCode,
       qrImageBase64: qrImageBase64,
-      bankAccountNumber: payment.bankAccountNumber ?? null,
-      instapayBankCode: payment.instapayBankCode ?? null,
+      bankAccountNumber: isInternalMerchant ? null : payment.bankAccountNumber ?? null,
+      instapayBankCode: isInternalMerchant ? null : payment.instapayBankCode ?? null,
       ...(quote ? {
         customerAmount: quote.customerAmount,
         customerCurrency: quote.customerCurrency,
@@ -1215,15 +1279,24 @@ export function createApp({
   }));
 
   app.get("/v1/wallet/balance", requireScope("swiftpay:disbursements:read"), asyncRoute(async (req, res) => {
-    if (req.principal.role === "customer") {
-      if (!userStore?.getCustomerWalletBalance) {
-        throw new SwiftPayError(503, "Personal wallet storage is unavailable");
-      }
-      const balance = Number(await userStore.getCustomerWalletBalance(req.principal.sub));
+    const isCustomerWallet = req.principal.role === "customer";
+    const isInternalMerchant = req.principal.role === "merchant" && req.principal.walletMode === "internal";
+    if (isCustomerWallet || isInternalMerchant) {
+      const getBalance = isCustomerWallet
+        ? userStore?.getCustomerWalletBalance
+        : userStore?.getMerchantWalletBalance;
+      if (!getBalance) throw new SwiftPayError(503, "Wallet ledger storage is unavailable");
+      const balance = Number(await getBalance(req.principal.sub));
       if (!Number.isFinite(balance) || balance < 0) {
-        throw new SwiftPayError(502, "Stored personal wallet balance is invalid");
+        throw new SwiftPayError(502, "Stored wallet balance is invalid");
       }
-      return res.json({ balance, adjustedBalance: balance, accountNumber: null, currency: "PHP" });
+      return res.json({
+        balance,
+        adjustedBalance: balance,
+        accountNumber: null,
+        currency: "PHP",
+        walletMode: isInternalMerchant ? "internal" : "personal"
+      });
     }
     let result;
     try {
@@ -1254,7 +1327,8 @@ export function createApp({
   }));
 
   app.get("/v1/wallet/krw-receipts", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
-    if (req.principal.role === "customer") {
+    if (req.principal.role === "customer" ||
+        (req.principal.role === "merchant" && req.principal.walletMode === "internal")) {
       return res.status(403).json({ error: "personal_wallet_only" });
     }
     if (!userStore?.getKrwQrPaymentBalance) {
@@ -1268,23 +1342,33 @@ export function createApp({
     res.json({ currency: "KRW", balance, paymentCount: ledger.paymentCount });
   }));
 
-  app.get("/v1/wallet/activity", requireScope("swiftpay:payments:read"), requireCustomer, asyncRoute(async (req, res) => {
-    if (!userStore?.listCustomerWalletTransactions) {
-      throw new SwiftPayError(503, "Personal wallet activity is unavailable");
-    }
+  app.get("/v1/wallet/activity", requireScope("swiftpay:payments:read"), asyncRoute(async (req, res) => {
     const limit = z.coerce.number().int().min(1).max(200).catch(100).parse(req.query.limit);
     const offset = z.coerce.number().int().min(0).max(2_147_483_647).catch(0).parse(req.query.offset);
-    const transactions = await userStore.listCustomerWalletTransactions(req.principal.sub, limit, offset);
+    const isCustomerWallet = req.principal.role === "customer";
+    const isInternalMerchant = req.principal.role === "merchant" && req.principal.walletMode === "internal";
+    if (!isCustomerWallet && !isInternalMerchant) {
+      return res.status(403).json({ error: "personal_wallet_activity_required" });
+    }
+    const listTransactions = isCustomerWallet
+      ? userStore?.listCustomerWalletTransactions
+      : userStore?.listMerchantWalletTransactions;
+    if (!listTransactions) throw new SwiftPayError(503, "Wallet activity is unavailable");
+    const transactions = await listTransactions(req.principal.sub, limit, offset);
     res.json(transactions.map((transaction) => ({
       id: transaction.id,
       referenceNo: transaction.reference_no,
       amount: (transaction.direction === "debit" ? -1 : 1) * Number(transaction.amount),
       currency: transaction.currency,
       status: transaction.status,
-      transactionType: transaction.kind === "topup" ? "WALLET_TOP_UP" : "DISBURSEMENT",
-      description: transaction.kind === "topup" && Number.isInteger(Number(transaction.details?.customerAmountKrw))
+      transactionType: transaction.kind === "topup" || transaction.kind === "collection"
+        ? "WALLET_TOP_UP"
+        : "DISBURSEMENT",
+      description: (transaction.kind === "topup" || transaction.kind === "collection") &&
+        Number.isInteger(Number(transaction.details?.customerAmountKrw))
         ? `KRW exchange (₩${Number(transaction.details.customerAmountKrw).toLocaleString("en-US")})`
-        : transaction.kind === "topup" ? "Wallet top-up" : "Bank transfer",
+        : transaction.kind === "collection" ? "Merchant QR collection"
+          : transaction.kind === "topup" ? "Wallet top-up" : "Bank transfer",
       createdAt: transaction.created_at
     })));
   }));
@@ -1446,7 +1530,7 @@ export function createApp({
     });
   }));
 
-  app.post("/v1/payment-links", requireScope("swiftpay:payments:write"), requireMerchantPrincipal, asyncRoute(async (req, res) => {
+  app.post("/v1/payment-links", requireScope("swiftpay:payments:write"), requireMerchantPrincipal, requirePooledMerchantPrincipal, asyncRoute(async (req, res) => {
     if (!config.publicBaseUrl) {
       throw new SwiftPayError(503, "Public checkout links are not configured. Set PUBLIC_BASE_URL to this backend's HTTPS address.");
     }
@@ -1470,13 +1554,13 @@ export function createApp({
     });
   }));
 
-  app.get("/v1/payment-links/:code", requireScope("swiftpay:payments:read"), requireMerchantPrincipal, asyncRoute(async (req, res) => {
+  app.get("/v1/payment-links/:code", requireScope("swiftpay:payments:read"), requireMerchantPrincipal, requirePooledMerchantPrincipal, asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);
     const result = await requestProvider(`payments/links/${encodeURIComponent(code)}`, { auth: "basic" });
     res.status(result.status).json(result.data);
   }));
 
-  app.delete("/v1/payment-links/:code", requireScope("swiftpay:payments:write"), requireMerchantPrincipal, asyncRoute(async (req, res) => {
+  app.delete("/v1/payment-links/:code", requireScope("swiftpay:payments:write"), requireMerchantPrincipal, requirePooledMerchantPrincipal, asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);
     const result = await requestProvider(`payments/links/${encodeURIComponent(code)}/invalidate`, { method: "DELETE", auth: "basic" });
     res.status(result.status).json(result.data);
@@ -1499,11 +1583,19 @@ export function createApp({
       recipientInformation: input.recipientInformation
     };
     const isCustomerWallet = req.principal.role === "customer";
-    if (isCustomerWallet) {
-      if (!userStore?.reserveCustomerWalletDisbursement) {
-        throw new SwiftPayError(503, "Personal wallet transfers are unavailable");
+    const isInternalMerchantWallet = req.principal.role === "merchant" && req.principal.walletMode === "internal";
+    const isLedgerWallet = isCustomerWallet || isInternalMerchantWallet;
+    const reserveWallet = isCustomerWallet
+      ? userStore?.reserveCustomerWalletDisbursement
+      : userStore?.reserveMerchantWalletDisbursement;
+    const finishWallet = isCustomerWallet
+      ? userStore?.finishCustomerWalletDisbursement
+      : userStore?.finishMerchantWalletDisbursement;
+    if (isLedgerWallet) {
+      if (!reserveWallet || !finishWallet) {
+        throw new SwiftPayError(503, "Wallet transfers are unavailable");
       }
-      await userStore.reserveCustomerWalletDisbursement(req.principal.sub, input.referenceNo, input.amount);
+      await reserveWallet(req.principal.sub, input.referenceNo, input.amount);
     }
     let auditId = null;
     try {
@@ -1516,9 +1608,9 @@ export function createApp({
       })
         : null;
     } catch (error) {
-      if (isCustomerWallet) {
+      if (isLedgerWallet) {
         try {
-          await userStore.finishCustomerWalletDisbursement(
+          await finishWallet(
             req.principal.sub,
             input.referenceNo,
             "REJECTED",
@@ -1534,9 +1626,9 @@ export function createApp({
     try {
       result = await requestProvider("disbursements/send", { method: "POST", auth: "basic", body: payload });
     } catch (error) {
-      if (isCustomerWallet) {
+      if (isLedgerWallet) {
         try {
-          await userStore.finishCustomerWalletDisbursement(
+          await finishWallet(
             req.principal.sub,
             input.referenceNo,
             error instanceof SwiftPayError && error.status < 500 ? "REJECTED" : "UNKNOWN",
@@ -1607,8 +1699,14 @@ export function createApp({
   app.get("/v1/disbursements", requireScope("swiftpay:disbursements:read"), asyncRoute(async (req, res) => {
     const pageNo = z.coerce.number().int().min(0).max(100_000).catch(0).parse(req.query.pageNo);
     const pageSize = z.coerce.number().int().min(1).max(100).catch(100).parse(req.query.pageSize);
-    if (req.principal.role === "customer") {
-      const transactions = await userStore.listCustomerWalletDisbursements(
+    const isCustomerWallet = req.principal.role === "customer";
+    const isInternalMerchantWallet = req.principal.role === "merchant" && req.principal.walletMode === "internal";
+    if (isCustomerWallet || isInternalMerchantWallet) {
+      const listDisbursements = isCustomerWallet
+        ? userStore?.listCustomerWalletDisbursements
+        : userStore?.listMerchantWalletDisbursements;
+      if (!listDisbursements) throw new SwiftPayError(503, "Wallet transfer history is unavailable");
+      const transactions = await listDisbursements(
         req.principal.sub,
         pageSize,
         pageNo * pageSize
@@ -1633,7 +1731,8 @@ export function createApp({
   }));
 
   app.get("/v1/disbursements/:id", requireScope("swiftpay:disbursements:read"), asyncRoute(async (req, res) => {
-    if (req.principal.role === "customer") {
+    if (req.principal.role === "customer" ||
+        (req.principal.role === "merchant" && req.principal.walletMode === "internal")) {
       return res.status(403).json({ error: "personal_wallet_activity_required" });
     }
     const id = z.string().uuid().parse(req.params.id);

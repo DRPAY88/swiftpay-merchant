@@ -63,6 +63,9 @@ fun HomeScreen(
     val merchantAlias by settingsManager.merchantAlias.collectAsState(initial = null)
     val signedInRole by settingsManager.loggedInRole.collectAsState(initial = null)
     val isCustomer = signedInRole == "customer"
+    var walletMode by remember { mutableStateOf<String?>(null) }
+    val showMerchantPaymentLinks =
+        signedInRole == "super_admin" || (signedInRole == "merchant" && walletMode == "pooled")
     val merchantName = if (isCustomer) "Personal wallet" else {
         merchantAlias?.takeIf { it.isNotBlank() } ?: "Merchant account"
     }
@@ -78,10 +81,13 @@ fun HomeScreen(
 
     LaunchedEffect(refreshKey) {
         try {
+            walletMode = null
             val service = settingsManager.createSwiftPayService()
-            service.getWalletBalance()
-                .onSuccess {
-                    balance = it
+            service.getWalletBalanceDetails()
+                .onSuccess { details ->
+                    balance = details.balance
+                    walletMode = details.walletMode
+                        ?: if (details.accountNumber?.isNotBlank() == true) "pooled" else null
                     balanceError = null
                 }
                 .onFailure { error ->
@@ -139,6 +145,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(24.dp))
             QuickActionsSection(
                 isCustomer = isCustomer,
+                showMerchantPaymentLinks = showMerchantPaymentLinks,
                 onCollect = { onLaunchMiniApp("topup-page") },
                 onTransfer = { onLaunchMiniApp("disbursement-page") },
                 onPaymentLink = { onLaunchMiniApp("payment-link-page") },
@@ -148,7 +155,7 @@ fun HomeScreen(
                 onTransactionsClick = onNavigateToWallet
             )
             Spacer(modifier = Modifier.height(22.dp))
-            if (!isCustomer) {
+            if (!isCustomer && showMerchantPaymentLinks) {
                 MerchantToolsBanner(onCreatePaymentLink = { onLaunchMiniApp("payment-link-page") })
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -337,6 +344,7 @@ fun WalletBalanceCard(
 @Composable
 fun QuickActionsSection(
     isCustomer: Boolean,
+    showMerchantPaymentLinks: Boolean,
     onCollect: () -> Unit,
     onTransfer: () -> Unit,
     onPaymentLink: () -> Unit,
@@ -370,8 +378,16 @@ fun QuickActionsSection(
             }
             Spacer(modifier = Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                QuickAction(Icons.Rounded.Link, "Payment link", actionSurface, onPaymentLink, Modifier.weight(1f))
-                QuickAction(Icons.Rounded.QrCodeScanner, "Scan QR code", scheme.secondaryContainer, onScanQr, Modifier.weight(1f))
+                if (showMerchantPaymentLinks) {
+                    QuickAction(Icons.Rounded.Link, "Payment link", actionSurface, onPaymentLink, Modifier.weight(1f))
+                }
+                QuickAction(
+                    Icons.Rounded.QrCodeScanner,
+                    "Scan QR code",
+                    scheme.secondaryContainer,
+                    onScanQr,
+                    Modifier.weight(if (showMerchantPaymentLinks) 1f else 2f)
+                )
             }
             Spacer(modifier = Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

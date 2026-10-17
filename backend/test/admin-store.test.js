@@ -153,7 +153,8 @@ test("admin store persists merchant status, internal adjustments, and atomic aud
 test("email customer wallet balances are isolated, credited once on settlement, and reserve transfers", async () => {
   const database = newDb();
   const { Pool } = database.adapters.createPg();
-  const store = createAdminStore("postgresql://test", new Pool());
+  const pool = new Pool();
+  const store = createAdminStore("postgresql://test", pool);
   try {
     await store.initialize(["existing-merchant@example.com"], []);
     const firstEmail = "first@example.com";
@@ -213,6 +214,98 @@ test("email customer wallet balances are isolated, credited once on settlement, 
     assert.ok(activity.some(({ kind, status }) => kind === "disbursement" && status === "REJECTED"));
     assert.ok(activity.some(({ kind, status }) => kind === "topup" && status === "EXECUTED"));
     assert.ok(activity.some(({ kind, status }) => kind === "topup" && status === "ERROR"));
+  } finally {
+    await store.close();
+  }
+});
+
+test("self-service merchant ledgers isolate collections and reserve payouts", async () => {
+  const database = newDb();
+  const { Pool } = database.adapters.createPg();
+  const pool = new Pool();
+  const store = createAdminStore("postgresql://test", pool);
+  try {
+    await store.initialize([], []);
+    const firstEmail = "merchant-one@example.com";
+    const secondEmail = "merchant-two@example.com";
+    const firstMerchant = await store.ensureSelfServiceMerchant(firstEmail);
+    await store.ensureSelfServiceMerchant(secondEmail);
+    assert.equal(firstMerchant.role, "merchant");
+    assert.equal(firstMerchant.wallet_mode, "internal");
+
+    await store.createMerchantWalletCollection(firstEmail, "COLLECT-ONE", 100);
+    await store.recordMerchantWalletCollectionOrder(firstEmail, "COLLECT-ONE", "payment-one");
+    const settledCollection = {
+      eventKey: "payment:merchant-collection-one",
+      eventType: "payment",
+      paymentId: "payment-one",
+      referenceNo: "COLLECT-ONE",
+      status: "EXECUTED",
+      amount: 100,
+      currency: "PHP",
+      verifiedWebhook: true
+    };
+    await store.recordWebhookEvent({ ...settledCollection, verifiedWebhook: false });
+    assert.equal(Number(await store.getMerchantWalletBalance(firstEmail)), 0);
+    await store.recordWebhookEvent(settledCollection);
+    await store.recordWebhookEvent(settledCollection);
+    assert.equal(Number(await store.getMerchantWalletBalance(firstEmail)), 100);
+    assert.equal(Number(await store.getMerchantWalletBalance(secondEmail)), 0);
+
+    await store.createMerchantWalletCollection(secondEmail, "COLLECT-TWO", 35);
+    await store.recordMerchantWalletCollectionOrder(secondEmail, "COLLECT-TWO", "payment-two");
+    await store.recordWebhookEvent({
+      eventKey: "payment:merchant-collection-two",
+      eventType: "payment",
+      paymentId: "payment-two",
+      referenceNo: "COLLECT-TWO",
+      status: "EXECUTED",
+      amount: 36,
+      currency: "PHP",
+      verifiedWebhook: true
+    });
+    assert.equal(Number(await store.getMerchantWalletBalance(secondEmail)), 0);
+    assert.equal((await store.listMerchantWalletTransactions(secondEmail, 10))[0].status, "ERROR");
+
+    await store.createMerchantWalletCollection(secondEmail, "COLLECT-THREE", 20);
+    await store.recordMerchantWalletCollectionOrder(secondEmail, "COLLECT-THREE", "payment-three");
+    await store.recordWebhookEvent({
+      eventKey: "payment:merchant-collection-three",
+      eventType: "payment",
+      paymentId: "payment-three",
+      referenceNo: "COLLECT-THREE",
+      status: "EXECUTED",
+      amount: 20,
+      currency: "USD",
+      verifiedWebhook: true
+    });
+    assert.equal(Number(await store.getMerchantWalletBalance(secondEmail)), 0);
+    assert.equal(
+      (await store.listMerchantWalletTransactions(secondEmail, 10))
+        .find(({ reference_no }) => reference_no === "COLLECT-THREE").status,
+      "ERROR"
+    );
+
+    await store.reserveMerchantWalletDisbursement(firstEmail, "PAYOUT-ONE", 40);
+    assert.equal(Number(await store.getMerchantWalletBalance(firstEmail)), 60);
+    await assert.rejects(
+      store.reserveMerchantWalletDisbursement(firstEmail, "PAYOUT-TOO-LARGE", 61),
+      (error) => error.status === 409 && error.message === "insufficient_wallet_balance"
+    );
+    await store.recordWebhookEvent({
+      eventKey: "disbursement:PAYOUT-ONE",
+      eventType: "disbursement",
+      referenceNo: "PAYOUT-ONE",
+      status: "REJECTED",
+      verifiedWebhook: true
+    });
+    assert.equal(
+      (await store.listMerchantWalletTransactions(firstEmail, 10))
+        .find(({ kind }) => kind === "disbursement").status,
+      "REJECTED"
+    );
+    assert.equal(Number(await store.getMerchantWalletBalance(firstEmail)), 100);
+    assert.equal((await store.listMerchantWalletTransactions(firstEmail, 10)).length, 2);
   } finally {
     await store.close();
   }

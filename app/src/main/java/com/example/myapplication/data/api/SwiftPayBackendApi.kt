@@ -127,7 +127,8 @@ data class BackendStatusResponse(
 data class BackendWalletBalanceResponse(
     val balance: Double,
     val adjustedBalance: Double? = null,
-    val accountNumber: String? = null
+    val accountNumber: String? = null,
+    val walletMode: String? = null
 )
 
 @Serializable

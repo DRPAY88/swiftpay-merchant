@@ -110,6 +110,9 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     var walletAdjustedBalance by mutableStateOf<Double?>(null)
         private set
 
+    var walletMode by mutableStateOf<String?>(null)
+        private set
+
     var walletBalanceError by mutableStateOf<String?>(null)
         private set
 
@@ -180,6 +183,8 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     fun refreshBalance() {
         viewModelScope.launch {
             walletBalanceError = null
+            walletMode = null
+            depositAccountNumber = null
             try {
                 val service = getService()
                 service.getWalletBalanceDetails()
@@ -188,6 +193,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                         walletAdjustedBalance = details.adjustedBalance
                         walletBalanceError = null
                         val accountNumber = details.accountNumber?.trim()?.takeIf { it.isNotEmpty() }
+                        walletMode = details.walletMode ?: if (accountNumber != null) "pooled" else null
                         depositAccountNumber = accountNumber
                         viewModelScope.launch {
                             if (accountNumber == null) {

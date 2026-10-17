@@ -590,6 +590,9 @@ class SwiftPayService(
 
     suspend fun getWalletDepositAccount(): Result<BackendWalletDepositAccount> =
         getWalletBalanceDetails().mapCatching { body ->
+            if (body.walletMode == "internal" || body.walletMode == "personal") {
+                throw IllegalStateException("This wallet does not have a separate deposit account")
+            }
             val accountNumber = body.accountNumber?.trim()?.takeIf { it.isNotEmpty() }
                 ?: throw IllegalStateException("SwiftPay did not return the wallet's inbound deposit account number")
             BackendWalletDepositAccount(

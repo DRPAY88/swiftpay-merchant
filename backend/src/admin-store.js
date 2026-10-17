@@ -25,10 +25,12 @@ export function createAdminStore(
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         onboarding_eligible BOOLEAN NOT NULL DEFAULT FALSE,
-        onboarding_completed_at TIMESTAMPTZ
+        onboarding_completed_at TIMESTAMPTZ,
+        wallet_mode TEXT NOT NULL DEFAULT 'pooled' CHECK (wallet_mode IN ('pooled', 'internal'))
       );
       ALTER TABLE merchant_users ADD COLUMN IF NOT EXISTS onboarding_eligible BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE merchant_users ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ;
+      ALTER TABLE merchant_users ADD COLUMN IF NOT EXISTS wallet_mode TEXT NOT NULL DEFAULT 'pooled';
       CREATE TABLE IF NOT EXISTS app_feature_settings (
         id SMALLINT PRIMARY KEY CHECK (id = 1),
         onboarding_enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -91,6 +93,33 @@ export function createAdminStore(
         WHERE payment_id IS NOT NULL AND kind = 'topup';
       CREATE INDEX IF NOT EXISTS customer_wallet_transactions_history
         ON customer_wallet_transactions (email, created_at DESC);
+      CREATE TABLE IF NOT EXISTS merchant_wallet_transactions (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL REFERENCES merchant_users(email),
+        reference_no TEXT NOT NULL,
+        payment_id TEXT,
+        kind TEXT NOT NULL CHECK (kind IN ('collection', 'disbursement')),
+        direction TEXT NOT NULL CHECK (direction IN ('credit', 'debit')),
+        amount NUMERIC(14, 2) NOT NULL CHECK (amount > 0),
+        currency TEXT NOT NULL DEFAULT 'PHP' CHECK (currency = 'PHP'),
+        status TEXT NOT NULL CHECK (status IN ('PENDING', 'EXECUTED', 'REJECTED', 'CANCELED', 'EXPIRED', 'ERROR')),
+        details JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (email, reference_no)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS merchant_wallet_collection_reference
+        ON merchant_wallet_transactions (reference_no) WHERE kind = 'collection';
+      CREATE UNIQUE INDEX IF NOT EXISTS merchant_wallet_disbursement_reference
+        ON merchant_wallet_transactions (reference_no) WHERE kind = 'disbursement';
+      CREATE UNIQUE INDEX IF NOT EXISTS merchant_wallet_payment_id
+        ON merchant_wallet_transactions (payment_id)
+        WHERE payment_id IS NOT NULL AND kind = 'collection';
+      CREATE INDEX IF NOT EXISTS merchant_wallet_transactions_history
+        ON merchant_wallet_transactions (email, created_at DESC);
+      UPDATE merchant_users
+      SET wallet_mode = 'internal'
+      WHERE role = 'merchant' AND created_by <> 'bootstrap';
       UPDATE merchant_users
       SET onboarding_eligible = TRUE
       WHERE onboarding_eligible = FALSE
@@ -198,7 +227,7 @@ export function createAdminStore(
 
   async function getUser(email) {
     const result = await pool.query(
-      "SELECT email, role, status, created_by, created_at, updated_at FROM merchant_users WHERE email = $1",
+      "SELECT email, role, status, created_by, created_at, updated_at, wallet_mode FROM merchant_users WHERE email = $1",
       [email.toLowerCase()]
     );
     if (result.rows[0]) return result.rows[0];
@@ -222,6 +251,179 @@ export function createAdminStore(
       [email.toLowerCase()]
     );
     return result.rows[0] || null;
+  }
+
+  async function ensureSelfServiceMerchant(email) {
+    const result = await pool.query(
+      `INSERT INTO merchant_users (email, role, status, created_by, wallet_mode)
+       SELECT $1, 'merchant', 'active', 'email_verification', 'internal'
+       WHERE NOT EXISTS (SELECT 1 FROM customer_users WHERE email = $1)
+         AND NOT EXISTS (SELECT 1 FROM merchant_registrations WHERE email = $1)
+       ON CONFLICT (email) DO NOTHING
+       RETURNING email, role, status, created_by, wallet_mode, created_at, updated_at`,
+      [email.toLowerCase()]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function getMerchantWalletBalance(email) {
+    const result = await pool.query(
+      `SELECT COALESCE(SUM(
+         CASE
+           WHEN direction = 'credit' AND status = 'EXECUTED' THEN amount
+           WHEN direction = 'debit' AND status IN ('PENDING', 'EXECUTED') THEN -amount
+           ELSE 0
+         END
+       ), 0)::text AS balance
+       FROM merchant_wallet_transactions
+       WHERE email = $1`,
+      [email]
+    );
+    return result.rows[0]?.balance ?? "0";
+  }
+
+  async function listMerchantWalletTransactions(email, limit, offset = 0) {
+    const result = await pool.query(
+      `SELECT COALESCE(payment_id, id) AS id, reference_no, payment_id, amount, currency, status, direction, kind, details, created_at
+       FROM merchant_wallet_transactions
+       WHERE email = $1
+       ORDER BY created_at DESC, id DESC
+       LIMIT $2 OFFSET $3`,
+      [email, limit, offset]
+    );
+    return result.rows;
+  }
+
+  async function listMerchantWalletDisbursements(email, limit, offset = 0) {
+    const result = await pool.query(
+      `SELECT id, reference_no, amount, currency, status, created_at
+       FROM merchant_wallet_transactions
+       WHERE email = $1 AND kind = 'disbursement'
+       ORDER BY created_at DESC, id DESC
+       LIMIT $2 OFFSET $3`,
+      [email, limit, offset]
+    );
+    return result.rows;
+  }
+
+  async function getMerchantWalletPaymentStatus(email, paymentId) {
+    const result = await pool.query(
+      `SELECT status
+       FROM merchant_wallet_transactions
+       WHERE email = $1 AND kind = 'collection' AND (payment_id = $2 OR id = $2)`,
+      [email, paymentId]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function createMerchantWalletCollection(email, referenceNo, amount, details = {}) {
+    const result = await pool.query(
+      `INSERT INTO merchant_wallet_transactions
+         (id, email, reference_no, kind, direction, amount, status, details)
+       VALUES ($1, $2, $3, 'collection', 'credit', $4, 'PENDING', $5::jsonb)
+       RETURNING id`,
+      [`collection:${email}:${referenceNo}`, email, referenceNo, amount, JSON.stringify(details)]
+    );
+    return result.rows[0];
+  }
+
+  async function recordMerchantWalletCollectionOrder(email, referenceNo, paymentId) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `SELECT payment_id FROM merchant_wallet_transactions
+         WHERE email = $1 AND reference_no = $2 AND kind = 'collection'
+         FOR UPDATE`,
+        [email, referenceNo]
+      );
+      if (!result.rowCount) throw new AdminStoreError(404, "merchant_wallet_collection_not_found");
+      if (result.rows[0].payment_id && result.rows[0].payment_id !== paymentId) {
+        throw new AdminStoreError(409, "merchant_wallet_payment_mismatch");
+      }
+      await client.query(
+        `UPDATE merchant_wallet_transactions
+         SET payment_id = COALESCE(payment_id, $3), updated_at = NOW()
+         WHERE email = $1 AND reference_no = $2 AND kind = 'collection'`,
+        [email, referenceNo, paymentId]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function finishMerchantWalletCollection(email, referenceNo, status, details = {}) {
+    await pool.query(
+      `UPDATE merchant_wallet_transactions
+       SET status = CASE
+             WHEN status IN ('EXECUTED', 'REJECTED', 'CANCELED', 'EXPIRED', 'ERROR') THEN status
+             ELSE $2
+           END,
+           details = details || $3::jsonb,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [`collection:${email}:${referenceNo}`, status, JSON.stringify(details)]
+    );
+  }
+
+  async function reserveMerchantWalletDisbursement(email, referenceNo, amount) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const user = await client.query(
+        "SELECT status, wallet_mode FROM merchant_users WHERE email = $1 AND role = 'merchant' FOR UPDATE",
+        [email]
+      );
+      if (!user.rowCount || user.rows[0].status !== "active" || user.rows[0].wallet_mode !== "internal") {
+        throw new AdminStoreError(401, "unauthorized");
+      }
+      const balance = await client.query(
+        `SELECT COALESCE(SUM(
+           CASE
+             WHEN direction = 'credit' AND status = 'EXECUTED' THEN amount
+             WHEN direction = 'debit' AND status IN ('PENDING', 'EXECUTED') THEN -amount
+             ELSE 0
+           END
+         ), 0) >= $2::numeric AS sufficient
+         FROM merchant_wallet_transactions
+         WHERE email = $1`,
+        [email, amount]
+      );
+      if (!balance.rows[0]?.sufficient) {
+        throw new AdminStoreError(409, "insufficient_wallet_balance");
+      }
+      await client.query(
+        `INSERT INTO merchant_wallet_transactions
+           (id, email, reference_no, kind, direction, amount, status)
+         VALUES ($1, $2, $3, 'disbursement', 'debit', $4, 'PENDING')`,
+        [`merchant-disbursement:${referenceNo}`, email, referenceNo, amount]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function finishMerchantWalletDisbursement(email, referenceNo, status, details = {}) {
+    await pool.query(
+      `UPDATE merchant_wallet_transactions
+       SET status = CASE
+             WHEN status = 'EXECUTED' THEN status
+             WHEN $3 = 'REJECTED' THEN 'REJECTED'
+             ELSE status
+           END,
+           details = $4::jsonb,
+           updated_at = NOW()
+       WHERE id = $1 AND email = $2`,
+      [`merchant-disbursement:${referenceNo}`, email, status, JSON.stringify(details)]
+    );
   }
 
   async function getCustomerWalletBalance(email) {
@@ -396,7 +598,7 @@ export function createAdminStore(
 
   async function listUsers() {
     const result = await pool.query(
-      "SELECT email, role, status, created_by, created_at, updated_at FROM merchant_users ORDER BY created_at DESC, email"
+      "SELECT email, role, status, created_by, created_at, updated_at, wallet_mode FROM merchant_users ORDER BY created_at DESC, email"
     );
     return result.rows;
   }
@@ -423,12 +625,12 @@ export function createAdminStore(
   async function createMerchant(email, actor) {
     return withAudit(actor, "merchant.created", email, {}, async (client) => {
       const result = await client.query(
-        `INSERT INTO merchant_users (email, role, status, created_by, onboarding_eligible)
-         VALUES ($1, 'merchant', 'active', $2, TRUE)
+        `INSERT INTO merchant_users (email, role, status, created_by, onboarding_eligible, wallet_mode)
+         VALUES ($1, 'merchant', 'active', $2, TRUE, 'internal')
          ON CONFLICT (email) DO UPDATE
          SET status = 'active', updated_at = NOW()
          WHERE merchant_users.role = 'merchant'
-         RETURNING email, role, status, created_by, created_at, updated_at`,
+         RETURNING email, role, status, created_by, created_at, updated_at, wallet_mode`,
         [email, actor]
       );
       if (!result.rowCount) throw new AdminStoreError(409, "Super-admin accounts cannot be changed as merchant users");
@@ -766,9 +968,9 @@ export function createAdminStore(
           throw new AdminStoreError(409, "A personal-wallet account cannot be approved as a merchant");
         }
         await client.query(
-          `INSERT INTO merchant_users (email, role, status, created_by, onboarding_eligible)
-           VALUES ($1, 'merchant', 'active', $2, TRUE)
-           ON CONFLICT (email) DO UPDATE SET status = 'active', updated_at = NOW()
+          `INSERT INTO merchant_users (email, role, status, created_by, onboarding_eligible, wallet_mode)
+           VALUES ($1, 'merchant', 'active', $2, TRUE, 'internal')
+           ON CONFLICT (email) DO UPDATE SET status = 'active', wallet_mode = 'internal', updated_at = NOW()
            WHERE merchant_users.role = 'merchant'`,
           [normalizedEmail, actor]
         );
@@ -971,6 +1173,46 @@ export function createAdminStore(
             );
           }
         }
+        if (event.verifiedWebhook) {
+          const collection = await client.query(
+            `SELECT id, payment_id, amount, status, details
+             FROM merchant_wallet_transactions
+             WHERE kind = 'collection' AND reference_no = $1
+             FOR UPDATE`,
+            [event.referenceNo]
+          );
+          if (collection.rowCount) {
+            const transaction = collection.rows[0];
+            const paymentMatches = Boolean(event.paymentId) &&
+              (!transaction.payment_id || transaction.payment_id === event.paymentId);
+            const amountMatches = amount !== undefined && amount !== null &&
+              Number.isFinite(Number(amount)) &&
+              Math.round(Number(amount) * 100) === Math.round(Number(transaction.amount) * 100);
+            const currencyMatches = currency === "PHP";
+            if (paymentMatches && amountMatches && currencyMatches) {
+              await client.query(
+                `UPDATE merchant_wallet_transactions
+                 SET payment_id = COALESCE(payment_id, $2),
+                     status = CASE
+                       WHEN status IN ('EXECUTED', 'REJECTED', 'CANCELED', 'EXPIRED', 'ERROR') THEN status
+                       ELSE $3
+                     END,
+                     updated_at = NOW()
+                 WHERE id = $1`,
+                [transaction.id, event.paymentId, effectiveStatus]
+              );
+            } else if (transaction.status === "PENDING") {
+              await client.query(
+                `UPDATE merchant_wallet_transactions
+                 SET status = 'ERROR',
+                     details = $2::jsonb,
+                     updated_at = NOW()
+                 WHERE id = $1`,
+                [transaction.id, JSON.stringify({ ...transaction.details, settlementMismatch: true })]
+              );
+            }
+          }
+        }
       } else if (event.eventType === "disbursement") {
         const reservationStatus = effectiveStatus === "EXECUTED"
           ? "EXECUTED"
@@ -988,6 +1230,21 @@ export function createAdminStore(
            WHERE kind = 'disbursement' AND reference_no = $1`,
           [event.referenceNo, reservationStatus, JSON.stringify(event.details || {})]
         );
+        if (event.verifiedWebhook) {
+          await client.query(
+            `UPDATE merchant_wallet_transactions
+             SET status = CASE
+                   WHEN status = 'EXECUTED' THEN status
+                   WHEN $2 = 'REJECTED' THEN 'REJECTED'
+                   WHEN $2 = 'EXECUTED' THEN 'EXECUTED'
+                   ELSE status
+                 END,
+                 details = $3::jsonb,
+                 updated_at = NOW()
+             WHERE id = $1 AND kind = 'disbursement'`,
+            [`merchant-disbursement:${event.referenceNo}`, reservationStatus, JSON.stringify(event.details || {})]
+          );
+        }
       }
       if (
         event.notifyIncoming &&
@@ -1196,6 +1453,7 @@ export function createAdminStore(
     initialize,
     getUser,
     ensureEmailCustomer,
+    ensureSelfServiceMerchant,
     getCustomerWalletBalance,
     listCustomerWalletTransactions,
     listCustomerWalletDisbursements,
@@ -1206,6 +1464,15 @@ export function createAdminStore(
     finishCustomerWalletTopup,
     reserveCustomerWalletDisbursement,
     finishCustomerWalletDisbursement,
+    getMerchantWalletBalance,
+    listMerchantWalletTransactions,
+    listMerchantWalletDisbursements,
+    getMerchantWalletPaymentStatus,
+    createMerchantWalletCollection,
+    recordMerchantWalletCollectionOrder,
+    finishMerchantWalletCollection,
+    reserveMerchantWalletDisbursement,
+    finishMerchantWalletDisbursement,
     listUsers,
     createMerchant,
     setMerchantStatus,

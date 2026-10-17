@@ -121,6 +121,10 @@ fun WalletScreen(
     val signedInIdentity by settings.loggedInIdentity.collectAsState(initial = null)
     val signedInRole by settings.loggedInRole.collectAsState(initial = null)
     val isCustomerWallet = signedInRole == "customer"
+    val isInternalMerchantWallet = signedInRole == "merchant" && viewModel.walletMode == "internal"
+    val isLedgerWallet = isCustomerWallet || isInternalMerchantWallet
+    val canShowProviderDepositAccount =
+        signedInRole in setOf("merchant", "super_admin") && viewModel.walletMode == "pooled"
 
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
 
@@ -251,12 +255,16 @@ fun WalletScreen(
                 WalletListContent(
                     balance = balance,
                     adjustedBalance = adjustedBalance,
-                    accountNumber = depositAccountNumber,
+                    accountNumber = depositAccountNumber.takeIf { canShowProviderDepositAccount },
                     transactions = filteredTransactions,
                     selectedFilter = selectedFilter,
                     transactionHistoryError = transactionHistoryError,
                     isHistoryLoading = isHistoryLoading,
                     showTopupAction = isCustomerWallet,
+                    isInternalMerchantWallet = isInternalMerchantWallet,
+                    isLedgerWallet = isLedgerWallet,
+                    showDepositAccount = canShowProviderDepositAccount,
+                    isCustomerWallet = isCustomerWallet,
                     onTopupClick = {
                         topupError = null
                         topupQr = null
@@ -562,6 +570,10 @@ fun WalletListContent(
     transactionHistoryError: String? = null,
     isHistoryLoading: Boolean = false,
     showTopupAction: Boolean = false,
+    isInternalMerchantWallet: Boolean = false,
+    isLedgerWallet: Boolean = false,
+    showDepositAccount: Boolean = true,
+    isCustomerWallet: Boolean = false,
     onTopupClick: () -> Unit = {},
     onFilterSelected: (String) -> Unit,
     onTransactionClick: (InternalTransaction) -> Unit,
@@ -607,9 +619,21 @@ fun WalletListContent(
                 balance = balance,
                 adjustedBalance = adjustedBalance,
                 accountNumber = accountNumber,
+                isInternalMerchantWallet = isInternalMerchantWallet,
+                isLedgerWallet = isLedgerWallet,
+                showDepositAccount = showDepositAccount,
                 errorMessage = viewModel?.walletBalanceError,
                 onRetry = { viewModel?.refreshBalance() }
             )
+        }
+        if (isInternalMerchantWallet) {
+            item(key = "merchant-wallet-info") {
+                Text(
+                    text = "This is your merchant's app-managed ledger on a shared SwiftPay provider account. It is not a separate bank or virtual account.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         item(key = "wallet-actions") {
             if (showTopupAction) {
@@ -622,7 +646,7 @@ fun WalletListContent(
                     Text("Exchange KRW / add money")
                 }
             }
-            QuickActionsRow()
+            QuickActionsRow(isCustomerWallet = isCustomerWallet)
         }
         item(key = "transaction-heading") {
             Row(
@@ -956,6 +980,9 @@ fun PremiumBalanceCard(
     balance: Double?,
     adjustedBalance: Double? = null,
     accountNumber: String? = null,
+    isInternalMerchantWallet: Boolean = false,
+    isLedgerWallet: Boolean = false,
+    showDepositAccount: Boolean = true,
     errorMessage: String? = null,
     onRetry: () -> Unit = {}
 ) {
@@ -1003,7 +1030,7 @@ fun PremiumBalanceCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "DRPAY WALLET BALANCE",
+                        text = if (isInternalMerchantWallet) "MERCHANT WALLET BALANCE" else "DRPAY WALLET BALANCE",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.74f),
                         fontWeight = FontWeight.SemiBold,
@@ -1096,55 +1123,86 @@ fun PremiumBalanceCard(
                     color = Color.White.copy(alpha = 0.17f),
                     modifier = Modifier.padding(top = 3.dp)
                 )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .clip(RoundedCornerShape(13.dp))
-                        .background(Color.White.copy(alpha = 0.08f))
-                        .then(
-                            if (!accountNumber.isNullOrBlank()) {
-                                Modifier
-                                    .semantics(mergeDescendants = true) {
-                                        contentDescription = "Deposit account, $accountNumber. Double tap to copy."
-                                    }
-                                    .clickable(role = Role.Button) {
-                                    clipboardManager.setText(AnnotatedString(accountNumber))
-                                    Toast.makeText(context, "Account number copied to clipboard", Toast.LENGTH_SHORT).show()
-                                }
-                            } else Modifier
-                        )
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Rounded.AccountBalance,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.82f),
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
-                        Text(
-                            text = "Deposit account",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.68f)
-                        )
-                        Text(
-                            text = accountNumber?.takeIf { it.isNotBlank() } ?: "Loading account number…",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    if (!accountNumber.isNullOrBlank()) {
+                if (isLedgerWallet) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(13.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
-                            Icons.Rounded.ContentCopy,
-                            contentDescription = "Copy account number",
-                            tint = Color.White.copy(alpha = 0.8f),
-                            modifier = Modifier.size(17.dp)
+                            Icons.Rounded.AccountBalanceWallet,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.82f),
+                            modifier = Modifier.size(20.dp)
                         )
+                        Column(modifier = Modifier.padding(start = 10.dp)) {
+                            Text(
+                                text = if (isInternalMerchantWallet) "Merchant ledger" else "Personal wallet",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.68f)
+                            )
+                            Text(
+                                text = if (isInternalMerchantWallet) "Per-merchant app balance" else "App-managed balance",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                } else if (showDepositAccount) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(13.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .then(
+                                if (!accountNumber.isNullOrBlank()) {
+                                    Modifier
+                                        .semantics(mergeDescendants = true) {
+                                            contentDescription = "Deposit account, $accountNumber. Double tap to copy."
+                                        }
+                                        .clickable(role = Role.Button) {
+                                            clipboardManager.setText(AnnotatedString(accountNumber))
+                                            Toast.makeText(context, "Account number copied to clipboard", Toast.LENGTH_SHORT).show()
+                                        }
+                                } else Modifier
+                            )
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.AccountBalance,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.82f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+                            Text(
+                                text = "Deposit account",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.68f)
+                            )
+                            Text(
+                                text = accountNumber?.takeIf { it.isNotBlank() } ?: "Loading account number…",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (!accountNumber.isNullOrBlank()) {
+                            Icon(
+                                Icons.Rounded.ContentCopy,
+                                contentDescription = "Copy account number",
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -1153,13 +1211,19 @@ fun PremiumBalanceCard(
 }
 
 @Composable
-fun QuickActionsRow() {
+fun QuickActionsRow(isCustomerWallet: Boolean) {
     val navController = LocalNavController.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        QuickActionItem(Icons.Rounded.Payments, "Top up", "Add money to wallet", FastPayBlue, Modifier.weight(1f)) {
+        QuickActionItem(
+            Icons.Rounded.Payments,
+            if (isCustomerWallet) "Top up" else "Collect payment",
+            if (isCustomerWallet) "Add money to wallet" else "Create a QR Ph collection",
+            FastPayBlue,
+            Modifier.weight(1f)
+        ) {
             navController.navigate(Route.MiniApp(initialPath = "topup-page"))
         }
         QuickActionItem(Icons.AutoMirrored.Rounded.Send, "Transfer", "Send money", FastPayAccent, Modifier.weight(1f)) {

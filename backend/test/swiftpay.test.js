@@ -64,15 +64,36 @@ before(async () => {
     },
     verifyOtp: async () => null,
     userStore: {
-      getUser: async () => ({ status: "active", role: "merchant" }),
+      getUser: async (email) => ({
+        status: "active",
+        role: "merchant",
+        wallet_mode: email === "internal-merchant@example.com" ? "internal" : "pooled"
+      }),
       recordWebhookEvent: async (event) => storedPaymentEvents.set(event.eventKey, event),
+      getMerchantWalletBalance: async () => "420.25",
+      listMerchantWalletTransactions: async () => [{
+        id: "merchant-payment-1",
+        reference_no: "COLLECTION-1",
+        amount: "25.50",
+        currency: "PHP",
+        direction: "credit",
+        status: "EXECUTED",
+        kind: "collection",
+        details: {},
+        created_at: "2025-01-01T00:00:00.000Z"
+      }],
       adjustmentTotal: async () => 0,
       createTransferIntent: async () => null,
       finishTransferIntent: async () => {}
     },
     verifyAccessToken: async (token) => {
-      if (!new Set(["valid-test-token", "read-only-test-token"]).has(token)) throw new Error("invalid token");
+      if (!new Set(["valid-test-token", "read-only-test-token", "internal-wallet-test-token"]).has(token)) {
+        throw new Error("invalid token");
+      }
       if (token === "read-only-test-token") return { sub: "reader-1", scope: "swiftpay:payments:read" };
+      if (token === "internal-wallet-test-token") {
+        return { ...tokenPrincipal, sub: "internal-merchant@example.com" };
+      }
       return tokenPrincipal;
     },
     cryptoWidgetService: {
@@ -209,7 +230,7 @@ before(async () => {
                 body: {
                   paymentId: "5008f066-d68a-4ef2-b794-8596bac268f6",
                   paymentStatus: "PENDING",
-                  referenceNo: "QR-1",
+                  referenceNo: JSON.parse(options.body).x_reference_no,
                   amount: JSON.parse(options.body).x_amount,
                   currency: JSON.parse(options.body).x_currency,
                   bankAccountNumber: "120000234109",
@@ -641,6 +662,57 @@ test("wallet balance reads the documented account number and balance using Basic
   });
   assert.equal(requests.at(-1).url, "https://provider.example/api/disbursements/account");
   assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
+});
+
+test("internal merchant wallet reads only its app ledger, never pooled provider data", async () => {
+  const providerAccountCalls = requests.filter(({ url }) => url.endsWith("/disbursements/account")).length;
+  const headers = { authorization: "Bearer internal-wallet-test-token" };
+  const balanceResponse = await fetch(`${baseUrl}/v1/wallet/balance`, { headers });
+  assert.equal(balanceResponse.status, 200);
+  assert.deepEqual(await balanceResponse.json(), {
+    balance: 420.25,
+    adjustedBalance: 420.25,
+    accountNumber: null,
+    currency: "PHP",
+    walletMode: "internal"
+  });
+  assert.equal(
+    requests.filter(({ url }) => url.endsWith("/disbursements/account")).length,
+    providerAccountCalls
+  );
+
+  const activityResponse = await fetch(`${baseUrl}/v1/wallet/activity`, { headers });
+  assert.equal(activityResponse.status, 200);
+  assert.deepEqual(await activityResponse.json(), [{
+    id: "merchant-payment-1",
+    referenceNo: "COLLECTION-1",
+    amount: 25.5,
+    currency: "PHP",
+    status: "EXECUTED",
+    transactionType: "WALLET_TOP_UP",
+    description: "Merchant QR collection",
+    createdAt: "2025-01-01T00:00:00.000Z"
+  }]);
+
+  const pooledHistoryResponse = await fetch(`${baseUrl}/v1/wallet/payment-transactions`, { headers });
+  assert.equal(pooledHistoryResponse.status, 403);
+
+  const unsupportedCollection = await fetch(`${baseUrl}/v1/payment-links`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ amount: 25, referenceNo: "INTERNAL-LINK-1" })
+  });
+  assert.equal(unsupportedCollection.status, 403);
+  assert.deepEqual(await unsupportedCollection.json(), {
+    error: "internal_merchant_wallet_supports_qrph_only"
+  });
+
+  const unsupportedOrder = await fetch(`${baseUrl}/v1/payments/orders`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ amount: 25, referenceNo: "INTERNAL-ORDER-1" })
+  });
+  assert.equal(unsupportedOrder.status, 403);
 });
 
 test("wallet balance reads only the documented account number and balance fields", async () => {
