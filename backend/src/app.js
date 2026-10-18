@@ -679,7 +679,7 @@ export function createApp({
   const webhookLimiter = rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: "draft-8", legacyHeaders: false });
   app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
   app.get("/download", (_req, res) => {
-    res.redirect(302, "/SwiftPay-Merchant-v1.0.21.apk");
+    res.redirect(302, "/SwiftPay-Merchant-v1.0.22.apk");
   });
   app.get("/checkout/:code", asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);

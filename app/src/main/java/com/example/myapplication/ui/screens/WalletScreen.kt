@@ -247,7 +247,6 @@ fun WalletScreen(
                     selectedFilter = selectedFilter,
                     transactionHistoryError = transactionHistoryError,
                     isHistoryLoading = isHistoryLoading,
-                    showTopupAction = isCustomerWallet,
                     isInternalMerchantWallet = isInternalMerchantWallet,
                     isLedgerWallet = isLedgerWallet,
                     showDepositAccount = canShowProviderDepositAccount,
@@ -556,7 +555,6 @@ fun WalletListContent(
     selectedFilter: String,
     transactionHistoryError: String? = null,
     isHistoryLoading: Boolean = false,
-    showTopupAction: Boolean = false,
     isInternalMerchantWallet: Boolean = false,
     isLedgerWallet: Boolean = false,
     showDepositAccount: Boolean = true,
@@ -623,17 +621,10 @@ fun WalletListContent(
             }
         }
         item(key = "wallet-actions") {
-            if (showTopupAction) {
-                FilledTonalButton(
-                    onClick = onTopupClick,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Rounded.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Exchange KRW / add money")
-                }
-            }
-            QuickActionsRow(isCustomerWallet = isCustomerWallet)
+            QuickActionsRow(
+                isCustomerWallet = isCustomerWallet,
+                onCustomerTopupClick = onTopupClick
+            )
         }
         item(key = "transaction-heading") {
             Row(
@@ -1207,7 +1198,10 @@ fun PremiumBalanceCard(
 }
 
 @Composable
-fun QuickActionsRow(isCustomerWallet: Boolean) {
+fun QuickActionsRow(
+    isCustomerWallet: Boolean,
+    onCustomerTopupClick: () -> Unit
+) {
     val navController = LocalNavController.current
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1215,12 +1209,16 @@ fun QuickActionsRow(isCustomerWallet: Boolean) {
     ) {
         QuickActionItem(
             Icons.Rounded.Payments,
-            if (isCustomerWallet) "Top up" else "Collect payment",
-            if (isCustomerWallet) "Add money to wallet" else "Create a QR Ph collection",
+            if (isCustomerWallet) "Add money" else "Collect payment",
+            if (isCustomerWallet) "Top up your personal wallet" else "Create a QR Ph collection",
             FastPayBlue,
             Modifier.weight(1f)
         ) {
-            navController.navigate(Route.MiniApp(initialPath = "topup-page"))
+            if (isCustomerWallet) {
+                onCustomerTopupClick()
+            } else {
+                navController.navigate(Route.MiniApp(initialPath = "collect-institution-page"))
+            }
         }
         QuickActionItem(Icons.AutoMirrored.Rounded.Send, "Transfer", "Send money", FastPayAccent, Modifier.weight(1f)) {
             navController.navigate(Route.MiniApp("disbursement-page"))

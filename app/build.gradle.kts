@@ -39,8 +39,8 @@ android {
         applicationId = "com.swiftpay.site"
         minSdk = 24
         targetSdk = 37
-        versionCode = 22
-        versionName = "1.0.21"
+        versionCode = 23
+        versionName = "1.0.22"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "FCM_PROJECT_ID", buildConfigString(optionalProperty("FCM_PROJECT_ID")))
