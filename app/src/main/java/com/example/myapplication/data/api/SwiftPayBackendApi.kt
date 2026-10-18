@@ -124,6 +124,11 @@ data class BackendStatusResponse(
 )
 
 @Serializable
+data class BackendRuntimeConfig(
+    val providerEnvironment: String
+)
+
+@Serializable
 data class BackendWalletBalanceResponse(
     val balance: Double,
     val adjustedBalance: Double? = null,
@@ -205,6 +210,21 @@ data class BackendPaymentLinkResponse(
 )
 
 @Serializable
+data class BackendMerchantApiKey(
+    val id: String,
+    val name: String,
+    val prefix: String,
+    val createdAt: String,
+    val lastUsedAt: String? = null,
+    val revokedAt: String? = null,
+    val scopes: List<String> = emptyList(),
+    val apiKey: String? = null
+)
+
+@Serializable
+data class BackendMerchantApiKeyRequest(val name: String)
+
+@Serializable
 data class BackendDisbursementRequest(
     val amount: Double,
     val referenceNo: String,
@@ -262,6 +282,24 @@ data class BackendPaymentInstitutionLogo(
 )
 
 interface SwiftPayBackendApi {
+    @GET("v1/runtime-config")
+    suspend fun getRuntimeConfig(): Response<BackendRuntimeConfig>
+
+    @GET("v1/merchant/api-keys")
+    suspend fun listMerchantApiKeys(): Response<List<BackendMerchantApiKey>>
+
+    @POST("v1/merchant/api-keys")
+    suspend fun createMerchantApiKey(@Body request: BackendMerchantApiKeyRequest): Response<BackendMerchantApiKey>
+
+    @POST("v1/merchant/api-keys/{id}/rotate")
+    suspend fun rotateMerchantApiKey(
+        @Path("id") id: String,
+        @Body request: BackendMerchantApiKeyRequest
+    ): Response<BackendMerchantApiKey>
+
+    @DELETE("v1/merchant/api-keys/{id}")
+    suspend fun revokeMerchantApiKey(@Path("id") id: String): Response<Unit>
+
     @POST("v1/notifications/push-token")
     suspend fun registerPushToken(@Body request: BackendPushTokenRequest): Response<Unit>
 

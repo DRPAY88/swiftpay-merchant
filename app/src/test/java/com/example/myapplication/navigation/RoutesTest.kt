@@ -57,26 +57,35 @@ class RoutesTest {
         val navigationState = AppNavigationState(Route.Wallet)
         navigationState.navigate(Route.MiniApp(initialPath = "disbursement-page"))
 
-        assertEquals(true, navigationState.popOrNavigateHome())
+        assertEquals(true, navigationState.popOrNavigateRoot())
         assertEquals(Route.Wallet, navigationState.currentRoute)
     }
 
     @Test
     fun poppingNestedDestinationReturnsToPreviousRoute() {
-        val navigationState = AppNavigationState(Route.Home)
+        val navigationState = AppNavigationState(Route.Wallet)
         navigationState.navigate(Route.Profile)
         navigationState.navigate(Route.ApiKeys)
 
-        assertEquals(true, navigationState.popOrNavigateHome())
+        assertEquals(true, navigationState.popOrNavigateRoot())
         assertEquals(Route.Profile, navigationState.currentRoute)
     }
 
     @Test
-    fun poppingFromRootNavigatesHomeUnlessAlreadyHome() {
+    fun poppingFromNonHomeTabNavigatesHomeUnlessAlreadyThere() {
         val navigationState = AppNavigationState(Route.Profile)
 
-        assertEquals(true, navigationState.popOrNavigateHome())
+        assertEquals(true, navigationState.popOrNavigateRoot())
         assertEquals(Route.Home, navigationState.currentRoute)
-        assertEquals(false, navigationState.popOrNavigateHome())
+        assertEquals(false, navigationState.popOrNavigateRoot())
+    }
+
+    @Test
+    fun homeIsASelectableMainTab() {
+        val navigationState = AppNavigationState(Route.Wallet)
+        navigationState.navigate(Route.Home)
+
+        assertEquals(listOf(Route.Home), navigationState.backStack)
+        assertEquals(Route.Home, navigationState.selectedMainTab())
     }
 }

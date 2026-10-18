@@ -6,6 +6,7 @@ const dashboardMessage = document.querySelector("#dashboard-message");
 const requestCodeForm = document.querySelector("#request-code-form");
 const verifyCodeForm = document.querySelector("#verify-code-form");
 const signOutButton = document.querySelector("#sign-out");
+let registrationSecureStorageAvailable = false;
 
 function showMessage(target, message, error = true) {
   target.textContent = message;
@@ -49,6 +50,14 @@ async function loadUsers() {
   const users = await api("/v1/admin/users");
   const tbody = document.querySelector("#users-table");
   tbody.replaceChildren();
+  if (users.length === 0) {
+    const row = document.createElement("tr");
+    const message = cell(row, "No users found.");
+    message.colSpan = 4;
+    message.className = "empty-state";
+    tbody.append(row);
+    return;
+  }
   for (const user of users) {
     const row = document.createElement("tr");
     cell(row, user.email);
@@ -117,14 +126,21 @@ async function loadRegistrationSettings() {
   const toggle = document.querySelector("#registration-enabled");
   const status = document.querySelector("#registration-status");
   toggle.disabled = true;
-  const setting = await api("/v1/admin/registration-settings");
-  toggle.checked = setting.enabled;
-  toggle.disabled = !setting.secureStorageAvailable;
-  status.textContent = !setting.secureStorageAvailable
-    ? "Registration is unavailable. Configure KYB_ENCRYPTION_KEY before accepting applications."
-    : setting.enabled
-      ? "Open registration is accepting applications."
-      : "Open registration is disabled.";
+  try {
+    const setting = await api("/v1/admin/registration-settings");
+    registrationSecureStorageAvailable = setting.secureStorageAvailable;
+    toggle.checked = setting.enabled;
+    status.textContent = !registrationSecureStorageAvailable
+      ? "Registration is unavailable. Configure KYB_ENCRYPTION_KEY before accepting applications."
+      : setting.enabled
+        ? "Open registration is accepting applications."
+        : "Open registration is disabled.";
+  } catch (error) {
+    status.textContent = `Could not load registration settings: ${error.message}`;
+    throw error;
+  } finally {
+    toggle.disabled = !registrationSecureStorageAvailable;
+  }
 }
 
 async function updateRegistrationSetting(enabled) {
@@ -136,17 +152,20 @@ async function updateRegistrationSetting(enabled) {
       method: "PATCH",
       body: JSON.stringify({ enabled })
     });
+    registrationSecureStorageAvailable = setting.secureStorageAvailable;
     toggle.checked = setting.enabled;
-    status.textContent = setting.enabled
-      ? "Open registration is accepting applications."
-      : "Open registration is disabled.";
+    status.textContent = !registrationSecureStorageAvailable
+      ? "Registration is unavailable. Configure KYB_ENCRYPTION_KEY before accepting applications."
+      : setting.enabled
+        ? "Open registration is accepting applications."
+        : "Open registration is disabled.";
     await Promise.all([loadRegistrations(), loadAudit()]);
     showMessage(dashboardMessage, "Registration setting updated.", false);
   } catch (error) {
     toggle.checked = !enabled;
     showMessage(dashboardMessage, error.message);
   } finally {
-    toggle.disabled = false;
+    toggle.disabled = !registrationSecureStorageAvailable;
   }
 }
 
@@ -154,6 +173,14 @@ async function loadRegistrations() {
   const registrations = await api("/v1/admin/registrations");
   const tbody = document.querySelector("#registrations-table");
   tbody.replaceChildren();
+  if (registrations.length === 0) {
+    const row = document.createElement("tr");
+    const message = cell(row, "No registration applications found.");
+    message.colSpan = 4;
+    message.className = "empty-state";
+    tbody.append(row);
+    return;
+  }
   for (const registration of registrations) {
     const row = document.createElement("tr");
     cell(row, registration.email);
@@ -191,6 +218,9 @@ async function downloadRegistrationDocument(email, kind) {
 
 async function showRegistration(email) {
   const detail = document.querySelector("#registration-detail");
+  detail.replaceChildren();
+  detail.textContent = "Loading application details…";
+  detail.classList.remove("hidden");
   try {
     const registration = await api(`/v1/admin/registrations/${encodeURIComponent(email)}`);
     detail.replaceChildren();
@@ -254,6 +284,7 @@ async function showRegistration(email) {
     }
     detail.append(actions);
   } catch (error) {
+    detail.textContent = `Could not load application details: ${error.message}`;
     showMessage(dashboardMessage, error.message);
   }
 }
@@ -289,6 +320,12 @@ async function deleteRegistration(email) {
 }
 
 async function updateUser(email, status) {
+  const confirmation = status === "removed"
+    ? `Remove merchant access for ${email}?`
+    : status === "suspended"
+      ? `Suspend ${email}'s merchant access?`
+      : null;
+  if (confirmation && !window.confirm(confirmation)) return;
   try {
     await api(`/v1/admin/users/${encodeURIComponent(email)}`, {
       method: "PATCH",

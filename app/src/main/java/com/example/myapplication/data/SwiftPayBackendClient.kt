@@ -4,10 +4,13 @@ import com.example.myapplication.BuildConfig
 import com.example.myapplication.bridge.PaymentData
 import com.example.myapplication.data.api.BackendDisbursementRecord
 import com.example.myapplication.data.api.BackendDisbursementRequest
+import com.example.myapplication.data.api.BackendRuntimeConfig
 import com.example.myapplication.data.api.CryptoWidgetRequest
 import com.example.myapplication.data.api.CryptoWidgetResponse
 import com.example.myapplication.data.api.BackendOrderRequest
 import com.example.myapplication.data.api.BackendPushTokenRequest
+import com.example.myapplication.data.api.BackendMerchantApiKey
+import com.example.myapplication.data.api.BackendMerchantApiKeyRequest
 import com.example.myapplication.data.api.BackendPaymentLinkRequest
 import com.example.myapplication.data.api.BackendQrPaymentRequest
 import com.example.myapplication.data.api.BackendWalletTopupRequest
@@ -87,7 +90,8 @@ private fun normalizePaymentAppName(rawName: String?): String? =
 
 class SwiftPayService(
     private val backendBaseUrl: String = BuildConfig.PAYMENT_BACKEND_URL,
-    private val accessToken: String? = null
+    private val accessToken: String? = null,
+    private val onUnauthorized: (suspend () -> Unit)? = null
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val baseUrl = resolveBackendBaseUrl(backendBaseUrl)
@@ -117,10 +121,11 @@ class SwiftPayService(
         IllegalStateException("Sign in with an authorized account to continue")
     )
 
-    private fun <T> failure(response: Response<T>) = Result.failure<Nothing>(
+    private suspend fun <T> failure(response: Response<T>) = Result.failure<Nothing>(
         IllegalStateException(
             if (response.code() == 401) {
-                "Your session has expired. Sign out and sign in again to restore wallet and transfer access."
+                onUnauthorized?.invoke()
+                "Your session has expired. Sign in again to restore wallet and transfer access."
             } else {
                 runCatching {
                     val rawBody = response.errorBody()?.string().orEmpty()
@@ -139,6 +144,46 @@ class SwiftPayService(
             }
         )
     )
+
+    suspend fun listMerchantApiKeys(): Result<List<BackendMerchantApiKey>> =
+        apiKeyBodyRequest { api.listMerchantApiKeys() }
+
+    suspend fun createMerchantApiKey(name: String): Result<BackendMerchantApiKey> =
+        apiKeyBodyRequest { api.createMerchantApiKey(BackendMerchantApiKeyRequest(name)) }
+
+    suspend fun rotateMerchantApiKey(id: String, name: String): Result<BackendMerchantApiKey> =
+        apiKeyBodyRequest { api.rotateMerchantApiKey(id, BackendMerchantApiKeyRequest(name)) }
+
+    suspend fun revokeMerchantApiKey(id: String): Result<Unit> {
+        if (!hasApiKey) return missingSession()
+        return try {
+            val response = api.revokeMerchantApiKey(id)
+            if (response.isSuccessful) Result.success(Unit) else failure(response)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    private suspend fun <T : Any> apiKeyBodyRequest(
+        request: suspend () -> Response<T>
+    ): Result<T> {
+        if (!hasApiKey) return missingSession()
+        return try {
+            val response = request()
+            if (response.isSuccessful) {
+                response.body()?.let(Result.Companion::success)
+                    ?: Result.failure(IllegalStateException("The payment service returned an empty response"))
+            } else {
+                failure(response)
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
 
     suspend fun registerPushToken(token: String): Result<Unit> = updatePushToken(token, remove = false)
 
@@ -213,6 +258,7 @@ class SwiftPayService(
                 val body = response.body() ?: return Result.failure(IllegalStateException("Empty payment status"))
                 return Result.success(SwiftPayStatusResponse(id = body.paymentId ?: paymentId, status = body.status))
             }
+
             if (response.code() != 404) return failure(response)
             val transferResponse = api.getDisbursement(paymentId)
             if (transferResponse.isSuccessful) {
@@ -220,6 +266,19 @@ class SwiftPayService(
                     ?: return Result.failure(IllegalStateException("Empty transfer status response"))
                 Result.success(SwiftPayStatusResponse(id = transfer.id ?: paymentId, status = transfer.status))
             } else failure(transferResponse)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
+    suspend fun getRuntimeConfig(): Result<BackendRuntimeConfig> {
+        if (!hasApiKey) return missingSession()
+        return try {
+            val response = api.getRuntimeConfig()
+            if (!response.isSuccessful) return failure(response)
+            Result.success(response.body() ?: return Result.failure(IllegalStateException("Empty runtime configuration")))
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {

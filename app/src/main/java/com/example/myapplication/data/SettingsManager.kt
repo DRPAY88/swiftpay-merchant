@@ -133,8 +133,13 @@ class SettingsManager(val context: Context) {
             preferences.remove(LOGGED_IN_ROLE)
             preferences.remove(WALLET_BALANCE)
             preferences.remove(DEPOSIT_ACCOUNT_NUMBER)
+            preferences.remove(SESSION_TOKEN)
             clearLegacySwiftPayKeys(preferences)
         }
+    }
+
+    suspend fun clearSessionIfAccessTokenMatches(token: String) {
+        if (getAccessToken() == token) clearSession()
     }
 
     suspend fun saveBackendAccessToken(token: String) {

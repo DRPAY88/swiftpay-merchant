@@ -39,6 +39,15 @@ object IncomingMoneyPush {
             BuildConfig.FCM_SENDER_ID.isNotBlank() &&
             BuildConfig.FCM_API_KEY.isNotBlank()
 
+    internal fun authenticatedService(context: Context, accessToken: String) =
+        SwiftPayService(
+            accessToken = accessToken,
+            onUnauthorized = {
+                SettingsManager(context.applicationContext)
+                    .clearSessionIfAccessTokenMatches(accessToken)
+            }
+        )
+
     private fun firebaseApp(context: Context): FirebaseApp? {
         if (!isConfigured()) return null
         return FirebaseApp.getApps(context).firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
@@ -67,7 +76,7 @@ object IncomingMoneyPush {
                     }
                 }
             }
-            val result = SwiftPayService(accessToken = accessToken).registerPushToken(token)
+            val result = authenticatedService(context, accessToken).registerPushToken(token)
             result.onFailure { Log.w(TAG, "Could not register this device for incoming-payment notifications") }
             result.isSuccess
         } catch (error: CancellationException) {
@@ -92,7 +101,7 @@ object IncomingMoneyPush {
                     }
                 }
             }
-            SwiftPayService(accessToken = accessToken).removePushToken(token)
+            authenticatedService(context, accessToken).removePushToken(token)
                 .onFailure { Log.w(TAG, "Could not remove the signed-out device's push token") }
         } catch (error: CancellationException) {
             throw error
@@ -159,7 +168,7 @@ class IncomingMoneyMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         val accessToken = SettingsManager(applicationContext).getAccessToken() ?: return
         serviceScope.launch {
-            SwiftPayService(accessToken = accessToken).registerPushToken(token)
+            IncomingMoneyPush.authenticatedService(applicationContext, accessToken).registerPushToken(token)
                 .onFailure { Log.w("IncomingMoneyPush", "Could not register refreshed push token") }
         }
     }

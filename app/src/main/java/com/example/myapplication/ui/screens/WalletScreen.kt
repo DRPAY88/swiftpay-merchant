@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.api.InternalTransaction
 import com.example.myapplication.data.api.BackendKrwPhpQrQuoteResponse
 import com.example.myapplication.data.api.SwiftPayQrResponse
+import com.example.myapplication.data.api.SwiftPayStatusResponse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -137,21 +138,7 @@ fun WalletScreen(
     }
     val transactionStatusMap = viewModel.transactionStatusMap
     val filteredTransactions = remember(transactions, selectedFilter, transactionStatusMap) {
-        when (selectedFilter) {
-            "Income" -> transactions.filter { it.amount > 0 }
-            "Expense" -> transactions.filter { it.amount < 0 }
-            "Bank Deposits" -> transactions.filter {
-                it.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true) ||
-                    it.transactionId.startsWith("DEP") ||
-                    it.transactionId.contains("NETBANK") ||
-                    (it.amount > 0 && it.transactionId.startsWith("VA"))
-            }
-            "Failed" -> transactions.filter {
-                val response = transactionStatusMap[it.transactionId]
-                isFailedTransactionStatus(response?.status ?: response?.paymentStatus ?: it.status)
-            }
-            else -> transactions
-        }
+        filterWalletTransactions(transactions, selectedFilter, transactionStatusMap)
     }
     LaunchedEffect(Unit) {
         val transactionStore = TransactionStore(appContext)
@@ -663,7 +650,7 @@ fun WalletListContent(
                         modifier = Modifier.semantics { heading() }
                     )
                     Text(
-                        text = "Activity on your PHP wallet",
+                        text = "Payments, transfers, and deposit records",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 3.dp)
@@ -1030,7 +1017,11 @@ fun PremiumBalanceCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = if (isInternalMerchantWallet) "MERCHANT WALLET BALANCE" else "DRPAY WALLET BALANCE",
+                        text = when {
+                            isInternalMerchantWallet -> "MERCHANT APP WALLET"
+                            isLedgerWallet -> "PERSONAL APP WALLET"
+                            else -> "SHARED SWIFTPAY PROVIDER BALANCE"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.74f),
                         fontWeight = FontWeight.SemiBold,
@@ -1073,13 +1064,13 @@ fun PremiumBalanceCard(
                             } else Modifier
                         )
                 )
-                adjustedBalance?.let {
+                adjustedBalance?.takeUnless { isLedgerWallet }?.let {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Adjusted balance",
+                            text = "Reconciliation reference",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White.copy(alpha = 0.7f),
                             modifier = Modifier.weight(1f)
@@ -1091,6 +1082,11 @@ fun PremiumBalanceCard(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
+                    Text(
+                        "Includes admin adjustments; not the provider-reported balance or available funds.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.66f)
+                    )
                 }
                 errorMessage?.let {
                     Row(
@@ -1346,13 +1342,50 @@ fun AnimatedTransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewMo
     }
 }
 
-private fun isFailedTransactionStatus(status: String): Boolean {
+internal fun isFailedTransactionStatus(status: String): Boolean {
     val normalized = status.uppercase()
     return normalized.contains("FAIL") ||
         normalized.contains("REJECT") ||
         normalized.contains("ERROR") ||
         normalized.contains("EXPIRED") ||
         normalized.contains("CANCEL")
+}
+
+internal fun isPendingTransactionStatus(status: String): Boolean {
+    val normalized = status.uppercase()
+    return normalized.contains("PEND") ||
+        normalized.contains("PROCESS") ||
+        normalized.contains("WAIT")
+}
+
+internal fun isSuccessfulTransactionStatus(status: String): Boolean {
+    val normalized = status.uppercase()
+    return normalized.contains("SUCCESS") ||
+        normalized == "EXECUTED" ||
+        normalized.contains("COMPLETED") ||
+        normalized.contains("PAID")
+}
+
+internal fun filterWalletTransactions(
+    transactions: List<InternalTransaction>,
+    selectedFilter: String,
+    statusMap: Map<String, SwiftPayStatusResponse>
+): List<InternalTransaction> = when (selectedFilter) {
+    "Income" -> transactions.filter { it.amount > 0 }
+    "Expense" -> transactions.filter { it.amount < 0 }
+    "Bank Deposits" -> transactions.filter {
+        it.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true) ||
+            it.transactionId.startsWith("DEP") ||
+            it.transactionId.contains("NETBANK") ||
+            (it.amount > 0 && it.transactionId.startsWith("VA"))
+    }
+    "Failed" -> transactions.filter { transaction ->
+        val response = statusMap[transaction.transactionId]
+        isFailedTransactionStatus(
+            response?.status ?: response?.paymentStatus ?: transaction.status
+        )
+    }
+    else -> transactions
 }
 
 @Composable
@@ -1364,16 +1397,25 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
     val apiStatus = (apiPaymentStatus?.status ?: apiPaymentStatus?.paymentStatus)?.uppercase()
     val statusForDisplay = apiStatus ?: normalizedStatus
     val isFailed = isFailedTransactionStatus(statusForDisplay)
-    val isPending = statusForDisplay.contains("PEND")
+    val isPending = isPendingTransactionStatus(statusForDisplay)
+    val isSuccessful = isSuccessfulTransactionStatus(statusForDisplay)
+    val isCancelled = statusForDisplay.contains("CANCEL")
+    val isExpired = statusForDisplay.contains("EXPIRED")
     val transactionType = tx.transactionType?.uppercase()
     val transactionTitle = when {
         isManualBankDeposit -> "Bank deposit"
+        isCancelled && isExpense -> "Transfer cancelled"
+        isCancelled -> "Payment cancelled"
+        isExpired && isExpense -> "Transfer expired"
+        isExpired -> "Payment expired"
         isFailed && isExpense -> "Transfer failed"
         isFailed -> "Payment failed"
         isPending && isExpense -> "Transfer pending"
         isPending -> "Payment pending"
-        transactionType == "DISBURSEMENT" || isExpense -> "Bank transfer"
-        transactionType == "PAYMENT" -> "Payment received"
+        isSuccessful && (transactionType == "DISBURSEMENT" || isExpense) -> "Bank transfer"
+        isSuccessful && transactionType == "PAYMENT" -> "Payment received"
+        transactionType == "DISBURSEMENT" || isExpense -> "Transfer status update"
+        transactionType == "PAYMENT" -> "Payment status update"
         else -> "Wallet transaction"
     }
     val transactionReference = tx.referenceNo?.takeIf { it.isNotBlank() }
@@ -1383,9 +1425,10 @@ fun TransactionItem(tx: InternalTransaction, onClick: () -> Unit, viewModel: Min
     val warningColor = if (isDarkTheme) Color(0xFFFFD18A) else FastPayWarning
     val (icon, statusColor) = when {
         isFailed || apiStatus?.contains("FAIL") == true -> Icons.Rounded.ErrorOutline to MaterialTheme.colorScheme.error
-        isPending || apiStatus?.contains("PEND") == true -> Icons.Rounded.Schedule to warningColor
-        isExpense -> Icons.Rounded.NorthEast to MaterialTheme.colorScheme.error
-        else -> Icons.Rounded.SouthWest to successColor
+        isPending -> Icons.Rounded.Schedule to warningColor
+        isSuccessful && isExpense -> Icons.Rounded.NorthEast to MaterialTheme.colorScheme.onSurface
+        isSuccessful -> Icons.Rounded.SouthWest to successColor
+        else -> Icons.Rounded.Info to MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -1522,14 +1565,16 @@ fun TransactionDetailScreen(
         val isManualBankDeposit = tx.transactionType.equals("MANUAL_BANK_DEPOSIT", ignoreCase = true)
         val statusToDisplay = (apiPaymentStatus?.status ?: apiPaymentStatus?.paymentStatus)?.uppercase()
             ?: tx.status.uppercase()
+        val isFailed = isFailedTransactionStatus(statusToDisplay)
+        val isPending = isPendingTransactionStatus(statusToDisplay)
+        val isSuccessful = isSuccessfulTransactionStatus(statusToDisplay)
         val isDarkTheme = MaterialTheme.colorScheme.background == FastPayBlack
         val color = when {
-            statusToDisplay.contains("FAIL") -> MaterialTheme.colorScheme.error
-            isExpense -> MaterialTheme.colorScheme.onSurface
-            statusToDisplay.contains("SUCCESS") || statusToDisplay == "EXECUTED" ->
+            isFailed -> MaterialTheme.colorScheme.error
+            isPending -> if (isDarkTheme) Color(0xFFFFD18A) else FastPayWarning
+            isSuccessful && isExpense -> MaterialTheme.colorScheme.onSurface
+            isSuccessful ->
                 if (isDarkTheme) Color(0xFF8BE0AC) else FastPaySuccess
-            statusToDisplay.contains("PENDING") ->
-                if (isDarkTheme) Color(0xFFFFD18A) else FastPayWarning
             else -> MaterialTheme.colorScheme.onSurface
         }
 
@@ -1567,11 +1612,17 @@ fun TransactionDetailScreen(
                 Text(
                     text = when {
                         isManualBankDeposit -> "Manual Bank Deposit Received"
-                        statusToDisplay.contains("FAIL") || statusToDisplay.contains("REJECT") || statusToDisplay == "ERROR" ->
+                        statusToDisplay.contains("CANCEL") && isExpense -> "Transfer Cancelled"
+                        statusToDisplay.contains("CANCEL") -> "Payment Cancelled"
+                        statusToDisplay.contains("EXPIRED") && isExpense -> "Transfer Expired"
+                        statusToDisplay.contains("EXPIRED") -> "Payment Expired"
+                        isFailed ->
                             if (isExpense) "Transfer Failed" else "Payment Failed"
-                        statusToDisplay.contains("PEND") -> if (isExpense) "Transfer Pending" else "Payment Pending"
-                        isExpense -> "Transfer Completed"
-                        else -> "Payment Received"
+                        isPending -> if (isExpense) "Transfer Pending" else "Payment Pending"
+                        isSuccessful && isExpense -> "Transfer Completed"
+                        isSuccessful -> "Payment Received"
+                        isExpense -> "Transfer Status Update"
+                        else -> "Payment Status Update"
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,

@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -124,9 +125,17 @@ fun FastPayStatusBadge(
     val statusIcon = when {
         normalizedStatus.contains("fail") ||
             normalizedStatus.contains("reject") ||
-            normalizedStatus.contains("error") -> Icons.Rounded.ErrorOutline
-        normalizedStatus.contains("pend") -> Icons.Rounded.Schedule
-        else -> Icons.Rounded.CheckCircle
+            normalizedStatus.contains("error") ||
+            normalizedStatus.contains("expired") ||
+            normalizedStatus.contains("cancel") -> Icons.Rounded.ErrorOutline
+        normalizedStatus.contains("pend") ||
+            normalizedStatus.contains("process") ||
+            normalizedStatus.contains("wait") -> Icons.Rounded.Schedule
+        normalizedStatus.contains("success") ||
+            normalizedStatus == "executed" ||
+            normalizedStatus.contains("completed") ||
+            normalizedStatus.contains("paid") -> Icons.Rounded.CheckCircle
+        else -> Icons.Rounded.Info
     }
 
     Surface(

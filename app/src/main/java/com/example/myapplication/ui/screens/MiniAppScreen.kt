@@ -195,7 +195,7 @@ fun MiniAppScreen(
                             onDismissRequest = { viewModel.dismissConsent() },
                             icon = Icons.Rounded.Payment,
                             title = "Confirm collection",
-                            description = "Create a ${state.data.currency} checkout for ${state.data.description}.\nAmount: ${state.data.amount}",
+                            description = "Create a ${state.data.currency} checkout for ${state.data.description}.\nAmount: ${state.data.currency} ${"%,.2f".format(java.util.Locale.US, state.data.amount)}",
                             buttons = {
                                 SwiftPaySecondaryButton(text = "Cancel", onClick = { viewModel.dismissConsent() }, modifier = Modifier.weight(1f))
                                 SwiftPayPrimaryButton(text = "Create checkout", onClick = { viewModel.approvePayment(state.data) }, modifier = Modifier.weight(1f))

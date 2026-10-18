@@ -83,15 +83,31 @@ Set Android `PAYMENT_BACKEND_URL` to this service’s HTTPS base URL. Android de
 
 The old app login creates a local UUID and is not accepted by this backend. The mobile client must use the backend OTP endpoints and store the returned bearer token securely.
 
+## Merchant store API keys
+
+Merchants can create and manage collection-only server credentials from the app's **Profile → Payment Service** screen. API keys use the `drpay_live_<id>_<secret>` bearer format. The backend stores only a SHA-256 digest, returns the full key only when created or rotated, and immediately rejects revoked keys or keys belonging to a suspended merchant. Each merchant may have up to 10 active keys.
+
+Manage credentials using the app's short-lived OTP session token:
+
+- `GET /v1/merchant/api-keys` lists key labels, prefixes, timestamps, and revoked status; never returns key material.
+- `POST /v1/merchant/api-keys` with `{"name":"Store backend"}` creates a key.
+- `POST /v1/merchant/api-keys/:id/rotate` with a key name atomically revokes the old key and returns its replacement once.
+- `DELETE /v1/merchant/api-keys/:id` revokes a key.
+
+Use the generated API key only from a merchant-controlled server and send it as `Authorization: Bearer <key>`. Keys are restricted to QR Ph collection creation, collection FX quotes, payment-status reads, and payment-institution reads. They cannot manage API keys, read wallets, create transfers, or use pooled payment-link/order endpoints. The app's integration guide generates Node.js, PHP, and cURL collection examples.
+
+There is no merchant-configurable outbound webhook yet. `POST /v1/webhooks/swiftpay` is for signed callbacks from SwiftPay; merchant stores must poll `GET /v1/payments/:paymentToken/status`. A returned QR or pending status is not settlement confirmation.
+
 ## Routes
 
 - `POST /v1/payments/orders` creates an HMAC-signed SwiftPay order and returns a hosted checkout URL for pooled merchant/operator accounts. Self-service internal merchants use the ledger-backed QR Ph collection route instead; orders are disabled for them until settlement can be assigned safely. The `details` field is sent as a JSON-encoded string, as required by the provider contract.
 - `POST /v1/payments/qrph/quote` returns a signed, merchant-bound five-minute KRW/USD/EUR/CNY-to-PHP quote using the latest available CurrencyAPI rate.
 - `POST /v1/payments/qrph` requests a signed P2M QR Ph payment in PHP and its PNG image. A KRW, USD, EUR, or CNY customer price must include the signed quote token; SwiftPay QR Ph is charged the locked PHP amount, and the customer price and rate are retained in the payment record. QR Ph itself settles only in PHP.
-- `GET /v1/payments/:paymentToken/status` checks payment status using the payment-scoped token.
+- `GET /v1/payments/:paymentToken/status` checks payment status using the payment-scoped token. For personal/internal wallet records, pending payments are refreshed against the exact payment ID stored on that account's ledger; pending transfers are refreshed using their stored provider transfer ID.
+- `GET /v1/runtime-config` returns the authenticated service's provider environment (`sandbox`, `live`, or `custom`) without exposing provider URLs or credentials. Transfers are enabled in the embedded dashboard only for recognized sandbox/live endpoints.
 - `GET /v1/wallet/balance` returns the authenticated internal merchant's own PHP ledger balance and never returns the shared SwiftPay account number or pooled provider balance to that session. Existing customer sessions receive their separate personal ledger. Pooled operator sessions continue to use the provider account endpoint.
 - `GET /v1/wallet/activity` returns only the authenticated customer's or internal merchant's own ledger activity.
-- `POST /v1/wallet/topups/qrph` creates a uniquely referenced customer QR Ph top-up. The top-up remains pending until a signed SwiftPay `EXECUTED` webhook matches its reference, PHP amount, and payment identity. `GET /v1/wallet/topups/:referenceNo` returns only that customer's top-up status.
+- `POST /v1/wallet/topups/qrph` creates a uniquely referenced customer QR Ph top-up. A signed SwiftPay `EXECUTED` webhook or a later authenticated provider-status poll for the exact stored payment ID can settle it; `GET /v1/wallet/topups/:referenceNo` returns only that customer's top-up status.
 - `GET /v1/wallet/manual-deposits` remains for pooled merchant/operator history; personal and internal merchant wallets receive no shared manual-deposit records. `POST /v1/admin/manual-bank-deposits` is super-admin-only and remains history-only.
 - `GET /v1/wallet/payment-transactions` remains a pooled merchant/operator history view. Personal and internal merchant wallets use `/v1/wallet/activity` so unrelated provider receipts are never exposed.
 - `POST /v1/notifications/push-token` stores the authenticated device token; `DELETE` removes it. Merchant incoming-payment alerts remain merchant-wide. Customer-wallet-specific push delivery is not enabled, and customer tokens are deliberately excluded from shared merchant broadcasts.
@@ -105,7 +121,7 @@ The old app login creates a local UUID and is not accepted by this backend. The 
 - `GET /v1/payment-institutions` returns enabled SwiftPay payment institutions and their validated official logo URLs for branded bank selection UI.
 - `GET /healthz` is an unauthenticated health check.
 
-All `/v1` routes require an issuer- and audience-verified JWT. Order creation requires a caller-provided reference number for provider idempotency. The backend returns disbursements as `PENDING` after SwiftPay accepts them; acceptance is not settlement. Poll the disbursement status until a terminal state.
+All `/v1` routes require an issuer- and audience-verified JWT. Order creation requires a caller-provided reference number for provider idempotency. The backend returns disbursements as `PENDING` after SwiftPay accepts them; acceptance is not settlement. For personal and internal merchant ledgers, poll the transaction ID from `/v1/wallet/activity` through `/v1/payments/:paymentToken/status`; the backend reconciles a stored provider transfer ID and persists terminal provider status, while signed SwiftPay callbacks remain authoritative. Do not retry an unknown transfer automatically.
 
 Email OTP challenges are currently held in process memory. Run a single backend instance until a shared persistent email challenge store is configured; otherwise a restart or load balancing between instances can invalidate email sign-in challenges.
 

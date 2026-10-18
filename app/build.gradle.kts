@@ -33,14 +33,14 @@ plugins {
 
 android {
     namespace = "com.example.myapplication"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.swiftpay.site"
         minSdk = 24
-        targetSdk = 36
-        versionCode = 21
-        versionName = "1.0.20"
+        targetSdk = 37
+        versionCode = 22
+        versionName = "1.0.21"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "FCM_PROJECT_ID", buildConfigString(optionalProperty("FCM_PROJECT_ID")))

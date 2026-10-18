@@ -71,7 +71,6 @@ import com.example.myapplication.ui.screens.ApiDocsScreen
 import com.example.myapplication.ui.screens.ApiKeysScreen
 import com.example.myapplication.ui.screens.CryptoScreen
 import com.example.myapplication.ui.components.DrPayLogo
-import com.example.myapplication.ui.screens.HomeScreen
 import com.example.myapplication.ui.screens.LoginScreen
 import com.example.myapplication.ui.screens.DevicePinScreen
 import com.example.myapplication.ui.screens.MiniAppScreen
@@ -288,7 +287,7 @@ fun SwiftPayApp() {
                 navigationState.navigate(route)
             }
             override fun pop() {
-                if (!navigationState.popOrNavigateHome()) {
+                if (!navigationState.popOrNavigateRoot()) {
                     (context as? ComponentActivity)?.finish()
                 }
             }
@@ -463,11 +462,9 @@ fun SwiftPayApp() {
                 ) { key ->
                     when (key) {
                         Route.Home -> NavEntry(key) {
-                            HomeScreen(
-                                onLaunchMiniApp = { path -> navController.navigate(Route.MiniApp(path)) },
-                                onNavigateToWallet = { navController.navigate(Route.Wallet) },
-                                onProfileClick = { navController.navigate(Route.Profile) },
-                                onHelpClick = { navController.navigate(Route.ApiDocs) }
+                            MiniAppScreen(
+                                initialPath = "",
+                                onNavigateHome = { navController.navigate(Route.Home) }
                             )
                         }
                         is Route.MiniApp -> NavEntry(key) {

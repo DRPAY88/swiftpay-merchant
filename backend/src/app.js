@@ -385,12 +385,28 @@ function createAuthMiddleware(verifyAccessToken, userStore) {
     if (!match) {
       return res.status(401).json({ error: "unauthorized" });
     }
-    try {
-      req.principal = await verifyAccessToken(match[1]);
-    } catch {
-      return res.status(401).json({ error: "unauthorized" });
+    if (match[1].startsWith("drpay_live_")) {
+      req.principal = await userStore?.authenticateMerchantApiKey?.(match[1]);
+      if (!req.principal) return res.status(401).json({ error: "unauthorized" });
+      const path = `${req.baseUrl}${req.path}`;
+      const allowed = req.method === "POST" && [
+        "/v1/payments/qrph",
+        "/v1/payments/qrph/quote"
+      ].includes(path) || req.method === "GET" && (
+        path === "/v1/payment-institutions" ||
+        /^\/v1\/payments\/[^/]+\/status$/.test(path)
+      );
+      if (!allowed) {
+        return res.status(403).json({ error: "api_key_endpoint_not_allowed" });
+      }
+    } else {
+      try {
+        req.principal = await verifyAccessToken(match[1]);
+      } catch {
+        return res.status(401).json({ error: "unauthorized" });
+      }
     }
-    if (userStore) {
+    if (userStore && req.principal.authType !== "api_key") {
       const user = await userStore.getUser(req.principal.sub.toLowerCase());
       if (user?.status === "active") {
         req.principal.role = user.role;
@@ -431,6 +447,16 @@ function requireMerchantPrincipal(req, res, next) {
   next();
 }
 
+function requireMerchantSession(req, res, next) {
+  if (req.principal?.authType === "api_key") {
+    return res.status(403).json({ error: "session_authentication_required" });
+  }
+  if (req.principal?.role !== "merchant") {
+    return res.status(403).json({ error: "merchant_account_required" });
+  }
+  next();
+}
+
 function requirePooledMerchantPrincipal(req, res, next) {
   if (req.principal?.role === "merchant" && req.principal.walletMode === "internal") {
     return res.status(403).json({ error: "internal_merchant_wallet_supports_qrph_only" });
@@ -458,6 +484,71 @@ export function createApp({
   if (!requestOtp || !verifyOtp) throw new Error("OTP auth handlers are required");
   const app = express();
   const requestProvider = (path, options) => callSwiftPay(config, fetchImpl, path, options);
+  async function reconcileWalletDisbursementStatus({ token, status, getProviderId, updateStatus, source }) {
+    const providerId = getProviderId(status);
+    if (
+      status.kind !== "disbursement" ||
+      status.status !== "PENDING" ||
+      !z.string().uuid().safeParse(providerId).success ||
+      !updateStatus
+    ) {
+      return { paymentId: token, status: status.status, source };
+    }
+
+    const result = await requestProvider(
+      `disbursements/${encodeURIComponent(providerId)}`,
+      { auth: "basic" }
+    );
+    const providerRecord = result.data?.result ?? result.data;
+    const rawStatus = typeof providerRecord === "string"
+      ? providerRecord
+      : providerRecord?.status ?? providerRecord?.disbursementStatus;
+    const normalizedStatus = typeof rawStatus === "string" ? rawStatus.toUpperCase() : "";
+    const reconciledStatus = ["EXECUTED", "SUCCESS", "COMPLETED"].includes(normalizedStatus)
+      ? "EXECUTED"
+      : ["REJECTED", "FAILED", "ERROR"].includes(normalizedStatus) ? "REJECTED" : null;
+
+    if (reconciledStatus) {
+      const persistedStatus = await updateStatus(reconciledStatus, providerId);
+      return {
+        paymentId: token,
+        status: typeof persistedStatus === "string" ? persistedStatus : reconciledStatus,
+        source: "provider_reconciliation"
+      };
+    }
+    return { paymentId: token, status: status.status, source };
+  }
+  async function reconcileWalletPaymentStatus({ token, status, updateStatus, source }) {
+    if (
+      status.status !== "PENDING" ||
+      !["topup", "collection"].includes(status.kind) ||
+      !updateStatus
+    ) {
+      return { paymentId: token, status: status.status, source };
+    }
+
+    const result = await requestProvider("payments/status", { paymentToken: token });
+    const providerRecord = result.data?.result ?? result.data;
+    const rawStatus = typeof providerRecord === "string"
+      ? providerRecord
+      : providerRecord?.status ?? providerRecord?.paymentStatus;
+    const normalizedStatus = typeof rawStatus === "string" ? rawStatus.toUpperCase() : "";
+    const reconciledStatus = ["EXECUTED", "SUCCESS", "COMPLETED", "PAID", "CAPTURED"].includes(normalizedStatus)
+      ? "EXECUTED"
+      : ["REJECTED", "FAILED", "ERROR", "EXPIRED", "CANCELED", "CANCELLED"].includes(normalizedStatus)
+        ? "REJECTED"
+        : null;
+
+    if (reconciledStatus) {
+      const persistedStatus = await updateStatus(reconciledStatus);
+      return {
+        paymentId: token,
+        status: typeof persistedStatus === "string" ? persistedStatus : reconciledStatus,
+        source: "provider_reconciliation"
+      };
+    }
+    return { paymentId: token, status: status.status, source };
+  }
   let paymentInstitutionCatalogue = null;
   let paymentInstitutionCatalogueLoadedAt = 0;
   let paymentInstitutionCatalogueRetryAt = 0;
@@ -588,7 +679,7 @@ export function createApp({
   const webhookLimiter = rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: "draft-8", legacyHeaders: false });
   app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
   app.get("/download", (_req, res) => {
-    res.redirect(302, "/SwiftPay-Merchant-v1.0.20.apk");
+    res.redirect(302, "/SwiftPay-Merchant-v1.0.21.apk");
   });
   app.get("/checkout/:code", asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);
@@ -850,6 +941,56 @@ export function createApp({
   }));
 
   app.use("/v1", createAuthMiddleware(verifyAccessToken, userStore));
+  app.get("/v1/runtime-config", requireScope("swiftpay:payments:read"), asyncRoute(async (_req, res) => {
+    const hostname = config.swiftPayBaseUrl.hostname.toLowerCase();
+    const providerEnvironment = hostname === "api.pay.sandbox.live.swiftpay.ph"
+      ? "sandbox"
+      : hostname === "api.pay.live.swiftpay.ph" ? "live" : "custom";
+    res.set("Cache-Control", "no-store").json({ providerEnvironment });
+  }));
+  const merchantApiKeyNameSchema = z.object({
+    name: z.string().trim().min(1).max(64)
+  }).strict();
+  function merchantApiKeyResponse(key) {
+    return {
+      id: key.id,
+      name: key.name,
+      prefix: key.key_prefix,
+      createdAt: key.created_at,
+      lastUsedAt: key.last_used_at,
+      revokedAt: key.revoked_at,
+      scopes: ["collections:create", "collections:read"],
+      ...(key.api_key ? { apiKey: key.api_key } : {})
+    };
+  }
+  app.get("/v1/merchant/api-keys", requireMerchantSession, asyncRoute(async (req, res) => {
+    if (!userStore?.listMerchantApiKeys) throw new SwiftPayError(503, "Merchant API key storage is unavailable");
+    res.set("Cache-Control", "no-store").json(
+      (await userStore.listMerchantApiKeys(req.principal.sub)).map(merchantApiKeyResponse)
+    );
+  }));
+  app.post("/v1/merchant/api-keys", requireMerchantSession, asyncRoute(async (req, res) => {
+    if (!userStore?.createMerchantApiKey) throw new SwiftPayError(503, "Merchant API key storage is unavailable");
+    const input = parse(merchantApiKeyNameSchema, req.body);
+    const key = await userStore.createMerchantApiKey(req.principal.sub, input.name);
+    if (!key) return res.status(403).json({ error: "active_merchant_account_required" });
+    res.set("Cache-Control", "no-store").status(201).json(merchantApiKeyResponse(key));
+  }));
+  app.post("/v1/merchant/api-keys/:id/rotate", requireMerchantSession, asyncRoute(async (req, res) => {
+    if (!userStore?.rotateMerchantApiKey) throw new SwiftPayError(503, "Merchant API key storage is unavailable");
+    const id = z.string().regex(/^[a-f0-9]{16}$/).parse(req.params.id);
+    const input = parse(merchantApiKeyNameSchema, req.body);
+    const key = await userStore.rotateMerchantApiKey(req.principal.sub, id, input.name);
+    if (!key) return res.status(404).json({ error: "api_key_not_found" });
+    res.set("Cache-Control", "no-store").status(201).json(merchantApiKeyResponse(key));
+  }));
+  app.delete("/v1/merchant/api-keys/:id", requireMerchantSession, asyncRoute(async (req, res) => {
+    if (!userStore?.revokeMerchantApiKey) throw new SwiftPayError(503, "Merchant API key storage is unavailable");
+    const id = z.string().regex(/^[a-f0-9]{16}$/).parse(req.params.id);
+    const revoked = await userStore.revokeMerchantApiKey(req.principal.sub, id);
+    if (!revoked) return res.status(404).json({ error: "api_key_not_found" });
+    res.status(204).end();
+  }));
   const registrationUploadLimiter = rateLimit({
     windowMs: 60_000,
     limit: 12,
@@ -1092,12 +1233,52 @@ export function createApp({
     if (req.principal.role === "customer") {
       const status = await userStore?.getCustomerWalletPaymentStatus?.(req.principal.sub, token);
       if (!status) return res.status(404).json({ error: "payment_not_found" });
-      return res.json({ paymentId: token, status: status.status, source: "personal_wallet" });
+      const response = status.kind === "disbursement"
+        ? await reconcileWalletDisbursementStatus({
+            token,
+            status,
+            getProviderId: (record) => record.details?.providerDisbursementId,
+            updateStatus: userStore?.reconcileCustomerWalletDisbursement
+              ? (nextStatus, providerId) => userStore.reconcileCustomerWalletDisbursement(
+                req.principal.sub, token, nextStatus, providerId
+              )
+              : null,
+            source: "personal_wallet"
+          })
+        : await reconcileWalletPaymentStatus({
+            token,
+            status,
+            updateStatus: userStore?.reconcileCustomerWalletTopup
+              ? (nextStatus) => userStore.reconcileCustomerWalletTopup(req.principal.sub, token, nextStatus)
+              : null,
+            source: "personal_wallet"
+          });
+      return res.json(response);
     }
     if (req.principal.role === "merchant" && req.principal.walletMode === "internal") {
       const status = await userStore?.getMerchantWalletPaymentStatus?.(req.principal.sub, token);
       if (!status) return res.status(404).json({ error: "payment_not_found" });
-      return res.json({ paymentId: token, status: status.status, source: "merchant_wallet" });
+      const response = status.kind === "disbursement"
+        ? await reconcileWalletDisbursementStatus({
+            token,
+            status,
+            getProviderId: (record) => record.details?.providerDisbursementId,
+            updateStatus: userStore?.reconcileMerchantWalletDisbursement
+              ? (nextStatus, providerId) => userStore.reconcileMerchantWalletDisbursement(
+                req.principal.sub, token, nextStatus, providerId
+              )
+              : null,
+            source: "merchant_wallet"
+          })
+        : await reconcileWalletPaymentStatus({
+            token,
+            status,
+            updateStatus: userStore?.reconcileMerchantWalletCollection
+              ? (nextStatus) => userStore.reconcileMerchantWalletCollection(req.principal.sub, token, nextStatus)
+              : null,
+            source: "merchant_wallet"
+          });
+      return res.json(response);
     }
     const webhookStatus = await userStore?.getPaymentWebhookStatus?.(token);
     if (webhookStatus) {
@@ -1661,6 +1842,16 @@ export function createApp({
       throw error;
     }
     if (typeof result.data?.id !== "string" || !z.string().uuid().safeParse(result.data.id).success) {
+      if (isLedgerWallet) {
+        try {
+          await finishWallet(req.principal.sub, input.referenceNo, "UNKNOWN", {
+            providerOutcome: "unknown",
+            error: "Provider response did not include a valid transfer ID"
+          });
+        } catch {
+          console.error("Personal wallet transfer reservation requires reconciliation");
+        }
+      }
       if (auditId !== null) {
         try {
           await userStore.finishTransferIntent(auditId, "unknown", input.referenceNo, {
@@ -1676,6 +1867,23 @@ export function createApp({
         referenceNo: input.referenceNo,
         message: "SwiftPay may have accepted this transfer, but did not return a valid confirmation. Do not submit it again. Check your transaction history or contact support with this reference."
       });
+    }
+    if (isLedgerWallet) {
+      try {
+        await finishWallet(req.principal.sub, input.referenceNo, "PENDING", {
+          providerDisbursementId: result.data.id,
+          providerStatus: "PENDING"
+        });
+      } catch {
+        console.error("Accepted personal wallet transfer could not be linked for status reconciliation");
+        return res.status(202).json({
+          id: result.data.id,
+          referenceNo: input.referenceNo,
+          status: "PENDING",
+          reconciliationRequired: true,
+          message: "SwiftPay accepted this transfer, but its wallet record could not be linked for automatic status reconciliation. Do not submit it again; contact support with this reference."
+        });
+      }
     }
     if (auditId !== null) {
       try {

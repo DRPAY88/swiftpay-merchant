@@ -26,7 +26,7 @@ internal class AppNavigationState(initialRoute: Route = Route.Login) {
         backStack.add(route)
     }
 
-    fun popOrNavigateHome(): Boolean {
+    fun popOrNavigateRoot(): Boolean {
         return when {
             backStack.size > 1 -> {
                 backStack.removeAt(backStack.lastIndex)

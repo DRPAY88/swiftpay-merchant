@@ -1,4 +1,5 @@
 import pg from "pg";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { decryptKyb, encryptKyb } from "./kyb-crypto.js";
 
 const { Pool } = pg;
@@ -28,6 +29,18 @@ export function createAdminStore(
         onboarding_completed_at TIMESTAMPTZ,
         wallet_mode TEXT NOT NULL DEFAULT 'pooled' CHECK (wallet_mode IN ('pooled', 'internal'))
       );
+      CREATE TABLE IF NOT EXISTS merchant_api_keys (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL REFERENCES merchant_users(email) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        key_prefix TEXT NOT NULL,
+        key_hash TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_used_at TIMESTAMPTZ,
+        revoked_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS merchant_api_keys_email_created
+        ON merchant_api_keys (email, created_at DESC);
       ALTER TABLE merchant_users ADD COLUMN IF NOT EXISTS onboarding_eligible BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE merchant_users ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ;
       ALTER TABLE merchant_users ADD COLUMN IF NOT EXISTS wallet_mode TEXT NOT NULL DEFAULT 'pooled';
@@ -225,6 +238,132 @@ export function createAdminStore(
     }
   }
 
+  function newMerchantApiKey() {
+    const id = randomBytes(8).toString("hex");
+    const secret = randomBytes(32).toString("hex");
+    const prefix = `drpay_live_${id}_`;
+    const apiKey = `${prefix}${secret}`;
+    return {
+      id,
+      prefix,
+      apiKey,
+      hash: createHash("sha256").update(apiKey).digest()
+    };
+  }
+
+  async function insertMerchantApiKey(client, email, name) {
+    const generated = newMerchantApiKey();
+    const result = await client.query(
+      `INSERT INTO merchant_api_keys (id, email, name, key_prefix, key_hash)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, key_prefix, created_at, last_used_at, revoked_at`,
+      [generated.id, email, name, generated.prefix, generated.hash.toString("hex")]
+    );
+    return { ...result.rows[0], api_key: generated.apiKey };
+  }
+
+  async function createMerchantApiKey(emailValue, nameValue) {
+    const email = emailValue.trim().toLowerCase();
+    const name = nameValue.trim();
+    const user = await pool.query(
+      "SELECT email FROM merchant_users WHERE email = $1 AND role = 'merchant' AND status = 'active'",
+      [email]
+    );
+    if (user.rowCount === 0) return null;
+
+    const activeCount = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM merchant_api_keys WHERE email = $1 AND revoked_at IS NULL",
+      [email]
+    );
+    if (Number(activeCount.rows[0].count) >= 10) {
+      throw new AdminStoreError(409, "A merchant can have at most 10 active API keys");
+    }
+    return insertMerchantApiKey(pool, email, name);
+  }
+
+  async function listMerchantApiKeys(emailValue) {
+    const email = emailValue.trim().toLowerCase();
+    const result = await pool.query(
+      `SELECT id, name, key_prefix, created_at, last_used_at, revoked_at
+       FROM merchant_api_keys WHERE email = $1
+       ORDER BY created_at DESC LIMIT 50`,
+      [email]
+    );
+    return result.rows;
+  }
+
+  async function rotateMerchantApiKey(emailValue, id, nameValue) {
+    const email = emailValue.trim().toLowerCase();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const revoked = await client.query(
+        `UPDATE merchant_api_keys
+         SET revoked_at = NOW()
+         WHERE id = $1 AND email = $2 AND revoked_at IS NULL
+           AND EXISTS (
+             SELECT 1 FROM merchant_users
+             WHERE email = $2 AND role = 'merchant' AND status = 'active'
+           )
+         RETURNING id`,
+        [id, email]
+      );
+      if (revoked.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const key = await insertMerchantApiKey(client, email, nameValue.trim());
+      await client.query("COMMIT");
+      return key;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function revokeMerchantApiKey(emailValue, id) {
+    const result = await pool.query(
+      `UPDATE merchant_api_keys SET revoked_at = NOW()
+       WHERE id = $1 AND email = $2 AND revoked_at IS NULL
+       RETURNING id`,
+      [id, emailValue.trim().toLowerCase()]
+    );
+    return result.rowCount > 0;
+  }
+
+  async function authenticateMerchantApiKey(value) {
+    const match = /^drpay_live_([a-f0-9]{16})_([a-f0-9]{64})$/.exec(value);
+    if (!match) return null;
+    const result = await pool.query(
+      `SELECT k.key_hash, k.email, u.wallet_mode
+       FROM merchant_api_keys k
+       JOIN merchant_users u ON u.email = k.email
+       WHERE k.id = $1 AND k.revoked_at IS NULL
+         AND u.role = 'merchant' AND u.status = 'active'`,
+      [match[1]]
+    );
+    const row = result.rows[0];
+    if (!row || typeof row.key_hash !== "string" || !/^[a-f0-9]{64}$/.test(row.key_hash)) return null;
+    const storedHash = Buffer.from(row.key_hash, "hex");
+    const submittedHash = createHash("sha256").update(value).digest();
+    if (storedHash.length !== submittedHash.length || !timingSafeEqual(storedHash, submittedHash)) {
+      return null;
+    }
+    await pool.query(
+      "UPDATE merchant_api_keys SET last_used_at = NOW() WHERE id = $1 AND revoked_at IS NULL",
+      [match[1]]
+    );
+    return {
+      sub: row.email,
+      role: "merchant",
+      walletMode: row.wallet_mode,
+      scope: "swiftpay:payments:read swiftpay:payments:write",
+      authType: "api_key"
+    };
+  }
+
   async function getUser(email) {
     const result = await pool.query(
       "SELECT email, role, status, created_by, created_at, updated_at, wallet_mode FROM merchant_users WHERE email = $1",
@@ -308,12 +447,29 @@ export function createAdminStore(
 
   async function getMerchantWalletPaymentStatus(email, paymentId) {
     const result = await pool.query(
-      `SELECT status
+      `SELECT status, kind, details, payment_id
        FROM merchant_wallet_transactions
-       WHERE email = $1 AND kind = 'collection' AND (payment_id = $2 OR id = $2)`,
+      WHERE email = $1 AND kind IN ('collection', 'disbursement') AND (payment_id = $2 OR id = $2)`,
       [email, paymentId]
     );
     return result.rows[0] || null;
+  }
+
+  async function reconcileMerchantWalletCollection(email, paymentId, status) {
+    const updated = await pool.query(
+      `UPDATE merchant_wallet_transactions
+      SET status = $3, updated_at = NOW()
+      WHERE email = $1 AND payment_id = $2 AND kind = 'collection' AND status = 'PENDING'
+      RETURNING status`,
+      [email, paymentId, status]
+    );
+    if (updated.rows[0]) return updated.rows[0].status;
+    const current = await pool.query(
+      `SELECT status FROM merchant_wallet_transactions
+      WHERE email = $1 AND payment_id = $2 AND kind = 'collection'`,
+      [email, paymentId]
+    );
+    return current.rows[0]?.status ?? null;
   }
 
   async function createMerchantWalletCollection(email, referenceNo, amount, details = {}) {
@@ -426,6 +582,25 @@ export function createAdminStore(
     );
   }
 
+  async function reconcileMerchantWalletDisbursement(email, transactionId, status, providerId) {
+    const updated = await pool.query(
+      `UPDATE merchant_wallet_transactions
+       SET status = $3,
+           details = details || $4::jsonb,
+           updated_at = NOW()
+       WHERE id = $1 AND email = $2 AND kind = 'disbursement' AND status = 'PENDING'
+       RETURNING status`,
+      [transactionId, email, status, JSON.stringify({ providerDisbursementId: providerId })]
+    );
+    if (updated.rows[0]) return updated.rows[0].status;
+    const current = await pool.query(
+      `SELECT status FROM merchant_wallet_transactions
+       WHERE id = $1 AND email = $2 AND kind = 'disbursement'`,
+      [transactionId, email]
+    );
+    return current.rows[0]?.status ?? null;
+  }
+
   async function getCustomerWalletBalance(email) {
     const result = await pool.query(
       `SELECT COALESCE(SUM(
@@ -478,12 +653,29 @@ export function createAdminStore(
 
   async function getCustomerWalletPaymentStatus(email, paymentId) {
     const result = await pool.query(
-      `SELECT status
+      `SELECT status, kind, details, payment_id
        FROM customer_wallet_transactions
        WHERE email = $1 AND (payment_id = $2 OR id = $2)`,
       [email, paymentId]
     );
     return result.rows[0] || null;
+  }
+
+  async function reconcileCustomerWalletTopup(email, paymentId, status) {
+    const updated = await pool.query(
+      `UPDATE customer_wallet_transactions
+       SET status = $3, updated_at = NOW()
+       WHERE email = $1 AND payment_id = $2 AND kind = 'topup' AND status = 'PENDING'
+       RETURNING status`,
+      [email, paymentId, status]
+    );
+    if (updated.rows[0]) return updated.rows[0].status;
+    const current = await pool.query(
+      `SELECT status FROM customer_wallet_transactions
+       WHERE email = $1 AND payment_id = $2 AND kind = 'topup'`,
+      [email, paymentId]
+    );
+    return current.rows[0]?.status ?? null;
   }
 
   async function createCustomerWalletTopup(email, referenceNo, amount, details = {}) {
@@ -594,6 +786,25 @@ export function createAdminStore(
        WHERE email = $1 AND reference_no = $2 AND kind = 'disbursement'`,
       [email, referenceNo, status, JSON.stringify(details)]
     );
+  }
+
+  async function reconcileCustomerWalletDisbursement(email, transactionId, status, providerId) {
+    const updated = await pool.query(
+      `UPDATE customer_wallet_transactions
+       SET status = $3,
+           details = details || $4::jsonb,
+           updated_at = NOW()
+       WHERE id = $1 AND email = $2 AND kind = 'disbursement' AND status = 'PENDING'
+       RETURNING status`,
+      [transactionId, email, status, JSON.stringify({ providerDisbursementId: providerId })]
+    );
+    if (updated.rows[0]) return updated.rows[0].status;
+    const current = await pool.query(
+      `SELECT status FROM customer_wallet_transactions
+       WHERE id = $1 AND email = $2 AND kind = 'disbursement'`,
+      [transactionId, email]
+    );
+    return current.rows[0]?.status ?? null;
   }
 
   async function listUsers() {
@@ -1216,7 +1427,7 @@ export function createAdminStore(
       } else if (event.eventType === "disbursement") {
         const reservationStatus = effectiveStatus === "EXECUTED"
           ? "EXECUTED"
-          : effectiveStatus === "REJECTED" ? "REJECTED" : "PENDING";
+          : ["REJECTED", "ERROR"].includes(effectiveStatus) ? "REJECTED" : "PENDING";
         await client.query(
           `UPDATE customer_wallet_transactions
            SET status = CASE
@@ -1452,6 +1663,11 @@ export function createAdminStore(
   return {
     initialize,
     getUser,
+    createMerchantApiKey,
+    listMerchantApiKeys,
+    rotateMerchantApiKey,
+    revokeMerchantApiKey,
+    authenticateMerchantApiKey,
     ensureEmailCustomer,
     ensureSelfServiceMerchant,
     getCustomerWalletBalance,
@@ -1459,6 +1675,8 @@ export function createAdminStore(
     listCustomerWalletDisbursements,
     getCustomerWalletTopup,
     getCustomerWalletPaymentStatus,
+    reconcileCustomerWalletTopup,
+    reconcileCustomerWalletDisbursement,
     createCustomerWalletTopup,
     recordCustomerWalletTopupOrder,
     finishCustomerWalletTopup,
@@ -1468,6 +1686,8 @@ export function createAdminStore(
     listMerchantWalletTransactions,
     listMerchantWalletDisbursements,
     getMerchantWalletPaymentStatus,
+    reconcileMerchantWalletCollection,
+    reconcileMerchantWalletDisbursement,
     createMerchantWalletCollection,
     recordMerchantWalletCollectionOrder,
     finishMerchantWalletCollection,

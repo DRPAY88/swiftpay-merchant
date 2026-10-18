@@ -209,8 +209,16 @@ test("email customer wallet balances are isolated, credited once on settlement, 
       status: "REJECTED"
     });
     assert.equal(Number(await store.getCustomerWalletBalance(firstEmail)), 100);
+    await store.reserveCustomerWalletDisbursement(firstEmail, "PAYOUT-ERROR", 10);
+    await store.recordWebhookEvent({
+      eventKey: "disbursement:PAYOUT-ERROR",
+      eventType: "disbursement",
+      referenceNo: "PAYOUT-ERROR",
+      status: "ERROR"
+    });
+    assert.equal(Number(await store.getCustomerWalletBalance(firstEmail)), 100);
     const activity = await store.listCustomerWalletTransactions(firstEmail, 10);
-    assert.equal(activity.length, 3);
+    assert.equal(activity.length, 4);
     assert.ok(activity.some(({ kind, status }) => kind === "disbursement" && status === "REJECTED"));
     assert.ok(activity.some(({ kind, status }) => kind === "topup" && status === "EXECUTED"));
     assert.ok(activity.some(({ kind, status }) => kind === "topup" && status === "ERROR"));
@@ -305,7 +313,29 @@ test("self-service merchant ledgers isolate collections and reserve payouts", as
       "REJECTED"
     );
     assert.equal(Number(await store.getMerchantWalletBalance(firstEmail)), 100);
-    assert.equal((await store.listMerchantWalletTransactions(firstEmail, 10)).length, 2);
+    await store.reserveMerchantWalletDisbursement(firstEmail, "PAYOUT-ERROR", 10);
+    await store.recordWebhookEvent({
+      eventKey: "disbursement:PAYOUT-ERROR",
+      eventType: "disbursement",
+      referenceNo: "PAYOUT-ERROR",
+      status: "ERROR",
+      verifiedWebhook: true
+    });
+    assert.equal(
+      (await store.listMerchantWalletTransactions(firstEmail, 10))
+        .find(({ reference_no }) => reference_no === "PAYOUT-ERROR").status,
+      "REJECTED"
+    );
+    assert.equal(Number(await store.getMerchantWalletBalance(firstEmail)), 100);
+    await store.createMerchantWalletCollection(firstEmail, "COLLECT-POLL", 15);
+    await store.recordMerchantWalletCollectionOrder(firstEmail, "COLLECT-POLL", "payment-poll");
+    assert.equal(
+      await store.reconcileMerchantWalletCollection(firstEmail, "payment-poll", "EXECUTED"),
+      "EXECUTED"
+    );
+    assert.equal(Number(await store.getMerchantWalletBalance(firstEmail)), 115);
+    assert.equal(Number(await store.getMerchantWalletBalance(secondEmail)), 0);
+    assert.equal((await store.listMerchantWalletTransactions(firstEmail, 10)).length, 4);
   } finally {
     await store.close();
   }

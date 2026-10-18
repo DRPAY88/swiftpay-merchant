@@ -72,6 +72,9 @@ before(async () => {
           headers: { "content-type": "image/png" }
         });
       }
+      if (url.pathname.endsWith("/payments/status")) {
+        return Response.json("EXECUTED");
+      }
       return new Response(JSON.stringify({ balance: 75, number: "000123" }), { status: 200 });
     },
     fxFetchImpl: async (url) => {
@@ -128,7 +131,7 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.equal((homepageHtml.match(/id="how-it-works"/g) || []).length, 1);
   assert.match(homepageHtml, /DRPAY IN 15 SECONDS/);
   assert.match(homepageHtml, /earlier DRPAY interface/);
-  assert.match(homepageHtml, /Version 1\.0\.20/);
+  assert.match(homepageHtml, /Version 1\.0\.21/);
   assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=2"/);
   assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=2"/);
   assert.match(homepageHtml, /id="market-rates"/);
@@ -151,8 +154,8 @@ test("admin dashboard is served while its APIs require a signed super-admin role
 
   const download = await fetch(`${baseUrl}/download`, { redirect: "manual" });
   assert.equal(download.status, 302);
-  assert.equal(download.headers.get("location"), "/SwiftPay-Merchant-v1.0.20.apk");
-  const apk = await fetch(`${baseUrl}/SwiftPay-Merchant-v1.0.20.apk`, { method: "HEAD" });
+  assert.equal(download.headers.get("location"), "/SwiftPay-Merchant-v1.0.21.apk");
+  const apk = await fetch(`${baseUrl}/SwiftPay-Merchant-v1.0.21.apk`, { method: "HEAD" });
   assert.equal(apk.status, 200);
   assert.equal(apk.headers.get("content-type"), "application/vnd.android.package-archive");
   assert.ok(Number(apk.headers.get("content-length")) > 40_000_000);
@@ -175,6 +178,97 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   });
   assert.equal(admin.status, 200);
   assert.equal((await admin.json()).length, 2);
+});
+
+test("merchant API keys are shown once, collection-scoped, rotatable, and revocable", async () => {
+  const create = await fetch(`${baseUrl}/v1/merchant/api-keys`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer merchant-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ name: "Store backend" })
+  });
+  assert.equal(create.status, 201);
+  assert.equal(create.headers.get("cache-control"), "no-store");
+  const created = await create.json();
+  assert.match(created.apiKey, /^drpay_live_[a-f0-9]{16}_[a-f0-9]{64}$/);
+  assert.equal(created.name, "Store backend");
+  assert.deepEqual(created.scopes, ["collections:create", "collections:read"]);
+
+  const list = await fetch(`${baseUrl}/v1/merchant/api-keys`, {
+    headers: { authorization: "Bearer merchant-token" }
+  });
+  assert.equal(list.status, 200);
+  const listed = await list.json();
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].id, created.id);
+  assert.equal("apiKey" in listed[0], false);
+  assert.equal("key_hash" in listed[0], false);
+
+  const forbidden = await fetch(`${baseUrl}/v1/wallet/balance`, {
+    headers: { authorization: `Bearer ${created.apiKey}` }
+  });
+  assert.equal(forbidden.status, 403);
+  assert.deepEqual(await forbidden.json(), { error: "api_key_endpoint_not_allowed" });
+
+  const collection = await fetch(`${baseUrl}/v1/payments/qrph`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${created.apiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({})
+  });
+  assert.equal(collection.status, 400);
+
+  const rotate = await fetch(`${baseUrl}/v1/merchant/api-keys/${created.id}/rotate`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer merchant-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ name: "Store backend" })
+  });
+  assert.equal(rotate.status, 201);
+  const rotated = await rotate.json();
+  assert.notEqual(rotated.apiKey, created.apiKey);
+
+  const oldKey = await fetch(`${baseUrl}/v1/payments/qrph/quote`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${created.apiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 100, currency: "USD" })
+  });
+  assert.equal(oldKey.status, 401);
+
+  const quote = await fetch(`${baseUrl}/v1/payments/qrph/quote`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${rotated.apiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 100, currency: "USD" })
+  });
+  assert.equal(quote.status, 200);
+  assert.equal((await quote.json()).settlementCurrency, "PHP");
+
+  const revoke = await fetch(`${baseUrl}/v1/merchant/api-keys/${rotated.id}`, {
+    method: "DELETE",
+    headers: { authorization: "Bearer merchant-token" }
+  });
+  assert.equal(revoke.status, 204);
+  const revokedKey = await fetch(`${baseUrl}/v1/payments/qrph/quote`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${rotated.apiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ amount: 100, currency: "USD" })
+  });
+  assert.equal(revokedKey.status, 401);
 });
 
 test("public marketing rates are sourced, cached, and labeled as reference values", async () => {
@@ -719,6 +813,17 @@ test("email customers receive isolated wallet balances and only settled QR top-u
   assert.match(qr.referenceNo, /^WLT-/);
   assert.equal(qr.qrImageBase64, Buffer.from("test-qr-image").toString("base64"));
   assert.equal(Number(await store.getCustomerWalletBalance("customer@example.com")), 0);
+
+  const reconciledTopup = await fetch(`${baseUrl}/v1/payments/${encodeURIComponent(qr.paymentId)}/status`, {
+    headers: customerHeaders
+  });
+  assert.equal(reconciledTopup.status, 200);
+  assert.deepEqual(await reconciledTopup.json(), {
+    paymentId: qr.paymentId,
+    status: "EXECUTED",
+    source: "provider_reconciliation"
+  });
+  assert.equal(Number(await store.getCustomerWalletBalance("customer@example.com")), 125);
 
   await store.recordWebhookEvent({
     eventKey: `payment:${qr.paymentId}`,

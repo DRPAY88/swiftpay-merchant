@@ -66,7 +66,6 @@ import android.util.Patterns
 
 sealed interface LoginState {
     object Landing : LoginState
-    object WaitingApproval : LoginState
     data class Otp(val email: String) : LoginState
     object MpinSetup : LoginState
     object MpinConfirmation : LoginState
@@ -99,6 +98,15 @@ internal fun validateRegistrationProfile(
     }
 }
 
+internal fun maskEmailAddress(email: String): String {
+    val separator = email.lastIndexOf('@')
+    if (separator <= 0 || separator == email.lastIndex) return email
+    return "${email.substring(0, separator).take(1)}***${email.substring(separator)}"
+}
+
+internal fun filterOtpInput(value: String): String =
+    value.filter { it in '0'..'9' }.take(6)
+
 class LoginViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsManager = SettingsManager(application)
     private val authService = BackendAuthService()
@@ -111,6 +119,12 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
     var resendTimer by mutableStateOf(0)
+    var isRegistrationConfigLoading by mutableStateOf(true)
+        private set
+    var isRegistrationAvailable by mutableStateOf(false)
+        private set
+    var registrationAvailabilityMessage by mutableStateOf("Checking merchant application availability…")
+        private set
     var registrationConsent by mutableStateOf(false)
     var businessName by mutableStateOf("")
     var businessRegistrationNumber by mutableStateOf("")
@@ -127,6 +141,22 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     private var timerJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            authService.getRegistrationConfig()
+                .onSuccess { config ->
+                    isRegistrationAvailable = config.enabled && config.secureStorageAvailable
+                    registrationAvailabilityMessage = when {
+                        isRegistrationAvailable -> ""
+                        !config.enabled -> "Merchant applications are currently closed."
+                        else -> "Merchant applications are unavailable while secure document storage is being configured."
+                    }
+                }
+                .onFailure {
+                    isRegistrationAvailable = false
+                    registrationAvailabilityMessage = "Merchant applications are temporarily unavailable. Please try again later."
+                }
+            isRegistrationConfigLoading = false
+        }
         viewModelScope.launch {
             val token = settingsManager.backendAccessToken.first()
             if (!token.isNullOrBlank() && !settingsManager.hasDevicePin()) {
@@ -149,13 +179,14 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         registrationAccessToken = null
     }
 
-    fun onRegisterClick() {
-        onLoginClick()
-    }
-
     fun onResumeMerchantApplication() {
         errorMessage = null
         state = LoginState.RegistrationEmail
+    }
+
+    fun reviseRejectedApplication() {
+        errorMessage = null
+        state = LoginState.RegistrationForm
     }
 
     fun requestRegistrationOtp() {
@@ -210,10 +241,14 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                         representativePhone = application.profile.representativePhone
                         registrationReviewNote = application.reviewNote
                         uploadedRegistrationDocuments = application.documents.toSet()
-                        state = if (application.status == "submitted") {
-                            LoginState.RegistrationResult(application.email, application.status, application.reviewNote)
-                        } else {
+                        state = if (application.status == "draft") {
                             LoginState.RegistrationForm
+                        } else {
+                            LoginState.RegistrationResult(
+                                application.email,
+                                application.status,
+                                application.reviewNote
+                            )
                         }
                     }.onFailure { error ->
                         errorMessage = error.message ?: "Could not load your application."
@@ -366,7 +401,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     fun onVerifyOtpClick(onSuccess: () -> Unit) {
         if (isLoading) return
         val currentEmail = (state as? LoginState.Otp)?.email ?: username.trim().lowercase()
-        if (otpCode.length < 6) {
+        if (otpCode.length != 6 || otpCode.any { it !in '0'..'9' }) {
             errorMessage = "Please enter a valid 6-digit code"
             return
         }
@@ -556,12 +591,11 @@ fun LoginScreen(
                 isLoading = viewModel.isLoading,
                 errorMessage = viewModel.errorMessage,
                 onUsernameChange = { viewModel.username = it },
-                onLoginClick = { viewModel.onLoginClick() },
-                onCreateAccountClick = viewModel::onRegisterClick,
-                onResumeMerchantApplication = viewModel::onResumeMerchantApplication
-            )
-            LoginState.WaitingApproval -> WaitingApprovalContent(
-                onCancel = { viewModel.navigateToLanding() }
+                onContinueWithEmail = viewModel::onLoginClick,
+                onResumeMerchantApplication = viewModel::onResumeMerchantApplication,
+                registrationAvailable = viewModel.isRegistrationAvailable,
+                registrationAvailabilityMessage = viewModel.registrationAvailabilityMessage,
+                isRegistrationConfigLoading = viewModel.isRegistrationConfigLoading
             )
             is LoginState.Otp -> OtpContent(
                 email = currentState.email,
@@ -583,6 +617,7 @@ fun LoginScreen(
                 onContinue = viewModel::requestRegistrationOtp
             )
             is LoginState.RegistrationOtp -> OtpContent(
+                email = currentState.email,
                 otpCode = viewModel.otpCode,
                 isLoading = viewModel.isLoading,
                 errorMessage = viewModel.errorMessage,
@@ -599,7 +634,8 @@ fun LoginScreen(
             )
             is LoginState.RegistrationResult -> RegistrationResultContent(
                 result = currentState,
-                onDone = viewModel::navigateToLanding
+                onDone = viewModel::navigateToLanding,
+                onUpdateApplication = viewModel::reviseRejectedApplication
             )
             LoginState.MpinSetup -> MpinEnrollmentContent(
                 isConfirmation = false,
@@ -650,8 +686,18 @@ private fun OnboardingCheckContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        CircularProgressIndicator(color = FastPayBlue)
-        Spacer(Modifier.height(24.dp))
+        if (isLoading) {
+            CircularProgressIndicator(color = FastPayBlue)
+            Spacer(Modifier.height(24.dp))
+        } else if (errorMessage != null) {
+            Icon(
+                Icons.Rounded.ErrorOutline,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(44.dp)
+            )
+            Spacer(Modifier.height(24.dp))
+        }
         Text(
             "Preparing your account",
             style = MaterialTheme.typography.headlineSmall,
@@ -662,7 +708,8 @@ private fun OnboardingCheckContent(
         Text(
             errorMessage ?: "Checking whether your merchant account needs onboarding.",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f),
+            color = if (errorMessage != null) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.68f),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp)
         )
@@ -821,7 +868,7 @@ private fun BiometricOptInContent(
     val availabilityMessage = authenticator?.availabilityMessage()
         ?: "Biometric unlock is unavailable in this app session."
     val textColor = MaterialTheme.colorScheme.onBackground
-    val gradient = Brush.horizontalGradient(listOf(Color(0xFFA44DE2), Color(0xFF087BE5)))
+    val gradient = Brush.horizontalGradient(listOf(FastPayNavy, FastPayBlue))
 
     Column(
         modifier = Modifier
@@ -837,14 +884,14 @@ private fun BiometricOptInContent(
                 .fillMaxWidth()
                 .height(4.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(Brush.horizontalGradient(listOf(Color(0xFFCC9BFF), Color(0xFFB990F5))))
+                .background(Brush.horizontalGradient(listOf(FastPayNavy, FastPayBlue)))
         )
         Spacer(Modifier.weight(0.5f))
         Box(
             modifier = Modifier
                 .size(250.dp)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(Color(0xFF71396F), Color(0xFF174C76), Color(0xFF087BE5)))),
+                .background(Brush.linearGradient(listOf(FastPayNavy, FastPayBlue))),
             contentAlignment = Alignment.Center
         ) {
             Surface(
@@ -871,7 +918,7 @@ private fun BiometricOptInContent(
             textAlign = TextAlign.Center
         )
         Text(
-            "Use your fingerprint to unlock DRPAY without entering your MPIN every time.",
+            "Use your device biometrics to unlock DRPAY on this device. This does not verify your merchant application or KYB documents.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f),
             textAlign = TextAlign.Center,
@@ -1101,29 +1148,16 @@ fun DevicePinScreen(
 }
 
 @Composable
-fun WaitingApprovalContent(onCancel: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text("Waiting for authorization from your trusted device...", style = MaterialTheme.typography.bodyLarge)
-        Spacer(modifier = Modifier.height(16.dp))
-        CircularProgressIndicator(color = FastPayBlue)
-        Spacer(modifier = Modifier.height(24.dp))
-        TextButton(onClick = onCancel) { Text("Cancel") }
-    }
-}
-
-@Composable
 fun LandingContent(
     username: String,
     isLoading: Boolean,
     errorMessage: String?,
     onUsernameChange: (String) -> Unit,
-    onLoginClick: () -> Unit,
-    onCreateAccountClick: () -> Unit,
-    onResumeMerchantApplication: () -> Unit
+    onContinueWithEmail: () -> Unit,
+    onResumeMerchantApplication: () -> Unit,
+    registrationAvailable: Boolean,
+    registrationAvailabilityMessage: String,
+    isRegistrationConfigLoading: Boolean
 ) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
@@ -1208,14 +1242,14 @@ fun LandingContent(
                 horizontalAlignment = Alignment.Start
             ) {
                 Text(
-                    "Your KRW.\nYour choice.",
+                    "Payments,\nmade clearer.",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     lineHeight = 38.sp
                 )
                 Text(
-                    "Create an account or sign in to manage your personal DRPAY wallet.",
+                    "Sign in to manage your DRPAY account and merchant payment tools.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color.White.copy(alpha = 0.82f),
                     modifier = Modifier.padding(top = 10.dp)
@@ -1243,7 +1277,7 @@ fun LandingContent(
                             color = colorScheme.onSurface
                         )
                         Text(
-                            "Use your email to continue or create an account.",
+                            "Use your email to sign in or continue eligible account setup.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = colorScheme.onSurfaceVariant
                         )
@@ -1264,13 +1298,13 @@ fun LandingContent(
                             imeAction = ImeAction.Go
                         ),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                            onGo = { if (!isLoading) onLoginClick() }
+                            onGo = { if (!isLoading) onContinueWithEmail() }
                         ),
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp)
                     )
                     Text(
-                        "We’ll email you a one-time code. New accounts activate as soon as you verify your email—no KYB or document uploads.",
+                        "We’ll email you a one-time code. Access depends on your account eligibility. Merchant applications are reviewed separately and do not grant access immediately.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colorScheme.onSurfaceVariant
                     )
@@ -1300,7 +1334,7 @@ fun LandingContent(
                         }
                     }
                     Button(
-                        onClick = onLoginClick,
+                        onClick = onContinueWithEmail,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
@@ -1323,24 +1357,41 @@ fun LandingContent(
                             Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null)
                         }
                     }
-                    OutlinedButton(
-                        onClick = onCreateAccountClick,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        enabled = !isLoading,
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Rounded.PersonAdd, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Create a new account", fontWeight = FontWeight.SemiBold)
-                    }
-                    TextButton(
-                        onClick = onResumeMerchantApplication,
-                        enabled = !isLoading,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Resume a merchant application")
+                    if (registrationAvailable) {
+                        OutlinedButton(
+                            onClick = onResumeMerchantApplication,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            enabled = !isLoading,
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Rounded.PersonAdd, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Apply or resume merchant application", fontWeight = FontWeight.SemiBold)
+                        }
+                    } else if (isRegistrationConfigLoading) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                registrationAvailabilityMessage,
+                                color = colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    } else {
+                        Text(
+                            registrationAvailabilityMessage,
+                            color = colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -1360,7 +1411,7 @@ fun LandingContent(
                 )
                 Spacer(Modifier.width(7.dp))
                 Text(
-                    "Email verification · Automatic account activation",
+                    "Email verification · Access based on account eligibility",
                     style = MaterialTheme.typography.labelSmall,
                     color = colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -1452,6 +1503,7 @@ private fun RegistrationFormContent(
     val documentsComplete = requiredDocumentKinds.all { it in viewModel.uploadedRegistrationDocuments }
     val consentComplete = viewModel.registrationConsent
     val completedMilestones = listOf(profileComplete, documentsComplete, consentComplete).count { it }
+    val canSubmitRegistration = profileComplete && documentsComplete && consentComplete && !viewModel.isLoading
 
     val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -1528,6 +1580,14 @@ private fun RegistrationFormContent(
             consentComplete = consentComplete,
             completedMilestones = completedMilestones
         )
+        if (completedMilestones < 3) {
+            Text(
+                "Complete all checklist items before submitting your application.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+        }
         if (viewModel.registrationReviewNote.isNotBlank()) {
             Surface(
                 color = MaterialTheme.colorScheme.errorContainer,
@@ -1688,11 +1748,11 @@ private fun RegistrationFormContent(
         }
         Button(
             onClick = viewModel::submitRegistration,
-            enabled = !viewModel.isLoading,
+            enabled = canSubmitRegistration,
             modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 22.dp)
         ) {
             if (viewModel.isLoading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-            else Text("Submit for KYB review")
+            else Text(if (completedMilestones == 3) "Submit for KYB review" else "Complete checklist to submit")
         }
     }
 }
@@ -1852,25 +1912,93 @@ private fun RegistrationSection(
 @Composable
 private fun RegistrationResultContent(
     result: LoginState.RegistrationResult,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onUpdateApplication: () -> Unit
 ) {
+    val isSubmitted = result.status == "submitted"
+    val isApproved = result.status == "approved"
+    val isRejected = result.status == "rejected"
     Column(
-        modifier = Modifier.fillMaxSize().padding(28.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Rounded.HourglassTop, contentDescription = null, tint = FastPayBlue, modifier = Modifier.size(54.dp))
-        Text("Application received", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Icon(
+            when {
+                isApproved -> Icons.Rounded.Verified
+                isRejected -> Icons.Rounded.ErrorOutline
+                else -> Icons.Rounded.HourglassTop
+            },
+            contentDescription = null,
+            tint = when {
+                isApproved -> MaterialTheme.colorScheme.primary
+                isRejected -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.tertiary
+            },
+            modifier = Modifier.size(54.dp)
+        )
+        Spacer(Modifier.height(16.dp))
         Text(
-            "Your merchant application for ${result.email} is pending manual KYB review. You will be able to sign in after approval.",
+            when {
+                isApproved -> "Application approved"
+                isRejected -> "Application needs changes"
+                isSubmitted -> "Application received"
+                else -> "Application status updated"
+            },
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            when {
+                isApproved -> "Your application for ${result.email} was approved. Return to sign in to access your merchant account."
+                isRejected -> "Your application for ${result.email} was not approved yet. Review the note below and update your application."
+                isSubmitted -> "Your application for ${result.email} has been submitted for manual review. Merchant access remains unavailable until approval."
+                else -> "The latest status for ${result.email} is ${result.status}. Merchant access is available only after approval."
+            },
             textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 12.dp)
         )
         if (result.reviewNote.isNotBlank()) {
-            Text(result.reviewNote, modifier = Modifier.padding(top = 12.dp), textAlign = TextAlign.Center)
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = if (isRejected) MaterialTheme.colorScheme.errorContainer
+                else MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Reviewer note", fontWeight = FontWeight.Bold)
+                    Text(result.reviewNote, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
         }
-        Button(onClick = onDone, modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
-            Text("Back to sign in")
+        if (isRejected) {
+            Button(
+                onClick = onUpdateApplication,
+                modifier = Modifier.fillMaxWidth().padding(top = 24.dp)
+            ) {
+                Text("Update application")
+            }
+        }
+        if (!isRejected) {
+            Button(
+                onClick = onDone,
+                modifier = Modifier.fillMaxWidth().padding(top = 24.dp)
+            ) {
+                Text(if (isApproved) "Continue to sign in" else "Back to sign in")
+            }
+        } else {
+            TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+                Text("Back to sign in")
+            }
         }
     }
 }
@@ -2013,9 +2141,9 @@ fun OtpContent(
         )
         Text(
             text = if (registrationFlow) {
-                "Enter the 6-digit code to continue your merchant application. This does not grant account access."
+                "Enter the 6-digit code sent to ${email?.let(::maskEmailAddress) ?: "your email"}. This verifies your application email only and does not grant account access."
             } else {
-                "We sent a 6-digit code to ${email ?: "your email address"}. Verifying signs you in or activates your new account."
+                "We sent a 6-digit code to ${email?.let(::maskEmailAddress) ?: "your email address"}. Verifying confirms your email and continues sign-in."
             },
             color = secondaryTextColor,
             modifier = Modifier.padding(top = 12.dp),
@@ -2026,10 +2154,13 @@ fun OtpContent(
 
         TextField(
             value = otpCode,
-            onValueChange = onOtpChange,
+            onValueChange = { onOtpChange(filterOtpInput(it)) },
             placeholder = { Text("000000", color = Color.Gray.copy(alpha = 0.5f), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
             modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Done
+            ),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = inputBgColor,
                 unfocusedContainerColor = inputBgColor,
@@ -2059,7 +2190,7 @@ fun OtpContent(
             modifier = Modifier.fillMaxWidth().height(62.dp),
             colors = ButtonDefaults.buttonColors(containerColor = FastPayBlue),
             shape = RoundedCornerShape(18.dp),
-            enabled = !isLoading
+            enabled = !isLoading && otpCode.length == 6
         ) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
@@ -2076,13 +2207,16 @@ fun OtpContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Didn't receive the code? ", color = secondaryTextColor, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                text = if (resendTimer > 0) "Wait ${resendTimer}s" else "Resend Code",
-                color = FastPayBlue,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable(enabled = resendTimer == 0) { onResendClick() }
-            )
+            Text("Didn't receive the code?", color = secondaryTextColor, style = MaterialTheme.typography.bodyMedium)
+            TextButton(
+                onClick = onResendClick,
+                enabled = resendTimer == 0 && !isLoading
+            ) {
+                Text(
+                    text = if (resendTimer > 0) "Wait ${resendTimer}s" else "Resend code",
+                    color = if (resendTimer == 0 && !isLoading) FastPayBlue else secondaryTextColor
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

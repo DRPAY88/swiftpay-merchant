@@ -807,10 +807,23 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val hasBackendSession = !settingsManager.backendAccessToken.first().isNullOrBlank()
                 val alias = settingsManager.merchantAlias.first() ?: ""
+                val providerEnvironment = if (hasBackendSession) {
+                    val environment = getService().getRuntimeConfig().getOrElse { error ->
+                        bridge?.sendError(error.message ?: "Unable to verify the payment provider environment")
+                        uiState = MiniAppUiState.Error(
+                            error.message ?: "Unable to verify the payment provider environment"
+                        )
+                        return@launch
+                    }
+                    environment.providerEnvironment
+                } else {
+                    "unknown"
+                }
                 bridge?.sendResponse(
                     mapOf(
                         "hasApiKey" to hasBackendSession.toString(),
                         "managedByServer" to "true",
+                        "providerEnvironment" to providerEnvironment,
                         "apiKey" to "",
                         "baseUrl" to "",
                         "merchantId" to "",

@@ -19,9 +19,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 import com.example.myapplication.data.api.MerchantProfileResponse
 import com.example.myapplication.data.api.VaultPaymentResponse
 import com.example.myapplication.ui.theme.*
+
+internal fun formatMonthlyVolume(amount: Double): String =
+    String.format(Locale.US, "%,.0f", amount)
 
 /**
  * Merchant Profile Card Component
@@ -207,7 +211,7 @@ fun MerchantProfileCard(
                 MerchantInfoBox(
                     icon = Icons.Rounded.AttachMoney,
                     label = "Monthly Volume",
-                    value = "₱${String.format("%,.0f", profile.monthlyVolume ?: 0.0)}",
+                    value = "₱${formatMonthlyVolume(profile.monthlyVolume ?: 0.0)}",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -507,7 +511,6 @@ fun TransactionStatusIndicator(
         )
     }
 }
-
 
 
 

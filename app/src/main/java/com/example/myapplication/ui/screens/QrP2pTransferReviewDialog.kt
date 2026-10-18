@@ -78,6 +78,11 @@ fun QrP2pTransferReviewDialog(
                         "then verify every detail. A QR scan does not confirm the recipient's identity.",
                     style = MaterialTheme.typography.bodySmall
                 )
+                Text(
+                    "Transfers are sent immediately after confirmation and may not be reversible.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it },
@@ -160,6 +165,24 @@ fun QrP2pTransferReviewDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (valid) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text("Final transfer review", style = MaterialTheme.typography.labelLarge)
+                            Text("Amount: PHP ${"%,.2f".format(java.util.Locale.US, parsedAmount)}")
+                            Text("To: ${selectedInstitution?.name}")
+                            Text("Account: ${accountNumber.trim()}")
+                            Text("Recipient: ${recipientName.trim()}")
+                        }
+                    }
+                }
                 Text(
                     "QR_P2P • InstaPay • PHP 0.01–50,000.00",
                     style = MaterialTheme.typography.labelSmall,
@@ -179,7 +202,15 @@ fun QrP2pTransferReviewDialog(
                         recipientName.trim()
                     )
                 }
-            ) { Text("Confirm and send") }
+            ) {
+                Text(
+                    if (parsedAmount != null && parsedAmount in 0.01..50_000.0) {
+                        "Confirm and send PHP ${"%,.2f".format(java.util.Locale.US, parsedAmount)}"
+                    } else {
+                        "Confirm and send"
+                    }
+                )
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

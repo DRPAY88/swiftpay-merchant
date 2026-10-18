@@ -1750,6 +1750,9 @@
                     <p>Move funds from your wallet to a recipient using an InstaPay-supported institution.</p>
                 </div>
                 <div class="transfer-body">
+                    <p id="transfer-provider-environment" class="helper-copy" role="status" aria-live="polite">
+                        Payment provider environment is being verified. Transfers are unavailable until it is confirmed.
+                    </p>
                     <div class="input-group">
                         <label class="input-label" for="institution-search">Destination bank / e-wallet</label>
                         <select id="disb-bank" hidden aria-hidden="true">
@@ -1833,6 +1836,7 @@
         let selectedCollectPaymentApp = null;
         let pendingCollectQuote = null;
         let returnFocusElement = null;
+        let providerEnvironment = 'unknown';
         function formatPhp(value) {
             const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
             return new Intl.NumberFormat('en-PH', {
@@ -2264,6 +2268,14 @@
         }
 
         function sendDisbursement() {
+            if (providerEnvironment === 'custom') {
+                showNotice('Transfers are disabled because this custom provider endpoint cannot be identified as sandbox or live. Contact your administrator.', true);
+                return;
+            }
+            if (!['sandbox', 'live'].includes(providerEnvironment)) {
+                showNotice('The payment provider environment has not been verified. Wait for the service status check before sending a transfer.', true);
+                return;
+            }
             const a = Number(document.getElementById('disb-amount').value);
             const b = document.getElementById('disb-bank').value;
             const acc = (document.getElementById('disb-acc').value || '').trim();
@@ -2493,9 +2505,25 @@
             }
             if (typeof res.data === 'number') { document.getElementById('balance-display').innerText = '\u20B1 ' + res.data.toLocaleString(undefined, {minimumFractionDigits: 2}); return; }
             if (res.data && res.data.managedByServer) {
-                const status = res.data.hasApiKey === 'true' ? 'Merchant session active' : 'Sign in required';
+                providerEnvironment = ['sandbox', 'live', 'custom'].includes(res.data.providerEnvironment)
+                    ? res.data.providerEnvironment
+                    : 'unknown';
+                const environmentLabel = {
+                    sandbox: 'SANDBOX — test provider',
+                    live: 'LIVE — real provider',
+                    custom: 'CUSTOM provider endpoint'
+                }[providerEnvironment] || 'Provider environment unverified';
+                const status = `${res.data.hasApiKey === 'true' ? 'Merchant session active' : 'Sign in required'} · ${environmentLabel}`;
                 document.getElementById('payment-service-status').innerText = status;
                 document.getElementById('payment-service-detail-status').innerText = status;
+                const transferEnvironment = document.getElementById('transfer-provider-environment');
+                transferEnvironment.textContent = providerEnvironment === 'live'
+                    ? 'LIVE SwiftPay environment — transfers will use the live payment provider.'
+                    : providerEnvironment === 'sandbox'
+                        ? 'SANDBOX SwiftPay environment — transfers will use the test payment provider.'
+                        : providerEnvironment === 'custom'
+                            ? 'CUSTOM provider endpoint — its environment cannot be verified, so transfers are disabled.'
+                            : 'Payment provider environment is unverified. Transfers are unavailable.';
             }
             if (res.data && typeof res.data.message === 'string') showNotice(res.data.message);
         };

@@ -50,7 +50,6 @@ fun ProfileScreen() {
     val themeMode by settingsManager.themeMode.collectAsState(initial = "SYSTEM")
     val signedInIdentity by settingsManager.loggedInIdentity.collectAsState(initial = null)
     val signedInRole by settingsManager.loggedInRole.collectAsState(initial = null)
-    val merchantAlias by settingsManager.merchantAlias.collectAsState(initial = null)
     val hasDevicePin = remember(context) { DevicePinManager(context).hasPin() }
     var biometricEnabled by remember(context) {
         mutableStateOf(settingsManager.isBiometricUnlockEnabled())
@@ -93,9 +92,7 @@ fun ProfileScreen() {
     val secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
     val borderColor = MaterialTheme.colorScheme.outlineVariant
     val isCustomer = signedInRole == "customer"
-    val accountName = if (isCustomer) "Personal wallet" else {
-        merchantAlias?.takeIf { it.isNotBlank() } ?: "Merchant account"
-    }
+    val accountName = if (isCustomer) "Personal wallet" else "Merchant account"
     val canEnableBiometrics = hasDevicePin && biometricAuthenticator?.isAvailable() == true
 
     fun onBiometricToggle(enabled: Boolean) {
@@ -216,10 +213,6 @@ fun ProfileScreen() {
                         secondaryTextColor
                     )
                     Spacer(Modifier.height(14.dp))
-                    if (!isCustomer) {
-                        ProfileDetailRow("Payment link alias", merchantAlias?.takeIf { it.isNotBlank() } ?: "Not set", textColor, secondaryTextColor)
-                        Spacer(Modifier.height(14.dp))
-                    }
                     ProfileDetailRow("App version", "${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})", textColor, secondaryTextColor)
                 }
             }
@@ -299,34 +292,36 @@ fun ProfileScreen() {
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("DEVELOPER", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    color = surfaceColor,
-                    border = BorderStroke(1.dp, borderColor)
-                ) {
-                    Column {
-                        ProfileActionRow(
-                            icon = Icons.Rounded.Key,
-                            title = "API credentials",
-                            subtitle = "Manage integration keys",
-                            tint = FastPayAccent,
-                            textColor = textColor,
-                            secondaryTextColor = secondaryTextColor,
-                            onClick = { navController.navigate(Route.ApiKeys) }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = borderColor)
-                        ProfileActionRow(
-                            icon = Icons.Rounded.Description,
-                            title = "API documentation",
-                            subtitle = "SwiftPay integration reference",
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            textColor = textColor,
-                            secondaryTextColor = secondaryTextColor,
-                            onClick = { navController.navigate(Route.ApiDocs) }
-                        )
+            if (!isCustomer) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("DEVELOPER", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor, fontWeight = FontWeight.Bold)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        color = surfaceColor,
+                        border = BorderStroke(1.dp, borderColor)
+                    ) {
+                        Column {
+                            ProfileActionRow(
+                                icon = Icons.Rounded.Key,
+                                title = "API credentials",
+                                subtitle = "Manage integration keys",
+                                tint = FastPayAccent,
+                                textColor = textColor,
+                                secondaryTextColor = secondaryTextColor,
+                                onClick = { navController.navigate(Route.ApiKeys) }
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = borderColor)
+                            ProfileActionRow(
+                                icon = Icons.Rounded.Description,
+                                title = "API documentation",
+                                subtitle = "SwiftPay integration reference",
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                textColor = textColor,
+                                secondaryTextColor = secondaryTextColor,
+                                onClick = { navController.navigate(Route.ApiDocs) }
+                            )
+                        }
                     }
                 }
             }

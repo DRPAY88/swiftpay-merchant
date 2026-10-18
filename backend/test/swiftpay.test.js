@@ -33,6 +33,10 @@ let orderFailureStatus = 0;
 let testClock = Date.now();
 let disbursementPage;
 let disbursementFailure;
+let disbursementStatusPayload;
+let walletDisbursementStatus;
+let walletDisbursementTransactionId;
+let reconciledWalletDisbursement;
 let cryptoWidgetRequest;
 let cryptoWidgetFailure = false;
 const storedPaymentEvents = new Map();
@@ -44,6 +48,10 @@ before(async () => {
   accountResponseStatus = 200;
   qrBootstrapStatus = 200;
   disbursementPage = { pageNo: 0, result: [], totalCount: 0, resultCount: 0 };
+  disbursementStatusPayload = { status: "EXECUTED" };
+  walletDisbursementStatus = null;
+  walletDisbursementTransactionId = null;
+  reconciledWalletDisbursement = null;
   storedPaymentEvents.clear();
   let app;
   app = createApp({
@@ -71,6 +79,20 @@ before(async () => {
       }),
       recordWebhookEvent: async (event) => storedPaymentEvents.set(event.eventKey, event),
       getMerchantWalletBalance: async () => "420.25",
+      getMerchantWalletPaymentStatus: async (_email, transactionId) =>
+        transactionId === walletDisbursementTransactionId ? walletDisbursementStatus : null,
+      reserveMerchantWalletDisbursement: async (_email, referenceNo) => {
+        walletDisbursementTransactionId = `merchant-disbursement:${referenceNo}`;
+        walletDisbursementStatus = { status: "PENDING", kind: "disbursement", details: {} };
+      },
+      finishMerchantWalletDisbursement: async (_email, _referenceNo, status, details) => {
+        walletDisbursementStatus = { ...walletDisbursementStatus, status, details };
+      },
+      reconcileMerchantWalletDisbursement: async (email, transactionId, status, providerId) => {
+        reconciledWalletDisbursement = { email, transactionId, status, providerId };
+        walletDisbursementStatus = { ...walletDisbursementStatus, status };
+        return status;
+      },
       listMerchantWalletTransactions: async () => [{
         id: "merchant-payment-1",
         reference_no: "COLLECTION-1",
@@ -240,7 +262,9 @@ before(async () => {
               }
             : url.pathname.endsWith("/payments/status")
               ? { status: 200, body: "EXECUTED" }
-              : url.pathname.endsWith("/disbursements/account")
+                : /^\/api\/disbursements\/[0-9a-f-]+$/i.test(url.pathname)
+                  ? { status: 200, body: disbursementStatusPayload }
+                : url.pathname.endsWith("/disbursements/account")
                 ? { status: accountResponseStatus, body: accountResponse }
                 : url.pathname.endsWith("/disbursements/send")
                   ? disbursementFailure || { status: 200, body: { id: "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01" } }
@@ -648,6 +672,74 @@ test("read-only scope can poll payment status using the provider payment token",
     body: JSON.stringify({ amount: 10, referenceNo: "DENIED-1", details: {} })
   });
   assert.equal(forbidden.status, 403);
+});
+
+test("runtime configuration reports the authenticated provider environment without credentials", async () => {
+  const anonymous = await fetch(`${baseUrl}/v1/runtime-config`);
+  assert.equal(anonymous.status, 401);
+
+  const originalBaseUrl = config.swiftPayBaseUrl;
+  try {
+    for (const [providerUrl, expectedEnvironment] of [
+      ["https://api.pay.sandbox.live.swiftpay.ph/api/", "sandbox"],
+      ["https://api.pay.live.swiftpay.ph/api/", "live"],
+      ["https://provider.example/api/", "custom"]
+    ]) {
+      config.swiftPayBaseUrl = new URL(providerUrl);
+      const response = await fetch(`${baseUrl}/v1/runtime-config`, {
+        headers: { authorization: "Bearer read-only-test-token" }
+      });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { providerEnvironment: expectedEnvironment });
+      assert.equal(response.headers.get("cache-control"), "no-store");
+    }
+  } finally {
+    config.swiftPayBaseUrl = originalBaseUrl;
+  }
+});
+
+test("internal wallet transfer status reconciles against the stored provider transfer ID", async () => {
+  const providerId = "9d51c8e2-3211-4c01-a9a1-19a9a8bd5c01";
+  const referenceNo = "TRANSFER-RECONCILE-1";
+  const submit = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer internal-wallet-test-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      amount: 75,
+      referenceNo,
+      channel: "INSTAPAY",
+      institutionCode: "TESTBANK",
+      recipientInformation: { accountNumber: "123456", fullName: "Test Recipient" }
+    })
+  });
+  assert.equal(submit.status, 202);
+  assert.equal((await submit.json()).status, "PENDING");
+  assert.equal(walletDisbursementStatus.details.providerDisbursementId, providerId);
+  assert.equal(walletDisbursementTransactionId, `merchant-disbursement:${referenceNo}`);
+
+  const response = await fetch(
+    `${baseUrl}/v1/payments/${encodeURIComponent(walletDisbursementTransactionId)}/status`,
+    {
+    headers: { authorization: "Bearer internal-wallet-test-token" }
+    }
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    paymentId: walletDisbursementTransactionId,
+    status: "EXECUTED",
+    source: "provider_reconciliation"
+  });
+  assert.deepEqual(reconciledWalletDisbursement, {
+    email: "internal-merchant@example.com",
+    transactionId: walletDisbursementTransactionId,
+    status: "EXECUTED",
+    providerId
+  });
+  assert.equal(requests.at(-1).url, `https://provider.example/api/disbursements/${providerId}`);
+  assert.match(requests.at(-1).options.headers.Authorization, /^Basic /);
 });
 
 test("wallet balance reads the documented account number and balance using Basic auth", async () => {

@@ -20,6 +20,7 @@ suspend fun SettingsManager.createSwiftPayService(): SwiftPayService {
         ?: backendAccessToken.first()?.takeIf { it.isNotBlank() }
     return SwiftPayService(
         backendBaseUrl = BuildConfig.PAYMENT_BACKEND_URL,
-        accessToken = token
+        accessToken = token,
+        onUnauthorized = { token?.let { clearSessionIfAccessTokenMatches(it) } }
     )
 }
