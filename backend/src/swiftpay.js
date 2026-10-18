@@ -100,7 +100,7 @@ export async function callSwiftPay(config, fetchImpl, path, options = {}) {
       signal: AbortSignal.timeout(15000)
     });
   } catch {
-    throw new SwiftPayError(502, "SwiftPay is temporarily unavailable");
+    throw new SwiftPayError(502, "The payment provider is temporarily unavailable");
   }
 
   if (options.responseType === "bytes") {
@@ -110,13 +110,13 @@ export async function callSwiftPay(config, fetchImpl, path, options = {}) {
       try {
         data = responseText ? JSON.parse(responseText) : null;
       } catch {
-        throw new SwiftPayError(502, "SwiftPay returned an invalid response", {
+        throw new SwiftPayError(502, "The payment provider returned an invalid response", {
           providerStatus: response.status,
           providerContentType: getProviderContentType(response)
         });
       }
       const code = safeProviderErrorCode(data);
-      const message = code ? `SwiftPay request failed (${code})` : "SwiftPay request failed";
+      const message = code ? `Payment provider request failed (${code})` : "Payment provider request failed";
       const supportReference = [data?.errorUuid, data?.requestUuid]
         .find((value) => typeof value === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(value));
       throw new SwiftPayError(response.status >= 500 ? 502 : response.status, message, {
@@ -127,11 +127,11 @@ export async function callSwiftPay(config, fetchImpl, path, options = {}) {
     }
     const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
     if (contentType !== "image/png") {
-      throw new SwiftPayError(502, "SwiftPay did not return a PNG image");
+      throw new SwiftPayError(502, "The payment provider did not return a PNG image");
     }
     const data = Buffer.from(await response.arrayBuffer());
     if (data.length === 0 || data.length > 1_048_576) {
-      throw new SwiftPayError(502, "SwiftPay returned an invalid QR image");
+      throw new SwiftPayError(502, "The payment provider returned an invalid QR image");
     }
     return { status: response.status, data, contentType };
   }
@@ -142,7 +142,7 @@ export async function callSwiftPay(config, fetchImpl, path, options = {}) {
     try {
       data = JSON.parse(responseText);
     } catch {
-      throw new SwiftPayError(502, "SwiftPay returned an invalid response", {
+      throw new SwiftPayError(502, "The payment provider returned an invalid response", {
         providerStatus: response.status,
         providerContentType: getProviderContentType(response)
       });
@@ -150,7 +150,7 @@ export async function callSwiftPay(config, fetchImpl, path, options = {}) {
   }
   if (!response.ok) {
     const code = safeProviderErrorCode(data);
-    const message = code ? `SwiftPay request failed (${code})` : "SwiftPay request failed";
+    const message = code ? `Payment provider request failed (${code})` : "Payment provider request failed";
     const supportReference = [data?.errorUuid, data?.requestUuid]
       .find((value) => typeof value === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(value));
     throw new SwiftPayError(response.status >= 500 ? 502 : response.status, message, {

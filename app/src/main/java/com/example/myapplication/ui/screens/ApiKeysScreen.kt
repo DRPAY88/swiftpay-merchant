@@ -125,7 +125,7 @@ fun ApiKeysScreen() {
                 ) {
                     Icon(Icons.Rounded.Warning, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
                     Text(
-                        "SwiftPay merchant credentials are held by the secure payment backend, not on this device.",
+                        "Payment provider credentials are held by the secure payment backend, not on this device.",
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
@@ -203,7 +203,7 @@ fun ApiKeysScreen() {
                         Icon(Icons.Rounded.Warning, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "How to manage SwiftPay credentials",
+                            "How to manage DRPAY API keys",
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             style = MaterialTheme.typography.titleSmall
@@ -319,7 +319,7 @@ private fun MerchantApiKeyCard(
                         }
                     }
                     Text(
-                        "Create a server-only credential for QR Ph collections, status checks, and FX quotes. Each key is limited to collection endpoints.",
+                        "Create a server-only credential for QRPH collections, status checks, and FX quotes. Each key is limited to collection endpoints.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

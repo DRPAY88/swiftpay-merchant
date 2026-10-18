@@ -24,7 +24,7 @@ data class ScannedQrPayment(
 )
 
 /**
- * Parses EMVCo / QR Ph payloads, supporting cross-border Alipay Connect PH Branch,
+ * Parses EMVCo / QRPH payloads, supporting cross-border Alipay Connect PH Branch,
  * South Korean Toss apps (Toss Bank, Toss Pay, Toss Money), and South Korean Banks
  * (KB Kookmin, Shinhan, Hana, Woori, KakaoPay, Naver Pay) in KRW and PHP currencies.
  */
@@ -107,7 +107,7 @@ fun parseScannedQrPayment(payload: String): ScannedQrPayment? {
 }
 
 /**
- * Generates an EMVCo / QR Ph cross-border payment payload scanable by
+ * Generates an EMVCo / QRPH cross-border payment payload scanable by
  * Alipay Connect Pte Ltd PH Branch, Toss (Toss Bank, Toss Pay, Toss Money), and
  * South Korean Banks (KB, Shinhan, Hana, Woori, KakaoPay, Naver Pay) in KRW or PHP currency.
  */

@@ -407,7 +407,7 @@ test("order signature uses sorted x-fields and two-decimal amount", () => {
   assert.equal(payload.details, "{}");
 });
 
-test("QR Ph bootstrap signs amount and returns the provider PNG", async () => {
+test("QRPH bootstrap signs amount and returns the provider PNG", async () => {
   const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
     method: "POST",
     headers: {
@@ -556,7 +556,7 @@ test("stale FX provider rates return a 502 instead of an internal server error",
   }
 });
 
-test("QR Ph rejects direct KRW amounts instead of sending an unsupported currency", async () => {
+test("QRPH rejects direct KRW amounts instead of sending an unsupported currency", async () => {
   const previousBootstrapCount = requests.filter(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).length;
   const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
     method: "POST",
@@ -574,14 +574,14 @@ test("QR Ph rejects direct KRW amounts instead of sending an unsupported currenc
   );
 });
 
-test("QR Ph signature verification rejects altered fields and malformed signatures", () => {
+test("QRPH signature verification rejects altered fields and malformed signatures", () => {
   const payload = buildQrPayload({ amount: 12.3, referenceNo: "QR-2" }, config);
   assert.equal(verifySwiftPaySignature(payload, payload.signature, config.swiftPaySecretKey), true);
   assert.equal(verifySwiftPaySignature({ ...payload, x_amount: 99 }, payload.signature, config.swiftPaySecretKey), false);
   assert.equal(verifySwiftPaySignature(payload, "not-a-signature", config.swiftPaySecretKey), false);
 });
 
-test("QR Ph collection does not fabricate a QR when bootstrap is unavailable", async () => {
+test("QRPH collection does not fabricate a QR when bootstrap is unavailable", async () => {
   qrBootstrapStatus = 404;
   try {
     const response = await fetch(`${baseUrl}/v1/payments/qrph`, {
@@ -594,7 +594,7 @@ test("QR Ph collection does not fabricate a QR when bootstrap is unavailable", a
     });
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), {
-      error: "SwiftPay request failed (NOT_FOUND)",
+      error: "Payment provider request failed (NOT_FOUND)",
       errorCode: "NOT_FOUND"
     });
     assert.equal(requests.some(({ url }) => url.endsWith("/orders")), false);
@@ -645,7 +645,7 @@ test("payment order preserves a provider 404 code for diagnosis", async () => {
     });
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), {
-      error: "SwiftPay request failed (NOT_FOUND)",
+      error: "Payment provider request failed (NOT_FOUND)",
       errorCode: "NOT_FOUND"
     });
     assert.equal(requests.at(-1).url, "https://provider.example/api/orders");
@@ -850,7 +850,7 @@ test("wallet balance rejects the undocumented available_balance field", async ()
   }
 });
 
-test("wallet balance reports when SwiftPay has no configured disbursement account", async () => {
+test("wallet balance reports when no disbursement account is configured", async () => {
   accountResponseStatus = 404;
   try {
     const response = await fetch(`${baseUrl}/v1/wallet/balance`, {
@@ -858,7 +858,7 @@ test("wallet balance reports when SwiftPay has no configured disbursement accoun
     });
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), {
-      error: "SwiftPay has no disbursement account configured for this merchant"
+      error: "No disbursement account is configured for this merchant"
     });
   } finally {
     accountResponseStatus = 200;
@@ -957,6 +957,8 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   assert.match(checkoutPageResponse.headers.get("cache-control"), /no-store/);
   const checkoutPage = await checkoutPageResponse.text();
   assert.match(checkoutPage, /DRPAY/);
+  assert.match(checkoutPage, /DRPAY secure checkout/);
+  assert.doesNotMatch(checkoutPage, /Powered by SwiftPay|SwiftPay’s secure page/i);
   assert.match(checkoutPage, /125\.50/);
   assert.match(checkoutPage, /Invoice &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(checkoutPage, /<script>/);
@@ -968,14 +970,14 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   assert.match(checkoutPage, /No logo institution/);
   assert.match(checkoutPage, /institution-card institution-card--text/);
   assert.doesNotMatch(checkoutPage, /logos\.example|disabled\.png|method-logo-fallback/);
-  assert.doesNotMatch(checkoutPage, /Continue with SwiftPay QR Ph|Other payment methods/);
+  assert.doesNotMatch(checkoutPage, /Continue with DRPAY QRPH|Other payment methods/);
   assert.match(checkoutPage, /action="\/checkout\/PL-1\/qrph"/);
   assert.match(checkoutPage, /Choose your payment app/);
-  assert.match(checkoutPage, /link amount stays fixed and QR Ph settles in PHP/);
+  assert.match(checkoutPage, /link amount stays fixed and QRPH settles in PHP/);
   assert.match(checkoutPage, /Other Currencies/);
   assert.match(checkoutPage, /Manual Bank Transfer/);
   assert.match(checkoutPage, /Continue to secure payment/);
-  assert.match(checkoutPage, /Pay with QR Ph/);
+  assert.match(checkoutPage, /Pay with QRPH/);
   const methodOrder = ["gcash", "maya", "qrph", "alipay", "toss", "kakao", "kbank"]
     .map((method) => checkoutPage.indexOf(`name="paymentApp" value="${method}"`));
   assert.ok(methodOrder.every((index) => index >= 0));
@@ -1001,7 +1003,7 @@ test("payment links use Basic auth and require a fixed supported-currency amount
   assert.equal(invalid.status, 400);
 });
 
-test("self-hosted QR Ph checkout presents a valid generic scan flow", async () => {
+test("self-hosted QRPH checkout presents a valid generic scan flow", async () => {
   const response = await fetch(`${baseUrl}/checkout/PL-1/qrph`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -1010,7 +1012,7 @@ test("self-hosted QR Ph checkout presents a valid generic scan flow", async () =
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Scan to pay/);
-  assert.match(html, /supports QR Ph/);
+  assert.match(html, /supports QRPH/);
   assert.match(html, /class="checkout-qr"/);
   const qrRequest = JSON.parse(requests.findLast(({ url }) => url.endsWith("/bootstrap/qrph?type=P2M")).options.body);
   assert.equal(qrRequest.x_currency, "PHP");
@@ -1044,7 +1046,7 @@ test("payment-link QR checkout labels the selected app and rejects unsupported a
   );
 });
 
-test("self-hosted checkout QR Ph converts USD link prices to a PHP settlement QR", async () => {
+test("self-hosted checkout QRPH converts USD link prices to a PHP settlement QR", async () => {
   fxRequests = [];
   const response = await fetch(`${baseUrl}/checkout/PL-USD/qrph`, {
     method: "POST",
@@ -1182,7 +1184,7 @@ test("ambiguous disbursement provider failures require confirmation and warn aga
       status: "UNKNOWN",
       outcomeUnknown: true,
       referenceNo: "TRANSFER-UNKNOWN-1",
-      message: "SwiftPay has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference."
+      message: "The payment provider has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference."
     });
   } finally {
     disbursementFailure = null;
@@ -1262,7 +1264,7 @@ test("transfer errors preserve SwiftPay error code and safe support reference", 
     });
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), {
-      error: "SwiftPay request failed (INVALID_INPUT)",
+      error: "Payment provider request failed (INVALID_INPUT)",
       errorCode: "INVALID_INPUT",
       supportReference: "support-ref-123"
     });

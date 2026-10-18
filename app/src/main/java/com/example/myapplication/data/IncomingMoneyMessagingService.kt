@@ -150,7 +150,7 @@ object IncomingMoneyPush {
                 "Incoming payments",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Alerts when SwiftPay confirms an incoming payment"
+                description = "Alerts when the payment provider confirms an incoming payment"
             }
         )
     }

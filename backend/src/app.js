@@ -211,25 +211,25 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
   const institutionContent = institutionCards
     ? `<ul class="institution-grid" aria-label="Available banks and wallets">${institutionCards}</ul>`
     : `<p class="institution-empty">${institutionLoadFailed
-      ? "Bank and wallet options are available on SwiftPay’s secure payment page."
-      : "More bank and wallet options are available on SwiftPay’s secure payment page."}</p>`;
+      ? "Bank and wallet options are available on the secure payment page."
+      : "More bank and wallet options are available on the secure payment page."}</p>`;
   const qrPaymentMethods = [
     {
       category: "PHP",
       methods: [
-        { code: "gcash", name: "GCash", icon: "G", description: "Pay with QR Ph" },
-        { code: "maya", name: "Maya", icon: "M", description: "Pay with QR Ph" },
-        { code: "qrph", name: "QR Ph", icon: "QR", description: "Use a QR Ph-compatible app" },
-        { href: true, name: "Manual Bank Transfer", icon: "BK", description: "Continue to SwiftPay’s secure page for transfer options" }
+        { code: "gcash", name: "GCash", icon: "G", description: "Pay with QRPH" },
+        { code: "maya", name: "Maya", icon: "M", description: "Pay with QRPH" },
+        { code: "qrph", name: "QRPH", icon: "QR", description: "Use a QRPH-compatible app" },
+        { href: true, name: "Manual Bank Transfer", icon: "BK", description: "Continue to the secure payment page for transfer options" }
       ]
     },
     {
       category: "Other Currencies",
       methods: [
-        { code: "alipay", name: "Alipay", icon: "A", description: "Pay with QR Ph" },
-        { code: "toss", name: "Toss", icon: "T", description: "Pay with QR Ph" },
-        { code: "kakao", name: "Kakao", icon: "K", description: "Pay with QR Ph" },
-        { code: "kbank", name: "KBank", icon: "KB", description: "Pay with QR Ph" }
+        { code: "alipay", name: "Alipay", icon: "A", description: "Pay with QRPH" },
+        { code: "toss", name: "Toss", icon: "T", description: "Pay with QRPH" },
+        { code: "kakao", name: "Kakao", icon: "K", description: "Pay with QRPH" },
+        { code: "kbank", name: "KBank", icon: "KB", description: "Pay with QRPH" }
       ]
     }
   ].map(({ category, methods }) => `
@@ -283,18 +283,18 @@ function checkoutPage({ code, title, amount, currency, paymentUrl, institutions,
           <h2 id="payment-methods-title">Banks &amp; wallets</h2>
           <p>Official payment partner logos</p>
         </div>
-        <span class="powered-badge">Powered by SwiftPay</span>
+        <span class="powered-badge">DRPAY secure checkout</span>
       </div>
       ${institutionContent}
       <a class="pay-button" href="${safePaymentUrl}" rel="noopener noreferrer">
         Continue to secure payment
         <span aria-hidden="true">→</span>
       </a>
-      <p class="provider-note">You’ll see all supported banks and payment methods on SwiftPay’s secure page.</p>
+      <p class="provider-note">You’ll see all supported banks and payment methods on the secure payment page.</p>
     </section>
-    <div class="checkout-divider"><span>or pay with QR Ph</span></div>
-    <section class="checkout-qr-methods" aria-label="QR Ph payment methods">
-      <p class="checkout-method-note">Choose your payment app. The payment link amount stays fixed and QR Ph settles in PHP.</p>
+    <div class="checkout-divider"><span>or pay with QRPH</span></div>
+    <section class="checkout-qr-methods" aria-label="QRPH payment methods">
+      <p class="checkout-method-note">Choose your payment app. The payment link amount stays fixed and QRPH settles in PHP.</p>
       ${qrPaymentMethods}
     </section>
     <footer class="checkout-footer">
@@ -320,7 +320,7 @@ function checkoutQrPage({ code, title, amount, currency, paymentApp, phpAmount, 
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#f4f7fb">
-  <title>QR Ph payment · DRPAY</title>
+  <title>QRPH payment · DRPAY</title>
   <link rel="stylesheet" href="/checkout-assets/checkout.css">
 </head>
 <body>
@@ -333,13 +333,13 @@ function checkoutQrPage({ code, title, amount, currency, paymentApp, phpAmount, 
       </div>
     </header>
     <section class="payment-summary" aria-labelledby="checkout-title">
-      <p class="summary-label">QR Ph payment</p>
+      <p class="summary-label">QRPH payment</p>
       <h1 id="checkout-title">${paymentApp ? `Scan with ${escapeHtml(paymentApp)}` : "Scan to pay"}</h1>
       <p class="amount">${customerAmount}</p>
       <p class="summary-note">${displayTitle}</p>
     </section>
-    <p class="qr-instructions">Scan this code with a banking or wallet app that supports QR Ph. The payment settles in PHP at <strong>${settlementAmount}</strong>. Your bank or wallet may apply its own conversion.</p>
-    <img class="checkout-qr" src="data:image/png;base64,${imageBase64}" alt="QR Ph payment code">
+    <p class="qr-instructions">Scan this code with a banking or wallet app that supports QRPH. The payment settles in PHP at <strong>${settlementAmount}</strong>. Your bank or wallet may apply its own conversion.</p>
+    <img class="checkout-qr" src="data:image/png;base64,${imageBase64}" alt="QRPH payment code">
     <p class="rate-note">${rateDescription}</p>
     <div class="qr-back">
       <a class="pay-button" href="/checkout/${encodeURIComponent(code)}">Back to payment options</a>
@@ -604,7 +604,7 @@ export function createApp({
         const result = await requestProvider("institutions");
         const parsedInstitutions = z.array(paymentInstitutionSchema).safeParse(result.data);
         if (!parsedInstitutions.success) {
-          throw new SwiftPayError(502, "SwiftPay returned an invalid payment institution catalogue");
+          throw new SwiftPayError(502, "The payment service returned an invalid payment institution catalogue");
         }
         paymentInstitutionCatalogue = parsedInstitutions.data;
         paymentInstitutionCatalogueLoadedAt = clock();
@@ -630,7 +630,7 @@ export function createApp({
     try {
       paymentUrl = new URL(result.data?.paymentUrl);
     } catch {
-      throw new SwiftPayError(502, "SwiftPay returned invalid payment-link details");
+      throw new SwiftPayError(502, "The payment service returned invalid payment-link details");
     }
     const amount = Number(result.data?.amount);
     const currency = currencySchema.parse(result.data?.currency || "PHP");
@@ -643,7 +643,7 @@ export function createApp({
       amount <= 0 ||
       ["EXPIRED", "INVALIDATED", "INACTIVE", "CANCELLED"].includes(status)
     ) {
-      throw new SwiftPayError(502, "SwiftPay returned invalid payment-link details");
+      throw new SwiftPayError(502, "The payment service returned invalid payment-link details");
     }
     return {
       ...result.data,
@@ -765,10 +765,10 @@ export function createApp({
       qrCode: z.string().min(1)
     }).safeParse(bootstrap.data);
     if (!payment.success || !Number.isFinite(Number(payment.data.amount))) {
-      throw new SwiftPayError(502, "SwiftPay returned an incomplete QR Ph payment");
+      throw new SwiftPayError(502, "The payment service returned an incomplete QRPH payment");
     }
     if (Math.round(Number(payment.data.amount) * 100) !== Math.round(phpAmount * 100)) {
-      throw new SwiftPayError(502, "SwiftPay returned a QR Ph amount that does not match the quoted PHP amount");
+      throw new SwiftPayError(502, "The payment service returned a QRPH amount that does not match the quoted PHP amount");
     }
     const image = await requestProvider("payments/qrph/image?type=P2M", {
       paymentToken: payment.data.paymentId,
@@ -1218,7 +1218,7 @@ export function createApp({
     const result = await requestProvider("orders", { method: "POST", body: payload });
     const redirectUrl = result.data?.customerRedirectUrl;
     if (typeof redirectUrl !== "string" || new URL(redirectUrl).protocol !== "https:") {
-      throw new SwiftPayError(502, "SwiftPay did not return a valid hosted checkout URL");
+      throw new SwiftPayError(502, "The payment service did not return a valid hosted checkout URL");
     }
     res.status(result.status).json({
       paymentId: payload.x_payment_id,
@@ -1370,7 +1370,7 @@ export function createApp({
       instapayBankCode: z.string().nullable().optional()
     }).safeParse(bootstrap.data);
     if (!providerPayment.success || !Number.isFinite(Number(providerPayment.data.amount))) {
-      throw new SwiftPayError(502, "SwiftPay returned an incomplete QR Ph payment");
+      throw new SwiftPayError(502, "The payment service returned an incomplete QRPH payment");
     }
 
     const payment = providerPayment.data;
@@ -1380,7 +1380,7 @@ export function createApp({
           settlementMismatch: true
         });
       }
-      throw new SwiftPayError(502, "SwiftPay returned a QR Ph payment with a different reference");
+      throw new SwiftPayError(502, "The payment service returned a QRPH payment with a different reference");
     }
     if (payment.currency && payment.currency !== input.currency) {
       if (isInternalMerchant) {
@@ -1388,7 +1388,7 @@ export function createApp({
           settlementMismatch: true
         });
       }
-      throw new SwiftPayError(502, "SwiftPay returned a QR Ph payment in a different currency");
+      throw new SwiftPayError(502, "The payment service returned a QRPH payment in a different currency");
     }
     const expectedAmount = quote?.amountPhp ?? input.amount;
     if (Math.round(Number(payment.amount) * 100) !== Math.round(expectedAmount * 100)) {
@@ -1397,7 +1397,7 @@ export function createApp({
           settlementMismatch: true
         });
       }
-      throw new SwiftPayError(502, "SwiftPay returned a PHP QR amount that does not match the locked quote");
+      throw new SwiftPayError(502, "The payment service returned a PHP QR amount that does not match the locked quote");
     }
     if (isInternalMerchant) {
       await userStore.recordMerchantWalletCollectionOrder(
@@ -1485,7 +1485,7 @@ export function createApp({
     } catch (error) {
       if (error instanceof SwiftPayError && error.status === 404) {
         return res.status(503).json({
-          error: "SwiftPay has no disbursement account configured for this merchant"
+          error: "No disbursement account is configured for this merchant"
         });
       }
       throw error;
@@ -1497,7 +1497,7 @@ export function createApp({
     const balance = z.number().finite().safeParse(normalizedBalance);
     const accountNumber = z.string().trim().min(1).safeParse(result.data?.number);
     if (!balance.success || !accountNumber.success || !accountNumber.data) {
-      throw new SwiftPayError(502, "SwiftPay returned an invalid wallet account response");
+      throw new SwiftPayError(502, "The payment service returned an invalid wallet account response");
     }
     const adjustmentTotal = userStore ? Number(await userStore.adjustmentTotal()) : 0;
     res.status(result.status).json({
@@ -1660,7 +1660,7 @@ export function createApp({
       providerPayment.data.referenceNo !== referenceNo ||
       (providerPayment.data.currency && providerPayment.data.currency !== "PHP")
     ) {
-      throw new SwiftPayError(502, "SwiftPay returned a QR payment that does not match the personal wallet top-up");
+      throw new SwiftPayError(502, "The payment service returned a QR payment that does not match the personal wallet top-up");
     }
     const payment = providerPayment.data;
     await userStore.recordCustomerWalletTopupOrder(req.principal.sub, referenceNo, payment.paymentId);
@@ -1722,11 +1722,11 @@ export function createApp({
     try {
       paymentUrl = new URL(result.data?.paymentUrl);
     } catch {
-      throw new SwiftPayError(502, "SwiftPay did not return a valid payment-link URL");
+      throw new SwiftPayError(502, "The payment service did not return a valid payment-link URL");
     }
     const code = paymentLinkCodeSchema.safeParse(result.data?.code);
     if (!code.success || paymentUrl.protocol !== "https:" || paymentUrl.username || paymentUrl.password) {
-      throw new SwiftPayError(502, "SwiftPay did not return a valid payment link");
+      throw new SwiftPayError(502, "The payment service did not return a valid payment link");
     }
     const publicPaymentUrl = new URL(`checkout/${encodeURIComponent(code.data)}`, config.publicBaseUrl);
     res.status(result.status).json({
@@ -1836,7 +1836,7 @@ export function createApp({
           status: "UNKNOWN",
           outcomeUnknown: true,
           referenceNo: input.referenceNo,
-          message: "SwiftPay has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference."
+          message: "The payment provider has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference."
         });
       }
       throw error;
@@ -1865,7 +1865,7 @@ export function createApp({
         status: "UNKNOWN",
         outcomeUnknown: true,
         referenceNo: input.referenceNo,
-        message: "SwiftPay may have accepted this transfer, but did not return a valid confirmation. Do not submit it again. Check your transaction history or contact support with this reference."
+        message: "The payment provider may have accepted this transfer, but did not return a valid confirmation. Do not submit it again. Check your transaction history or contact support with this reference."
       });
     }
     if (isLedgerWallet) {
@@ -1881,7 +1881,7 @@ export function createApp({
           referenceNo: input.referenceNo,
           status: "PENDING",
           reconciliationRequired: true,
-          message: "SwiftPay accepted this transfer, but its wallet record could not be linked for automatic status reconciliation. Do not submit it again; contact support with this reference."
+          message: "The payment provider accepted this transfer, but its wallet record could not be linked for automatic status reconciliation. Do not submit it again; contact support with this reference."
         });
       }
     }
@@ -1933,7 +1933,7 @@ export function createApp({
     );
     const records = z.array(z.record(z.string(), z.unknown())).safeParse(result.data?.result);
     if (!records.success) {
-      throw new SwiftPayError(502, "SwiftPay returned an invalid disbursement page");
+      throw new SwiftPayError(502, "The payment service returned an invalid disbursement page");
     }
     res.status(result.status).json(records.data);
   }));
@@ -1957,7 +1957,7 @@ export function createApp({
     const result = await requestProvider("institutions");
     const institutions = z.array(paymentInstitutionSchema).safeParse(result.data);
     if (!institutions.success) {
-      throw new SwiftPayError(502, "SwiftPay returned an invalid payment institution catalogue");
+      throw new SwiftPayError(502, "The payment service returned an invalid payment institution catalogue");
     }
     res.status(result.status).json(
       institutions.data

@@ -137,7 +137,7 @@ fun EnhancedPaymentLinkDialog(
                 Spacer(Modifier.height(8.dp))
 
                 Text(
-                    "Customers see a DRPAY checkout page before continuing to SwiftPay's secure payment page.",
+                    "Customers see a DRPAY checkout page before continuing to the secure payment page.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                     textAlign = TextAlign.Center

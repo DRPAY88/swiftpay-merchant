@@ -432,7 +432,7 @@ private fun WalletTopupDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (topup == null) {
-                    Text("Choose a payment currency. Your personal PHP wallet is credited only after SwiftPay verifies settlement.")
+                    Text("Choose a payment currency. Your personal PHP wallet is credited only after the payment provider verifies settlement.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = currency == "KRW",
@@ -482,22 +482,22 @@ private fun WalletTopupDialog(
                     if (topup.customerAmountKrw != null) {
                         Text(
                             "Pay ₩${topup.customerAmountKrw.toLocaleAmount()} using ${paymentApp.displayPaymentApp()}. " +
-                                "PHP ${"%.2f".format(Locale.US, topup.amount ?: 0.0)} is credited after SwiftPay confirms settlement."
+                            "PHP ${"%.2f".format(Locale.US, topup.amount ?: 0.0)} is credited after the payment provider confirms settlement."
                         )
                     } else {
-                        Text("Scan this QR Ph code to pay PHP ${"%.2f".format(Locale.US, topup.amount ?: 0.0)}.")
+                        Text("Scan this QRPH code to pay PHP ${"%.2f".format(Locale.US, topup.amount ?: 0.0)}.")
                     }
                     if (qrBitmap != null) {
                         Image(
                             bitmap = qrBitmap,
-                            contentDescription = "QR Ph code to top up your wallet",
+                            contentDescription = "QRPH code to top up your wallet",
                             modifier = Modifier.fillMaxWidth().height(220.dp),
                             contentScale = ContentScale.Fit
                         )
                     } else {
                         Text("The QR image could not be displayed. Close this dialog and create a new QR.")
                     }
-                    Text("Wallet credit is added only after the signed SwiftPay settlement webhook confirms payment.")
+                    Text("Wallet credit is added only after a signed settlement notification confirms payment.")
                     Text("Status: ${(status ?: "PENDING").lowercase().replaceFirstChar(Char::uppercase)}")
                 }
                 if (!error.isNullOrBlank()) {
@@ -614,7 +614,7 @@ fun WalletListContent(
         if (isInternalMerchantWallet) {
             item(key = "merchant-wallet-info") {
                 Text(
-                    text = "This is your merchant's app-managed ledger on a shared SwiftPay provider account. It is not a separate bank or virtual account.",
+                    text = "This is your merchant's app-managed ledger on a shared payment provider account. It is not a separate bank or virtual account.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -807,7 +807,7 @@ private fun CryptoWalletContent(modifier: Modifier = Modifier) {
                 Text("External wallet", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
                 Text("Balance is not connected", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "SwiftPay does not custody USDT or read an on-chain balance. Buy and sell orders open in Transak.",
+                    "DRPAY does not custody USDT or read an on-chain balance. Buy and sell orders open in Transak.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.72f),
                     modifier = Modifier.padding(top = 5.dp)
@@ -1011,7 +1011,7 @@ fun PremiumBalanceCard(
                         text = when {
                             isInternalMerchantWallet -> "MERCHANT APP WALLET"
                             isLedgerWallet -> "PERSONAL APP WALLET"
-                            else -> "SHARED SWIFTPAY PROVIDER BALANCE"
+                            else -> "SHARED PROVIDER BALANCE"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.74f),
@@ -1210,7 +1210,7 @@ fun QuickActionsRow(
         QuickActionItem(
             Icons.Rounded.Payments,
             if (isCustomerWallet) "Add money" else "Collect payment",
-            if (isCustomerWallet) "Top up your personal wallet" else "Create a QR Ph collection",
+            if (isCustomerWallet) "Top up your personal wallet" else "Create a QRPH collection",
             FastPayBlue,
             Modifier.weight(1f)
         ) {
@@ -1660,7 +1660,7 @@ fun TransactionDetailScreen(
                         },
                         textColor
                     )
-                    ReceiptRow("Channel", tx.bankName ?: "SwiftPay Corporate", textColor)
+                    ReceiptRow("Channel", tx.bankName ?: "Payment Provider", textColor)
                     tx.description?.takeIf { it.isNotBlank() }?.let { ReceiptRow("Notes", it, textColor) }
                     
                     val pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f)

@@ -315,7 +315,7 @@ fun ProfileScreen() {
                             ProfileActionRow(
                                 icon = Icons.Rounded.Description,
                                 title = "API documentation",
-                                subtitle = "SwiftPay integration reference",
+                                subtitle = "DRPAY API reference",
                                 tint = MaterialTheme.colorScheme.tertiary,
                                 textColor = textColor,
                                 secondaryTextColor = secondaryTextColor,
@@ -345,7 +345,7 @@ fun ProfileScreen() {
             DebugNetworkOverlay()
 
             Text(
-                text = "SWIFTPAY MERCHANT",
+                text = "DRPAY MERCHANT",
                 style = MaterialTheme.typography.labelSmall,
                 color = secondaryTextColor,
                 fontWeight = FontWeight.Bold

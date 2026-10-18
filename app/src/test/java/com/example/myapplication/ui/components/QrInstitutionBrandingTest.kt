@@ -22,7 +22,7 @@ class QrInstitutionBrandingTest {
 
     @Test
     fun genericOrUnknownSelectionDoesNotReuseQrPhBranding() {
-        assertNull(qrInstitutionLogoAsset("QR Ph"))
+        assertNull(qrInstitutionLogoAsset("QRPH"))
         assertNull(qrInstitutionLogoAsset(null))
         assertNull(qrInstitutionLogoAsset("Unknown"))
     }

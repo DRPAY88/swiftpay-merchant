@@ -188,7 +188,7 @@ test("failed OTP delivery clears the challenge and allows an immediate retry", a
 test("OTP delivery diagnostics retain provider messages while redacting sensitive values", async () => {
   await assert.rejects(
     sendOtpEmail(
-      { resendApiKey: "test-key", otpFromEmail: "SwiftPay <login@example.com>" },
+      { resendApiKey: "test-key", otpFromEmail: "DRPAY <login@example.com>" },
       "merchant@example.com",
       "204681",
       async () => new Response(JSON.stringify({
@@ -208,7 +208,7 @@ test("OTP delivery diagnostics retain provider messages while redacting sensitiv
 test("OTP delivery diagnostics redact API keys and cap provider message length", async () => {
   await assert.rejects(
     sendOtpEmail(
-      { resendApiKey: "test-key", otpFromEmail: "SwiftPay <login@example.com>" },
+      { resendApiKey: "test-key", otpFromEmail: "DRPAY <login@example.com>" },
       "merchant@example.com",
       "204681",
       async () => new Response(JSON.stringify({

@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>SwiftPay Super Admin</title>
+  <title>DRPAY Super Admin</title>
   <link rel="stylesheet" href="/admin/admin.css">
   <script src="/admin/admin.js" defer></script>
 </head>
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">SWIFTPAY CONTROL CENTER</p>
+      <p class="eyebrow">DRPAY CONTROL CENTER</p>
       <h1>Super Admin</h1>
     </div>
     <button id="sign-out" class="button secondary hidden" type="button">Sign out</button>
@@ -35,7 +35,7 @@
 
     <div id="dashboard" class="hidden">
       <section class="notice">
-        This console manages users for the single configured SwiftPay merchant account.
+        This console manages users for the single configured payment provider account.
         Shared account data supports reconciliation, user management, and transfer review.
       </section>
 
@@ -118,7 +118,7 @@
         <article class="panel">
           <p class="eyebrow">MANUAL BANK DEPOSIT</p>
           <h2>Record confirmed deposit</h2>
-          <p class="muted">Record only verified bank credits. This logs a receipt for wallet history and does not change SwiftPay funds or the wallet balance.</p>
+          <p class="muted">Record only verified bank credits. This logs a receipt for wallet history and does not change funds held by the payment provider or the wallet balance.</p>
           <form id="manual-deposit-form">
             <label for="manual-deposit-amount">Amount (PHP)</label>
             <input id="manual-deposit-amount" type="number" step="0.01" min="0.01" max="1000000" required>
@@ -135,7 +135,7 @@
         <article id="transfers" class="panel dashboard-section">
           <p class="eyebrow">LIVE PAYMENT RAIL</p>
           <h2>Submit transfer</h2>
-          <p class="warning">Submits a real transfer from the shared SwiftPay account. Verify details before confirming.</p>
+          <p class="warning">Submits a real transfer from the shared payment provider account. Verify details before confirming.</p>
           <form id="transfer-form">
             <label for="transfer-amount">Amount (PHP)</label>
             <input id="transfer-amount" type="number" min="0.01" max="50000" step="0.01" required>

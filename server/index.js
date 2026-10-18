@@ -208,7 +208,7 @@ app.post('/v1/magpie/qr/dynamic', async (req, res) => {
   const qid = 'QR-' + Math.random().toString(36).slice(2, 10).toUpperCase()
   res.json({
     paymentId: qid,
-    qrCode: `00020101021228690016PH.CO.SWIFTPAY0110${qid}5204000053036085802PH5913SwiftPay Merchant6006Laguna62110707${qid}`,
+    qrCode: `00020101021228690016PH.CO.SWIFTPAY0110${qid}5204000053036085802PH5914DRPAY Merchant6006Laguna62110707${qid}`,
     amount: amount,
     status: 'SUCCESS'
   })
@@ -219,7 +219,7 @@ app.post('/v1/xend/create-qr-code', async (req, res) => {
   const qid = 'XQR-' + Math.random().toString(36).slice(2, 10).toUpperCase()
   res.json({
     paymentId: qid,
-    qrCode: `00020101021228690016PH.CO.SWIFTPAY0110${qid}5204000053036085802PH5913SwiftPay Merchant6006Laguna62110707${qid}`,
+    qrCode: `00020101021228690016PH.CO.SWIFTPAY0110${qid}5204000053036085802PH5914DRPAY Merchant6006Laguna62110707${qid}`,
     amount: amount,
     status: 'SUCCESS'
   })

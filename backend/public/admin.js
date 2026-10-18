@@ -467,7 +467,7 @@ document.querySelector("#adjustment-form").addEventListener("submit", async (eve
   event.preventDefault();
   const amount = Number(document.querySelector("#adjustment-amount").value);
   const reason = document.querySelector("#adjustment-reason").value.trim();
-  if (!window.confirm("Record an internal-only adjustment? This does not change real SwiftPay funds.")) return;
+  if (!window.confirm("Record an internal-only adjustment? This does not change funds held by the payment provider.")) return;
   try {
     await api("/v1/admin/balance-adjustments", {
       method: "POST",
@@ -521,7 +521,7 @@ document.querySelector("#transfer-form").addEventListener("submit", async (event
     const result = await api("/v1/disbursements", { method: "POST", body: JSON.stringify(transfer) });
     event.currentTarget.reset();
     await Promise.all([loadTransfers(), loadAudit()]);
-    showMessage(dashboardMessage, `Transfer accepted as pending (${result.id}). Verify its final status with SwiftPay.`, false);
+    showMessage(dashboardMessage, `Transfer accepted as pending (${result.id}). Verify its final status with the payment provider.`, false);
   } catch (error) {
     showMessage(dashboardMessage, error.message);
   }

@@ -207,7 +207,7 @@ fun MiniAppScreen(
                             onDismissRequest = { viewModel.dismissConsent() },
                             icon = Icons.Rounded.Security,
                             title = "Secure Redirect",
-                            description = "You will be redirected to the secure SwiftPay payment page to complete your order.",
+                            description = "DRPAY will open the secure payment page to complete your order.",
                             buttons = {
                                 SwiftPaySecondaryButton(text = "Cancel", onClick = { viewModel.dismissConsent() }, modifier = Modifier.weight(1f))
                                 SwiftPayPrimaryButton(

@@ -1791,7 +1791,7 @@
             </button>
             <button type="button" class="action-card" onclick="scanQrToSend()">
                 <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM19 14v7M14 19h3"/></svg></span>
-                <span class="action-title">QR Ph</span>
+                <span class="action-title">QRPH</span>
             </button>
             <button type="button" class="action-card" onclick="openPage('disbursement-page')">
                 <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></svg></span>
@@ -1816,7 +1816,7 @@
                 <div class="input-label">SESSION</div>
                 <div id="payment-service-status" class="api-key-val" aria-live="polite">Checking...</div>
                 <div class="input-label">PAYMENT PARTNER</div>
-                <div class="api-key-val">SwiftPay checkout, securely managed by our payment backend</div>
+                <div class="api-key-val">DRPAY checkout, securely managed by our payment backend</div>
             </div>
         </section>
     </main>
@@ -1856,7 +1856,7 @@
             <div class="collect-checkout">
                 <div class="collect-checkout-mark" aria-hidden="true">&#8599;</div>
                 <div>
-                    <div class="collect-checkout-title">SwiftPay QR Ph</div>
+                    <div class="collect-checkout-title">DRPAY QRPH</div>
                     <div class="collect-checkout-copy">Foreign-currency payments require a live quote and confirmation before QR generation.</div>
                 </div>
             </div>
@@ -1881,7 +1881,7 @@
             <header class="collect-heading">
                 <p class="collect-eyebrow">PAYMENT METHOD</p>
                 <h2>Choose a payment method</h2>
-                <p>For Kakao, Toss, and KBank, customers pay in KRW using SwiftPay QR Ph. SwiftPay converts the KRW amount to PHP, and the payment settles in PHP. This requires multicurrency to be enabled for your account and a KRW-to-PHP rate to be configured; a live quote is shown before generating the QR.</p>
+                <p>For Kakao, Toss, and KBank, customers pay in KRW using DRPAY QRPH. The payment provider converts the KRW amount to PHP, and the payment settles in PHP. This requires multicurrency to be enabled for your account and a KRW-to-PHP rate to be configured; a live quote is shown before generating the QR.</p>
             </header>
             <div id="collect-institution-list" class="collect-institution-list" aria-label="Payment methods">
                 <section class="collect-method-category" role="group" aria-labelledby="collect-php-category-title">
@@ -1896,7 +1896,7 @@
                     </button>
                     <button type="button" class="channel-card collect-institution-option" data-payment-app="QR Ph" aria-pressed="false" onclick="selectCollectPaymentApp('QR Ph')">
                         <span class="channel-icon" aria-hidden="true"><img src="qr_ph_logo.svg" alt=""></span>
-                        <span class="channel-info"><span class="channel-title">QR Ph</span></span>
+                        <span class="channel-info"><span class="channel-title">QRPH</span></span>
                     </button>
                     <button type="button" class="channel-card" onclick="showCollectTransferAccount()" aria-label="Manual Bank Transfer">
                         <span class="channel-icon" aria-hidden="true">
@@ -1969,11 +1969,11 @@
             <div class="collect-institution-summary">
                 <div class="summary-row"><span>Payment app</span><strong id="collect-confirm-app">—</strong></div>
                 <div class="summary-row"><span id="collect-confirm-customer-label">Customer pays</span><strong id="collect-confirm-krw">—</strong></div>
-                <div class="summary-row"><span>QR Ph settlement</span><strong id="collect-confirm-php">—</strong></div>
+                <div class="summary-row"><span>QRPH settlement</span><strong id="collect-confirm-php">—</strong></div>
                 <div class="summary-row"><span>Exchange rate</span><strong id="collect-confirm-rate">—</strong></div>
                 <div class="summary-row"><span>Rate updated</span><strong id="collect-confirm-updated">—</strong></div>
             </div>
-            <p class="collect-note">The customer pays the displayed amount in KRW. SwiftPay QR Ph converts it to the displayed PHP settlement amount using this quote. The customer's final KRW debit may vary based on their payment provider.</p>
+            <p class="collect-note">The customer pays the displayed amount in KRW. DRPAY QRPH converts it to the displayed PHP settlement amount using this quote. The customer's final KRW debit may vary based on their payment provider.</p>
             <button type="button" class="btn-action" id="collect-confirm-button" onclick="confirmCollectKrwQuote()">Pay Now</button>
         </div>
     </section>
@@ -1990,7 +1990,7 @@
             <div class="api-card">
                 <div class="input-label">SESSION STATUS</div>
                 <div id="payment-service-detail-status" class="api-key-val" aria-live="polite">Checking...</div>
-                <p class="channel-desc">SwiftPay merchant credentials are stored by the payment backend and are not available to this page.</p>
+                <p class="channel-desc">Merchant credentials are stored by the payment backend and are not available to this page.</p>
             </div>
         </div>
     </section>
@@ -2019,7 +2019,7 @@
             <h1 id="card-payment-page-title" class="navbar-title" tabindex="-1">Card payments</h1>
         </div>
         <div class="page-content" style="text-align:center">
-            <div class="api-card">Direct card and tap-to-phone payments are not available through the configured SwiftPay service. Use hosted checkout instead.</div>
+            <div class="api-card">Direct card and tap-to-phone payments are not available through the configured payment service. Use hosted checkout instead.</div>
             <button class="btn-action" onclick="closePage('card-payment-page'); openPage('topup-page')" style="margin-top:20px">Open hosted checkout</button>
         </div>
     </section>
@@ -2450,8 +2450,8 @@
             document.getElementById('collect-amount-copy').textContent = `${paymentApp} selected. Enter the amount the customer will pay.`;
             document.getElementById('collect-summary-label').textContent = `Amount (${currency})`;
             document.getElementById('collect-amount-note').textContent = isQuotedCollectApp(paymentApp)
-                ? `The customer pays ${currency}. SwiftPay QR Ph converts this amount to PHP for settlement using a live quote. This requires multicurrency to be enabled on your account and a ${currency}-to-PHP rate to be configured.`
-                : 'This generates a PHP-denominated SwiftPay QR Ph code. Make sure the selected app supports QR Ph.';
+                ? `The customer pays ${currency}. DRPAY QRPH converts this amount to PHP for settlement using a live quote. This requires multicurrency to be enabled on your account and a ${currency}-to-PHP rate to be configured.`
+                : 'This generates a PHP-denominated DRPAY QRPH code. Make sure the selected app supports QRPH.';
             document.querySelector('.collect-presets').hidden = isKrw || isCny;
             document.getElementById('topup-submit-btn').disabled = false;
             document.getElementById('topup-btn-label').textContent = 'Continue';
@@ -2512,7 +2512,7 @@
         }
         function confirmCollectKrwQuote() {
             if (!pendingCollectQuote?.quoteToken || !pendingCollectPayment || !isQuotedCollectApp()) {
-                showNotice("Request a new currency quote before generating the QR Ph code.", true);
+                showNotice("Request a new currency quote before generating the QRPH code.", true);
                 return;
             }
             const button = document.getElementById('collect-confirm-button');
@@ -2706,7 +2706,7 @@
                         'transfer-result-reference',
                         'Transfer not accepted',
                         isInvalidInput
-                            ? 'SwiftPay returned INVALID_INPUT, so this transfer was not accepted. Confirm the selected InstaPay institution, account number, and recipient’s complete legal name exactly as registered. Use the support reference below if the details are correct.'
+                            ? 'The payment provider rejected the details, so this transfer was not accepted. Confirm the selected InstaPay institution, account number, and recipient’s complete legal name exactly as registered. Use the support reference below if the details are correct.'
                             : message,
                         message
                     );
@@ -2723,7 +2723,7 @@
                     document.getElementById('transfer-result-title').textContent =
                         'Transfer confirmation required';
                     document.getElementById('transfer-result-message').textContent =
-                        transfer.message || 'SwiftPay has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference.';
+                        transfer.message || 'The payment provider has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference.';
                     const transferReference = document.getElementById('transfer-result-reference');
                     transferReference.hidden = !transfer.referenceNo;
                     transferReference.textContent = transfer.referenceNo
@@ -2788,7 +2788,7 @@
                 document.getElementById('disb-institutions-error').hidden = true;
             }
             if (res.data && typeof res.data.checkoutUrl === 'string') {
-                showNotice('SwiftPay checkout opened. Choose QR Ph on the secure checkout page.');
+                showNotice('Secure checkout opened. Choose QRPH on the payment page.');
             }
             if (typeof res.data === 'number') { document.getElementById('balance-display').innerText = '\u20B1 ' + res.data.toLocaleString(undefined, {minimumFractionDigits: 2}); return; }
             if (res.data && res.data.managedByServer) {
@@ -2805,9 +2805,9 @@
                 document.getElementById('payment-service-detail-status').innerText = status;
                 const transferEnvironment = document.getElementById('transfer-provider-environment');
                 transferEnvironment.textContent = providerEnvironment === 'live'
-                    ? 'LIVE SwiftPay environment — transfers will use the live payment provider.'
+                    ? 'LIVE payment environment — transfers will use the live payment provider.'
                     : providerEnvironment === 'sandbox'
-                        ? 'SANDBOX SwiftPay environment — transfers will use the test payment provider.'
+                        ? 'SANDBOX payment environment — transfers will use the test payment provider.'
                         : providerEnvironment === 'custom'
                             ? 'CUSTOM provider endpoint — its environment cannot be verified, so transfers are disabled.'
                             : 'Payment provider environment is unverified. Transfers are unavailable.';

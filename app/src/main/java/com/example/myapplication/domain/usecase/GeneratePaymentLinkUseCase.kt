@@ -21,7 +21,7 @@ class GeneratePaymentLinkUseCase(
                 return Result.failure(Exception("Amount exceeds maximum limit of ₱1,000,000"))
             }
 
-            val desc = description.ifBlank { "SwiftPay Payment" }
+            val desc = description.ifBlank { "DRPAY Payment" }
             val result = swiftPayService.createPaymentLink(
                 amount = if (amount > 0) amount else 0.0,
                 description = desc

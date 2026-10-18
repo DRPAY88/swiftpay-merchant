@@ -305,9 +305,9 @@ fun SwiftPayQrDialog(
 
     SwiftPayBaseDialog(
         onDismissRequest = onDismiss,
-        title = "SwiftPay QR Ph Payment",
+        title = "DRPAY QRPH Payment",
         description = buildString {
-            append("Scan this SwiftPay QR Ph code with a QR Ph-enabled payment app. Settlement is in PHP.")
+            append("Scan this DRPAY QRPH code with a QRPH-enabled payment app. Settlement is in PHP.")
             if (!paymentAppName.isNullOrBlank()) {
                 append("\nSelected payment method: ")
                 append(paymentAppName)
@@ -342,7 +342,7 @@ fun SwiftPayQrDialog(
                     ) {
                         Image(
                             bitmap = qrImage,
-                            contentDescription = "QR Ph code for ${formatQrCurrency(customerAmountFx ?: customerAmountKrw?.toDouble() ?: amount, customerCurrency ?: if (customerAmountKrw != null) "KRW" else currency)}",
+                            contentDescription = "QRPH code for ${formatQrCurrency(customerAmountFx ?: customerAmountKrw?.toDouble() ?: amount, customerCurrency ?: if (customerAmountKrw != null) "KRW" else currency)}",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Fit
                         )

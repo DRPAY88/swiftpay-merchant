@@ -82,7 +82,7 @@ fun ApiDocsScreen() {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                "Integrate QR Ph collections into your web store. Create a payment from your server, show the returned QR to your customer, then check payment status.",
+                "Integrate QRPH collections into your web store. Create a payment from your server, show the returned QR to your customer, then check payment status.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -95,14 +95,14 @@ fun ApiDocsScreen() {
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    "Keep the key in your web server's secret manager or environment. Never put it in browser JavaScript, a mobile app, a URL, or source control. These keys can create QR Ph collections, request FX quotes, read payment status, and read payment institutions only.",
+                    "Keep the key in your web server's secret manager or environment. Never put it in browser JavaScript, a mobile app, a URL, or source control. These keys can create QRPH collections, request FX quotes, read payment status, and read payment institutions only.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 CodeBlock("Authorization: Bearer drpay_live_<key-id>_<secret>")
             }
 
-            DocPanel(title = "Create a QR Ph collection", icon = Icons.Rounded.Description) {
+            DocPanel(title = "Create a QRPH collection", icon = Icons.Rounded.Description) {
                 Endpoint("POST", "/v1/payments/qrph")
                 Text("PHP collection request:", fontWeight = FontWeight.SemiBold)
                 CodeBlock(
@@ -117,7 +117,7 @@ fun ApiDocsScreen() {
                 Text("Use a unique referenceNo per order (1–50 characters). Do not treat QR creation or a PENDING response as proof of payment.")
             }
 
-            DocPanel(title = "Foreign-currency QR Ph quote", icon = Icons.Rounded.Description) {
+            DocPanel(title = "Foreign-currency QRPH quote", icon = Icons.Rounded.Description) {
                 Text("For KRW, USD, EUR, or CNY, first request a short-lived quote:", fontWeight = FontWeight.SemiBold)
                 Endpoint("POST", "/v1/payments/qrph/quote")
                 CodeBlock(
@@ -149,11 +149,11 @@ fun ApiDocsScreen() {
 
             DocPanel(title = "Webhook status", icon = Icons.Rounded.Security) {
                 Text(
-                    "Merchant-configurable outbound webhooks are not available yet. The backend's POST /v1/webhooks/swiftpay endpoint is for authenticated provider callbacks; do not call it from your store. For now, poll the payment-status endpoint from your server.",
+                    "Merchant-configurable outbound webhooks are not available yet. The backend's provider callback endpoint is reserved for authenticated payment notifications; do not call it from your store. For now, poll the payment-status endpoint from your server.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    "The app credits merchant wallet funds only after it receives and verifies a signed SwiftPay callback that matches the payment, reference, PHP amount, and currency. A browser redirect or QR scan is not settlement confirmation.",
+                    "The app credits merchant wallet funds only after it receives and verifies a signed payment-provider callback that matches the payment, reference, PHP amount, and currency. A browser redirect or QR scan is not settlement confirmation.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -165,7 +165,7 @@ fun ApiDocsScreen() {
             }
 
             DocPanel(title = "Integration code generator", icon = Icons.Rounded.Code) {
-                Text("Generate a server-side starting point for the QR Ph collection flow.")
+                Text("Generate a server-side starting point for the QRPH collection flow.")
                 OutlinedTextField(
                     value = amountInput,
                     onValueChange = { amountInput = it },

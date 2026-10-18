@@ -132,7 +132,7 @@ class SwiftPayService(
                     val jsonObj = json.parseToJsonElement(rawBody).jsonObject
                     val errorCode = jsonObj["errorCode"]?.jsonPrimitive?.contentOrNull
                     val baseMessage = if (response.code() == 400 && errorCode == "INVALID_INPUT") {
-                        "SwiftPay rejected the transfer details. Confirm the selected InstaPay institution matches the recipient's account, then verify the account number and recipient's exact legal name. Contact SwiftPay with the support reference if those details are correct."
+                        "The payment provider rejected the transfer details. Confirm the selected InstaPay institution matches the recipient's account, then verify the account number and recipient's exact legal name. Contact support with the reference if those details are correct."
                     } else {
                         jsonObj["error"]?.jsonPrimitive?.contentOrNull
                         ?: jsonObj["message"]?.jsonPrimitive?.contentOrNull
@@ -294,11 +294,11 @@ class SwiftPayService(
     ): Result<SwiftPayPaymentLinkResponse> {
         if (!hasApiKey) return missingSession()
         if (!amount.isFinite() || amount <= 0.0) {
-            return Result.failure(IllegalArgumentException("SwiftPay payment links require a valid fixed amount"))
+            return Result.failure(IllegalArgumentException("Payment links require a valid fixed amount"))
         }
         val normalizedCurrency = currency.uppercase()
         if (normalizedCurrency !in setOf("PHP", "USD", "EUR")) {
-            return Result.failure(IllegalArgumentException("SwiftPay payment links support PHP, USD, and EUR"))
+            return Result.failure(IllegalArgumentException("Payment links support PHP, USD, and EUR"))
         }
         return try {
             val response = api.createPaymentLink(
@@ -313,7 +313,7 @@ class SwiftPayService(
             if (!response.isSuccessful) return failure(response)
             val body = response.body() ?: return Result.failure(IllegalStateException("Empty payment-link response"))
             if (body.currency != null && body.currency != normalizedCurrency) {
-                return Result.failure(IllegalStateException("SwiftPay returned a payment link in a different currency"))
+                return Result.failure(IllegalStateException("The payment service returned a payment link in a different currency"))
             }
             Result.success(
                 SwiftPayPaymentLinkResponse(
@@ -334,9 +334,9 @@ class SwiftPayService(
 
     suspend fun createDynamicQr(amount: Double, currency: String = "PHP"): Result<SwiftPayQrResponse> {
         if (!hasApiKey) return missingSession()
-        if (!amount.isFinite() || amount <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid QR Ph amount"))
+        if (!amount.isFinite() || amount <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid QRPH amount"))
         if (currency != "PHP") {
-            return Result.failure(IllegalArgumentException("SwiftPay QR Ph settles in PHP. Request a KRW, USD, EUR, or CNY-to-PHP quote first."))
+            return Result.failure(IllegalArgumentException("DRPAY QRPH settles in PHP. Request a KRW, USD, EUR, or CNY-to-PHP quote first."))
         }
         return try {
             val refNo = "QR-${UUID.randomUUID()}"
@@ -348,7 +348,7 @@ class SwiftPayService(
                 )
             )
             if (!response.isSuccessful) return failure(response)
-            val body = response.body() ?: return Result.failure(IllegalStateException("Empty QR Ph response"))
+            val body = response.body() ?: return Result.failure(IllegalStateException("Empty QRPH response"))
             Result.success(toSwiftPayQrResponse(body))
         } catch (error: Exception) {
             Result.failure(error)
@@ -438,7 +438,7 @@ class SwiftPayService(
             return Result.failure(IllegalArgumentException("Enter a valid customer amount."))
         }
         if (currency !in setOf("KRW", "USD", "EUR", "CNY")) {
-            return Result.failure(IllegalArgumentException("QR Ph quotes support KRW, USD, EUR, and CNY customer prices."))
+            return Result.failure(IllegalArgumentException("QRPH quotes support KRW, USD, EUR, and CNY customer prices."))
         }
         if (currency == "KRW" && amount % 1.0 != 0.0) {
             return Result.failure(IllegalArgumentException("KRW prices must be whole numbers."))
@@ -517,7 +517,7 @@ class SwiftPayService(
 
     private fun toSwiftPayQrResponse(body: com.example.myapplication.data.api.BackendQrPaymentResponse): SwiftPayQrResponse {
         val qrCodeValue = body.qrCode?.takeIf { it.isNotBlank() }
-            ?: throw IllegalStateException("SwiftPay did not return a QR Ph payload")
+            ?: throw IllegalStateException("The payment service did not return a QRPH payload")
         val qrImageBase64 = body.qrImageBase64?.takeIf { it.length > 200 }
             ?: com.example.myapplication.util.generateQrBitmapBase64(qrCodeValue)
         return SwiftPayQrResponse(
@@ -653,7 +653,7 @@ class SwiftPayService(
                 throw IllegalStateException("This wallet does not have a separate deposit account")
             }
             val accountNumber = body.accountNumber?.trim()?.takeIf { it.isNotEmpty() }
-                ?: throw IllegalStateException("SwiftPay did not return the wallet's inbound deposit account number")
+                ?: throw IllegalStateException("The payment service did not return the wallet's inbound deposit account number")
             BackendWalletDepositAccount(
                 accountNumber = accountNumber,
                 balance = body.balance
@@ -724,7 +724,7 @@ class SwiftPayService(
                     date = payment.createdAt,
                     transactionType = "PAYMENT",
                     referenceNo = payment.referenceNo,
-                    bankName = "SwiftPay"
+                    bankName = "Payment Provider"
                 )
             }
         }
@@ -814,7 +814,7 @@ class SwiftPayService(
         cardDetails: CardDetails,
         notes: String? = null
     ): Result<SwiftPayStatusResponse> = Result.failure(
-        UnsupportedOperationException("Direct card vault processing is not supported by the published SwiftPay API")
+        UnsupportedOperationException("Direct card vault processing is not supported by the published payment API")
     )
 
     suspend fun disburse(

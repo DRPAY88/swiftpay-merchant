@@ -227,12 +227,12 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                         krwReceiptPaymentCount = result.paymentCount
                     }
                     .onFailure { error ->
-                        krwReceiptBalanceError = error.message ?: "Could not load executed KRW QR Ph receipts."
+                        krwReceiptBalanceError = error.message ?: "Could not load executed KRW QRPH receipts."
                     }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                krwReceiptBalanceError = error.message ?: "Could not load executed KRW QR Ph receipts."
+                krwReceiptBalanceError = error.message ?: "Could not load executed KRW QRPH receipts."
             } finally {
                 isLoadingKrwReceiptBalance = false
             }
@@ -332,7 +332,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
 
                     Log.i("MiniAppViewModel", "Payment link generated successfully: $url")
                 } else {
-                    handlePaymentLinkError("Payment link URL was not provided by SwiftPay server")
+                    handlePaymentLinkError("Payment link URL was not provided by the payment service")
                 }
             }.onFailure { error ->
                 handlePaymentLinkError(error.message ?: "Failed to generate payment link")
@@ -347,7 +347,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onScanNFCCard(amount: Double) {
-        val message = "Tap-to-phone card processing is not supported by the configured SwiftPay API."
+        val message = "Tap-to-phone card processing is not supported by the configured payment service."
         bridge?.sendError(message)
         uiState = MiniAppUiState.Error(message)
     }
@@ -364,17 +364,17 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     fun onGenerateDynamicQr(amount: Double, currency: String = "PHP", paymentAppName: String? = null) {
         val normalizedPaymentApp = normalizePaymentAppName(paymentAppName)
         if (paymentAppName != null && normalizedPaymentApp == null) {
-            bridge?.sendError("Unsupported QR Ph payment app", action = "generate_dynamic_qr")
+            bridge?.sendError("Unsupported QRPH payment app", action = "generate_dynamic_qr")
             return
         }
         if (currency != "PHP") {
             bridge?.sendError(
-                "SwiftPay QR Ph settles in PHP. Request a KRW, USD, EUR, or CNY-to-PHP quote first.",
+                "DRPAY QRPH settles in PHP. Request a KRW, USD, EUR, or CNY-to-PHP quote first.",
                 action = "generate_dynamic_qr"
             )
             return
         }
-        launchProcessingAction("Generating dynamic QR Ph code...", bridgeAction = "generate_dynamic_qr") {
+        launchProcessingAction("Generating dynamic QRPH code...", bridgeAction = "generate_dynamic_qr") {
             handleQrGenerationResult(
                 result = getService().createDynamicQr(amount, currency),
                 amount = amount,
@@ -445,7 +445,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     fun onGenerateQuotedKrwPhpQr(quoteToken: String, paymentAppName: String? = null) {
         val normalizedPaymentApp = normalizePaymentAppName(paymentAppName)
         if (paymentAppName != null && normalizedPaymentApp == null) {
-            bridge?.sendError("Unsupported QR Ph payment app", action = "generate_quoted_krw_php_qr")
+            bridge?.sendError("Unsupported QRPH payment app", action = "generate_quoted_krw_php_qr")
             return
         }
         launchProcessingAction("Creating PHP QR from the KRW price quote...", bridgeAction = "generate_quoted_krw_php_qr") {
@@ -462,7 +462,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     fun onGenerateQuotedFxPhpQr(quoteToken: String, paymentAppName: String? = null) {
         val normalizedPaymentApp = normalizePaymentAppName(paymentAppName)
         if (paymentAppName != null && normalizedPaymentApp == null) {
-            bridge?.sendError("Unsupported QR Ph payment app", action = "generate_quoted_fx_php_qr")
+            bridge?.sendError("Unsupported QRPH payment app", action = "generate_quoted_fx_php_qr")
             return
         }
         launchProcessingAction("Creating PHP QR from the currency price quote...", bridgeAction = "generate_quoted_fx_php_qr") {
@@ -498,7 +498,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                     PaymentData(
                         amount = paymentAmount,
                         currency = paymentCurrency,
-                        description = "$paymentCurrency QR Ph collection"
+                        description = "$paymentCurrency QRPH collection"
                     )
                 )
                 bridge?.sendResponse(
@@ -523,7 +523,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                 )
                 bridge?.sendResponse(mapOf("qrCodeBody" to qrCode), action = bridgeAction)
             } else {
-                bridge?.sendError("SwiftPay returned an incomplete QR Ph payment", action = bridgeAction)
+                bridge?.sendError("The payment service returned an incomplete QRPH payment", action = bridgeAction)
                 uiState = MiniAppUiState.Idle
             }
         }.onFailure { error ->
@@ -610,7 +610,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                     )
                     val instapayInstitutions = brandedInstitutions.filter { it.instapayEnabled }
                     if (instapayInstitutions.isEmpty()) {
-                        val message = "SwiftPay returned no InstaPay institutions."
+                        val message = "The payment service returned no InstaPay institutions."
                         bridge?.sendError(message)
                         uiState = MiniAppUiState.Error(message)
                     } else {
@@ -660,7 +660,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                         "message" to if (recordedLocally) {
                             "QR_P2P transfer submitted. Check its status before treating it as complete."
                         } else {
-                            "SwiftPay accepted the QR_P2P transfer, but this device could not save it to transaction history. Check its status before retrying."
+                            "The payment service accepted the QR_P2P transfer, but this device could not save it to transaction history. Check its status before retrying."
                         }
                     )
                 )
@@ -678,7 +678,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
             uiState = MiniAppUiState.Error("Please enter a valid transfer amount.")
             return
         }
-        launchProcessingAction("Processing SwiftPay transfer...", bridgeAction = "send_disbursement") {
+        launchProcessingAction("Processing transfer...", bridgeAction = "send_disbursement") {
             val result = getService().disburse(amount, bankCode, accountNumber, recipientName)
             result.onSuccess { response ->
                 if (response.outcomeUnknown) {
@@ -688,7 +688,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                             "outcomeUnknown" to true,
                             "referenceNo" to (response.referenceNo ?: ""),
                             "message" to (response.message
-                                ?: "SwiftPay has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference.")
+                                ?: "The payment provider has not confirmed whether this transfer was accepted. Do not submit it again. Check your transaction history or contact support with this reference.")
                         ),
                         action = "send_disbursement"
                     )
@@ -708,7 +708,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                 )
                 val message = when {
                     !recordedLocally ->
-                        "SwiftPay accepted the transfer, but this device could not save it to transaction history. Verify its status before retrying."
+                        "The payment service accepted the transfer, but this device could not save it to transaction history. Verify its status before retrying."
                     status == "SUCCESS" ->
                         "Transfer of ₱${"%.2f".format(amount)} to $recipientName ($bankCode) completed."
                     else ->
@@ -766,7 +766,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun retryNfc() {
-        val message = "Tap-to-phone card processing is not supported by the configured SwiftPay API."
+        val message = "Tap-to-phone card processing is not supported by the configured payment service."
         bridge?.sendError(message)
         uiState = MiniAppUiState.Error(message)
     }
@@ -785,7 +785,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onCvvEntered(cvv: String) {
-        val message = "Direct card entry is not supported. Use SwiftPay hosted checkout instead."
+        val message = "Direct card entry is not supported. Use hosted checkout instead."
         bridge?.sendError(message)
         uiState = MiniAppUiState.Error(message)
     }
@@ -796,7 +796,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
 
             bridge?.sendResponse(mapOf(
                 "status" to "saved",
-                "message" to "SwiftPay credentials are managed securely by the payment service."
+                "message" to "Payment provider credentials are managed securely by the payment service."
             ))
             uiState = MiniAppUiState.Idle
         }
@@ -840,7 +840,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun approvePayment(data: PaymentData) {
-        launchProcessingAction("Creating SwiftPay checkout...") {
+        launchProcessingAction("Creating DRPAY checkout...") {
             val result = getService().createCheckout(data)
 
             result.onSuccess { response ->
@@ -855,7 +855,7 @@ class MiniAppViewModel(application: Application) : AndroidViewModel(application)
                     )
                     uiState = MiniAppUiState.PaymentRedirect(redirectUrl, data)
                 } else {
-                    val errorMsg = "Redirect URL was not provided by SwiftPay server"
+                    val errorMsg = "Redirect URL was not provided by the payment service"
                     bridge?.sendError(errorMsg)
                     uiState = MiniAppUiState.Error(errorMsg)
                 }

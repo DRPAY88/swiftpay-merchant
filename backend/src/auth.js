@@ -170,9 +170,9 @@ export function createOtpAuth(config, {
 
 export async function sendOtpEmail(config, email, code, fetchImpl = fetch, purpose = "sign-in") {
   const registration = purpose === "registration";
-  const subject = registration ? "Verify your SwiftPay merchant application" : "Your DRPAY verification code";
+  const subject = registration ? "Verify your DRPAY merchant application" : "Your DRPAY verification code";
   const message = registration
-    ? `Your SwiftPay merchant registration verification code is ${code}. It expires in 10 minutes.`
+    ? `Your DRPAY merchant registration verification code is ${code}. It expires in 10 minutes.`
     : `Your DRPAY verification code is ${code}. Use it to sign in or create your account. It expires in 10 minutes.`;
   const response = await fetchImpl("https://api.resend.com/emails", {
     method: "POST",

@@ -112,10 +112,11 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   const homepage = await fetch(`${baseUrl}/`);
   assert.equal(homepage.status, 200);
   const homepageHtml = await homepage.text();
+  assert.doesNotMatch(homepageHtml, /SwiftPay/i);
   assert.match(homepageHtml, /Collect in KRW\./);
   assert.match(homepageHtml, /Track PHP clearly/);
   assert.match(homepageHtml, /KRW QR PAYMENTS · PERSONAL PHP WALLET/);
-  assert.match(homepageHtml, /PHP appears in your personal wallet only after SwiftPay confirms settlement/);
+  assert.match(homepageHtml, /PHP appears in your personal wallet only after the payment provider confirms settlement/);
   assert.match(homepageHtml, /KRW → PHP/);
   assert.match(homepageHtml, /KRW → USDT/);
   assert.match(homepageHtml, /KRW → USDT \(TRC20\)/);
@@ -162,7 +163,9 @@ test("admin dashboard is served while its APIs require a signed super-admin role
 
   const page = await fetch(`${baseUrl}/admin/`);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /SwiftPay Super Admin/);
+  const adminHtml = await page.text();
+  assert.match(adminHtml, /DRPAY Super Admin/);
+  assert.doesNotMatch(adminHtml, /SwiftPay/i);
 
   const anonymous = await fetch(`${baseUrl}/v1/admin/users`);
   assert.equal(anonymous.status, 401);
