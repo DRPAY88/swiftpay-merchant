@@ -130,11 +130,13 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /app-managed ledger over pooled provider funds/);
   assert.match(homepageHtml, /id="promo"/);
   assert.equal((homepageHtml.match(/id="how-it-works"/g) || []).length, 1);
-  assert.match(homepageHtml, /DRPAY IN 15 SECONDS/);
-  assert.match(homepageHtml, /earlier DRPAY interface/);
+  assert.match(homepageHtml, /DRPAY IN 36 SECONDS — KRW COLLECTION/);
+  assert.match(homepageHtml, /real DRPAY app screens for Kakao, Toss, and KBank/);
+  assert.match(homepageHtml, /current KRW-to-PHP rate configured/);
+  assert.match(homepageHtml, /English voice-over/);
   assert.match(homepageHtml, /Version 1\.0\.23/);
-  assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=2"/);
-  assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=2"/);
+  assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=5"/);
+  assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=5"/);
   assert.match(homepageHtml, /id="market-rates"/);
   assert.match(homepageHtml, /Reference estimate only—not a DRPAY offer/);
   assert.match(homepageHtml, /href="\/site\.css\?v=3"/);
