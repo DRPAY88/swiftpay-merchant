@@ -130,16 +130,18 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /app-managed ledger over pooled provider funds/);
   assert.match(homepageHtml, /id="promo"/);
   assert.equal((homepageHtml.match(/id="how-it-works"/g) || []).length, 1);
-  assert.match(homepageHtml, /DRPAY IN 36 SECONDS — KRW COLLECTION/);
-  assert.match(homepageHtml, /real DRPAY app screens for Kakao, Toss, and KBank/);
+  assert.match(homepageHtml, /Pay in won\.<br><span>Merchant receives PHP\.<\/span>/);
+  assert.match(homepageHtml, /How KRW collection works/);
+  assert.match(homepageHtml, /scan their QR with Kakao, Toss, or KBank and pay in Korean won/);
+  assert.match(homepageHtml, /After the provider verifies your payment, PHP is credited to the merchant's balance/);
   assert.match(homepageHtml, /current KRW-to-PHP rate configured/);
   assert.match(homepageHtml, /English voice-over/);
   assert.match(homepageHtml, /Version 1\.0\.23/);
-  assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=5"/);
-  assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=5"/);
+  assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=6"/);
+  assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=6"/);
   assert.match(homepageHtml, /id="market-rates"/);
   assert.match(homepageHtml, /Reference estimate only—not a DRPAY offer/);
-  assert.match(homepageHtml, /href="\/site\.css\?v=3"/);
+  assert.match(homepageHtml, /href="\/site\.css\?v=4"/);
   assert.match(homepageHtml, /src="\/rates\.js\?v=3"/);
 
   const ratesScript = await fetch(`${baseUrl}/rates.js`);

@@ -556,6 +556,39 @@ h1 span,
   line-height: 1.75;
 }
 
+.promo-customer-steps {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 22px;
+  padding: 0;
+  color: #dce9f7;
+  list-style: none;
+  counter-reset: promo-step;
+}
+
+.promo-customer-steps li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  counter-increment: promo-step;
+}
+
+.promo-customer-steps li::before {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: #071a38;
+  background: #8cb9e9;
+  border-radius: 50%;
+  content: counter(promo-step);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .promo-video-copy .promo-video-disclaimer {
   margin-block: 25px;
   padding: 13px 16px;
