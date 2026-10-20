@@ -135,10 +135,11 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /scan their QR with Kakao, Toss, or KBank and pay in Korean won/);
   assert.match(homepageHtml, /After the provider verifies your payment, PHP is credited to the merchant's balance/);
   assert.match(homepageHtml, /current KRW-to-PHP rate configured/);
-  assert.match(homepageHtml, /English voice-over/);
+  assert.match(homepageHtml, /English narration and original instrumental music/);
+  assert.match(homepageHtml, /polished English voice-over \+ original instrumental music/);
   assert.match(homepageHtml, /Version 1\.0\.23/);
-  assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=6"/);
-  assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=6"/);
+  assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=9"/);
+  assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=9"/);
   assert.match(homepageHtml, /id="market-rates"/);
   assert.match(homepageHtml, /Reference estimate only—not a DRPAY offer/);
   assert.match(homepageHtml, /href="\/site\.css\?v=4"/);
