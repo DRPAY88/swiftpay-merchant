@@ -7,6 +7,7 @@ const requestCodeForm = document.querySelector("#request-code-form");
 const verifyCodeForm = document.querySelector("#verify-code-form");
 const signOutButton = document.querySelector("#sign-out");
 let registrationSecureStorageAvailable = false;
+let adjustmentSummary = null;
 
 function showMessage(target, message, error = true) {
   target.textContent = message;
@@ -348,9 +349,118 @@ async function loadBalance() {
   document.querySelector("#account-number").textContent =
     wallet.accountNumber ? `Funding account: ${wallet.accountNumber}` : "";
   document.querySelector("#adjustment-total").textContent =
-    `₱ ${Number(adjustment.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    `₱ ${Number(adjustment.outstanding).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  adjustmentSummary = adjustment;
+  renderAdjustmentSettlement(adjustment);
   renderAdjustments(adjustment.adjustments);
   await loadManualDeposits();
+}
+
+function renderAdjustmentSettlement(adjustment) {
+  const outstanding = Number(adjustment.outstanding);
+  const latestPayment = adjustment.latestPayment;
+  document.querySelector("#adjustment-outstanding").textContent =
+    `₱ ${outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })} remains`;
+  const status = document.querySelector("#adjustment-payment-status");
+  const createButton = document.querySelector("#create-adjustment-qr");
+  const checkButton = document.querySelector("#check-adjustment-payment");
+  const quoteLine = document.querySelector("#adjustment-payment-quote");
+  const qrContainer = document.querySelector("#adjustment-qr");
+  const qrImage = document.querySelector("#adjustment-qr-image");
+  const qrPayload = document.querySelector("#adjustment-qr-payload");
+  const qrReference = document.querySelector("#adjustment-qr-reference");
+  const activePayment = latestPayment && ["CREATING", "PENDING", "UNKNOWN"].includes(latestPayment.status);
+
+  createButton.disabled = !(outstanding > 0) || Boolean(activePayment);
+  if (!latestPayment) {
+    status.textContent = outstanding > 0
+      ? "A ₩500,000 KRW payment must be confirmed before this adjustment can be transferred."
+      : "No positive adjustment balance is awaiting reconciliation.";
+  } else if (latestPayment.status === "EXECUTED") {
+    status.textContent = outstanding <= 0
+      ? "Payment verified; no positive adjustment balance remains to transfer."
+      : adjustment.canTransfer
+        ? `Payment verified. ₱ ${Number(latestPayment.settledAmountPhp).toLocaleString(undefined, { minimumFractionDigits: 2 })} was applied to the adjustment.`
+        : "A newer positive adjustment was recorded; create a new QR payment before transferring it.";
+  } else if (activePayment) {
+    status.textContent = latestPayment.status === "UNKNOWN"
+      ? `The provider outcome is unknown. Do not create another QR; contact support with reference ${latestPayment.referenceNo}.`
+      : `Payment status: ${latestPayment.status}. Complete the QR payment, then check its status.`;
+  } else {
+    status.textContent = `Last QR payment status: ${latestPayment.status}. A new QR can be created if an adjustment remains.`;
+  }
+  quoteLine.textContent = latestPayment
+    ? `Locked QR amount: ₩ ${Number(latestPayment.customerAmountKrw).toLocaleString()} → PHP ${Number(latestPayment.expectedAmountPhp).toLocaleString(undefined, { minimumFractionDigits: 2 })}. Up to PHP ${Number(latestPayment.offsetAmountPhp).toLocaleString(undefined, { minimumFractionDigits: 2 })} is applied to the adjustment; any excess remains in the shared provider balance.`
+    : "";
+
+  checkButton.classList.toggle("hidden", !latestPayment?.paymentId || !activePayment);
+  const hasQr = Boolean(latestPayment?.qrImageBase64 || latestPayment?.qrCode) && activePayment;
+  qrContainer.classList.toggle("hidden", !hasQr);
+  qrImage.classList.toggle("hidden", !latestPayment?.qrImageBase64 || !activePayment);
+  qrImage.removeAttribute("src");
+  if (latestPayment?.qrImageBase64 && activePayment) {
+    qrImage.src = `data:image/png;base64,${latestPayment.qrImageBase64}`;
+  }
+  qrPayload.classList.toggle("hidden", !latestPayment?.qrCode || Boolean(latestPayment?.qrImageBase64) || !activePayment);
+  qrPayload.textContent = latestPayment?.qrCode || "";
+  qrReference.textContent = hasQr ? `Payment reference: ${latestPayment.referenceNo}` : "";
+
+  const adjustmentTransferToggle = document.querySelector("#transfer-adjustment");
+  adjustmentTransferToggle.disabled = !adjustment.canTransfer;
+  if (!adjustment.canTransfer) adjustmentTransferToggle.checked = false;
+  if (adjustmentTransferToggle.checked && adjustment.canTransfer) {
+    document.querySelector("#transfer-amount").value = Math.min(outstanding, 50_000).toFixed(2);
+  }
+}
+
+async function createAdjustmentKrwQr() {
+  const button = document.querySelector("#create-adjustment-qr");
+  button.disabled = true;
+  try {
+    const quote = await api("/v1/payments/qrph/quote", {
+      method: "POST",
+      body: JSON.stringify({ amountKrw: 500_000 })
+    });
+    await api("/v1/payments/qrph", {
+      method: "POST",
+      body: JSON.stringify({
+        quoteToken: quote.quoteToken,
+        adjustmentSettlement: true
+      })
+    });
+    await Promise.all([loadBalance(), loadAudit()]);
+    showMessage(dashboardMessage, "₩500,000 KRW QR created. The adjustment changes only after provider verification.", false);
+  } catch (error) {
+    showMessage(dashboardMessage, error.message);
+    await loadBalance().catch((loadError) => showMessage(dashboardMessage, loadError.message));
+  } finally {
+    if (adjustmentSummary) renderAdjustmentSettlement(adjustmentSummary);
+    else button.disabled = false;
+  }
+}
+
+async function checkAdjustmentKrwPayment() {
+  const paymentId = adjustmentSummary?.latestPayment?.paymentId;
+  if (!paymentId) return;
+  const button = document.querySelector("#check-adjustment-payment");
+  button.disabled = true;
+  try {
+    const result = await api(
+      `/v1/admin/balance-adjustments/krw-payments/${encodeURIComponent(paymentId)}/status`
+    );
+    await Promise.all([loadBalance(), loadAudit()]);
+    showMessage(
+      dashboardMessage,
+      result.status === "EXECUTED"
+        ? "KRW payment verified; its PHP settlement has been applied to the adjustment."
+        : `Payment is not settled yet (${result.status}).`,
+      result.status !== "EXECUTED"
+    );
+  } catch (error) {
+    showMessage(dashboardMessage, error.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function loadManualDeposits() {
@@ -508,23 +618,44 @@ document.querySelector("#transfer-form").addEventListener("submit", async (event
   const accountNumber = document.querySelector("#transfer-account").value.trim();
   const fullName = document.querySelector("#transfer-name").value.trim();
   const remarks = document.querySelector("#transfer-remarks").value.trim();
+  const adjustmentTransfer = document.querySelector("#transfer-adjustment").checked;
   const transfer = {
     amount,
     referenceNo: `ADMIN-${crypto.randomUUID()}`,
     channel: "INSTAPAY",
     institutionCode,
     recipientInformation: { accountNumber, fullName },
+    ...(adjustmentTransfer ? { adjustmentTransfer: true } : {}),
     ...(remarks ? { remarks } : {})
   };
-  if (!window.confirm(`Send a REAL PHP ${amount.toFixed(2)} InstaPay transfer to ${fullName}, account ending ${accountNumber.slice(-4)}?`)) return;
+  const transferPurpose = adjustmentTransfer ? " against the remaining adjusted balance" : "";
+  if (!window.confirm(`Send a REAL PHP ${amount.toFixed(2)} InstaPay transfer${transferPurpose} to ${fullName}, account ending ${accountNumber.slice(-4)}?`)) return;
   try {
     const result = await api("/v1/disbursements", { method: "POST", body: JSON.stringify(transfer) });
     event.currentTarget.reset();
-    await Promise.all([loadTransfers(), loadAudit()]);
+    await Promise.all([loadTransfers(), loadAudit(), loadBalance()]);
     showMessage(dashboardMessage, `Transfer accepted as pending (${result.id}). Verify its final status with the payment provider.`, false);
   } catch (error) {
     showMessage(dashboardMessage, error.message);
   }
+});
+
+document.querySelector("#create-adjustment-qr").addEventListener("click", createAdjustmentKrwQr);
+document.querySelector("#check-adjustment-payment").addEventListener("click", checkAdjustmentKrwPayment);
+document.querySelector("#transfer-adjustment").addEventListener("change", (event) => {
+  if (!event.currentTarget.checked) return;
+  if (!adjustmentSummary?.canTransfer) {
+    event.currentTarget.checked = false;
+    showMessage(dashboardMessage, "Verify the ₩500,000 KRW QR payment before transferring an adjustment.");
+    return;
+  }
+  const outstanding = Number(adjustmentSummary.outstanding);
+  if (outstanding <= 0) {
+    event.currentTarget.checked = false;
+    showMessage(dashboardMessage, "No positive adjustment balance remains to transfer.");
+    return;
+  }
+  document.querySelector("#transfer-amount").value = Math.min(outstanding, 50_000).toFixed(2);
 });
 
 document.querySelector("#refresh-balance").addEventListener("click", () => loadBalance().catch((error) => showMessage(dashboardMessage, error.message)));

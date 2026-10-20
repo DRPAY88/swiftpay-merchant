@@ -150,6 +150,90 @@ test("admin store persists merchant status, internal adjustments, and atomic aud
   }
 });
 
+test("adjustment QR settlements offset only verified PHP and reserve adjustment transfers", async () => {
+  const database = newDb();
+  const { Pool } = database.adapters.createPg();
+  const pool = new Pool();
+  const store = createAdminStore("postgresql://test", pool);
+  const actor = "support@swiftpay.site";
+  try {
+    await store.initialize(["merchant@example.com", actor], [actor]);
+    await store.createAdjustment(100_000, "Adjustment transfer reconciliation", actor);
+
+    let summary = await store.getBalanceAdjustmentSummary();
+    assert.equal(summary.outstanding, 100_000);
+    assert.equal(summary.canTransfer, false);
+
+    const intent = await store.createAdjustmentKrwPaymentIntent("ADJ-KRW-TEST-1", 20_000, actor);
+    assert.equal(intent.offsetAmountPhp, 20_000);
+    await store.recordAdjustmentKrwPaymentOrder(
+      intent.referenceNo,
+      "adjustment-payment-1",
+      "qr-payload",
+      null
+    );
+
+    summary = await store.getBalanceAdjustmentSummary();
+    assert.equal(summary.outstanding, 100_000);
+    assert.equal(summary.latestPayment.status, "PENDING");
+
+    await store.recordWebhookEvent({
+      eventKey: "payment:adjustment-payment-1",
+      eventType: "payment",
+      paymentId: "adjustment-payment-1",
+      referenceNo: "ADJ-KRW-TEST-1",
+      status: "EXECUTED",
+      verifiedWebhook: true,
+      amount: 20_000,
+      currency: "PHP",
+      details: { amount: 20_000, currency: "PHP" }
+    });
+    summary = await store.getBalanceAdjustmentSummary();
+    assert.equal(summary.settledPhp, 20_000);
+    assert.equal(summary.outstanding, 80_000);
+    assert.equal(summary.canTransfer, true);
+
+    const transfer = await store.reserveAdjustmentTransfer("ADJ-TRANSFER-1", 50_000, actor);
+    assert.equal(transfer.remaining, 30_000);
+    await assert.rejects(
+      store.reserveAdjustmentTransfer("ADJ-TRANSFER-2", 30_000.01, actor),
+      /exceeds the remaining adjusted PHP balance/
+    );
+    await store.finishAdjustmentTransfer("ADJ-TRANSFER-1", "REJECTED");
+    summary = await store.getBalanceAdjustmentSummary();
+    assert.equal(summary.outstanding, 80_000);
+
+    await store.createAdjustment(10_000, "New adjustment after QR settlement", actor);
+    summary = await store.getBalanceAdjustmentSummary();
+    assert.equal(summary.canTransfer, false);
+
+    const secondIntent = await store.createAdjustmentKrwPaymentIntent("ADJ-KRW-TEST-2", 20_000, actor);
+    await store.recordAdjustmentKrwPaymentOrder(
+      secondIntent.referenceNo,
+      "adjustment-payment-2",
+      "qr-payload",
+      null
+    );
+    await store.recordWebhookEvent({
+      eventKey: "payment:adjustment-payment-2",
+      eventType: "payment",
+      paymentId: "adjustment-payment-2",
+      referenceNo: "ADJ-KRW-TEST-2",
+      status: "EXECUTED",
+      verifiedWebhook: true,
+      amount: 20_001,
+      currency: "PHP",
+      details: { amount: 20_001, currency: "PHP" }
+    });
+    summary = await store.getBalanceAdjustmentSummary();
+    assert.equal(summary.latestPayment.status, "ERROR");
+    assert.equal(summary.settledPhp, 20_000);
+    assert.equal(summary.outstanding, 90_000);
+  } finally {
+    await store.close();
+  }
+});
+
 test("email customer wallet balances are isolated, credited once on settlement, and reserve transfers", async () => {
   const database = newDb();
   const { Pool } = database.adapters.createPg();

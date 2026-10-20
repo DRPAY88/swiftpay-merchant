@@ -60,7 +60,7 @@
           <p id="account-number" class="muted"></p>
         </article>
         <article class="panel">
-          <h2>Adjustment total</h2>
+          <h2>Remaining adjustment balance</h2>
           <p id="adjustment-total" class="amount">₱ 0.00</p>
         </article>
       </section>
@@ -114,6 +114,23 @@
             <button class="button" type="submit">Record adjustment</button>
           </form>
           <div class="table-wrap"><table><thead><tr><th>Amount</th><th>Reason</th><th>Actor</th><th>Date</th></tr></thead><tbody id="adjustments-table"></tbody></table></div>
+          <section id="adjustment-krw-settlement" class="adjustment-settlement" aria-labelledby="adjustment-krw-heading">
+            <p class="eyebrow">KRW PAYMENT VERIFICATION</p>
+            <h3 id="adjustment-krw-heading">Reconcile the adjustment</h3>
+            <p class="muted">For a positive adjustment, request a ₩500,000 QR payment and complete it with a supported Korean banking app. Only provider-confirmed PHP settlement offsets the adjustment; any PHP above the remaining adjustment stays in the shared provider balance.</p>
+            <p id="adjustment-outstanding" class="amount">₱ 0.00 remains</p>
+            <p id="adjustment-payment-status" class="muted" role="status">No adjustment QR payment yet.</p>
+            <p id="adjustment-payment-quote" class="muted"></p>
+            <div class="review-actions">
+              <button id="create-adjustment-qr" class="button" type="button">Create ₩500,000 KRW QR</button>
+              <button id="check-adjustment-payment" class="button secondary hidden" type="button">Check payment status</button>
+            </div>
+            <div id="adjustment-qr" class="adjustment-qr hidden">
+              <img id="adjustment-qr-image" class="hidden" alt="QR code for the ₩500,000 adjustment payment">
+              <pre id="adjustment-qr-payload" class="data-box hidden"></pre>
+              <p id="adjustment-qr-reference" class="muted"></p>
+            </div>
+          </section>
         </article>
         <article class="panel">
           <p class="eyebrow">MANUAL BANK DEPOSIT</p>
@@ -137,6 +154,10 @@
           <h2>Submit transfer</h2>
           <p class="warning">Submits a real transfer from the shared payment provider account. Verify details before confirming.</p>
           <form id="transfer-form">
+            <label class="setting-toggle transfer-adjustment-toggle" for="transfer-adjustment">
+              <input id="transfer-adjustment" type="checkbox">
+              Apply this transfer to the remaining adjustment (requires a verified KRW QR payment)
+            </label>
             <label for="transfer-amount">Amount (PHP)</label>
             <input id="transfer-amount" type="number" min="0.01" max="50000" step="0.01" required>
             <label for="transfer-bank">Institution code</label>

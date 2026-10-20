@@ -21,6 +21,8 @@ main { max-width: 1180px; margin: 26px auto; padding: 0 20px 40px; }
 .section-heading h2 { margin-bottom: 0; }
 .setting-toggle { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
 .setting-toggle input[type="checkbox"] { width: 20px; min-height: 20px; margin: 0; accent-color: #075bbb; }
+.transfer-adjustment-toggle { justify-content: flex-start; white-space: normal; }
+.transfer-adjustment-toggle input[type="checkbox"] { flex: 0 0 20px; }
 .amount { margin: 16px 0 6px; font-size: 32px; font-weight: 800; }
 .muted { color: #65748b; font-size: 13px; line-height: 1.5; }
 form { display: grid; gap: 10px; margin: 16px 0; }
@@ -48,5 +50,11 @@ td .button { min-height: 32px; margin: 2px; padding: 6px 9px; font-size: 12px; }
 .review-detail dd { margin: 0; overflow-wrap: anywhere; }
 .review-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .review-actions textarea { flex: 1 1 100%; }
+.adjustment-settlement { margin-top: 22px; padding: 18px; border: 1px solid #dce5ef; border-radius: 12px; background: #f8fafc; }
+.adjustment-settlement h3 { margin: 0 0 10px; }
+.adjustment-settlement .amount { margin: 12px 0 6px; font-size: 24px; }
+.adjustment-qr { display: grid; justify-items: start; gap: 12px; margin-top: 16px; }
+.adjustment-qr img { width: min(100%, 300px); padding: 10px; border: 1px solid #dce5ef; border-radius: 10px; background: #fff; }
+.setting-toggle input[type="checkbox"] { width: 20px; min-height: 20px; margin: 0; accent-color: #075bbb; }
 .hidden { display: none !important; }
 @media (max-width: 760px) { main { margin-top: 16px; padding: 0 12px 28px; } .grid { grid-template-columns: 1fr; } .inline-form { grid-template-columns: 1fr; } .topbar { padding: 17px 18px; } .panel { padding: 17px; } .dashboard-nav { margin: 0 -12px; padding: 10px 12px; } .review-detail dl { grid-template-columns: 1fr; gap: 3px; } .review-detail dd + dt { margin-top: 10px; } .section-heading { align-items: flex-start; flex-direction: column; } }

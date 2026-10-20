@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { newDb } from "pg-mem";
 import { createAdminStore } from "../src/admin-store.js";
@@ -144,10 +145,33 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /Reference estimate only—not a DRPAY offer/);
   assert.match(homepageHtml, /href="\/site\.css\?v=4"/);
   assert.match(homepageHtml, /src="\/rates\.js\?v=3"/);
+  assert.match(homepageHtml, /apple-mobile-web-app-capable/);
+  assert.match(homepageHtml, /href="\/manifest\.webmanifest"/);
+  assert.match(homepageHtml, /Add to Home Screen/);
+  assert.match(homepageHtml, /not this iPhone web app/);
 
   const ratesScript = await fetch(`${baseUrl}/rates.js`);
   assert.equal(ratesScript.status, 200);
   assert.match(await ratesScript.text(), /api\/marketing\/rates/);
+
+  const manifest = await fetch(`${baseUrl}/manifest.webmanifest`);
+  assert.equal(manifest.status, 200);
+  assert.match(manifest.headers.get("content-type"), /manifest\+json/);
+  const manifestData = await manifest.json();
+  assert.equal(manifestData.name, "DRPAY");
+  assert.equal(manifestData.display, "standalone");
+  assert.ok(manifestData.icons.some((icon) => icon.sizes === "192x192"));
+  assert.ok(manifestData.icons.some((icon) => icon.sizes === "512x512"));
+
+  const serviceWorker = await fetch(`${baseUrl}/service-worker.js`);
+  assert.equal(serviceWorker.status, 200);
+  assert.match(await serviceWorker.text(), /addAll\(PRECACHE_URLS\)/);
+
+  for (const iconPath of ["/apple-touch-icon.png", "/drpay-pwa-192.png", "/drpay-pwa-512.png"]) {
+    const icon = await fetch(`${baseUrl}${iconPath}`, { method: "HEAD" });
+    assert.equal(icon.status, 200);
+    assert.equal(icon.headers.get("content-type"), "image/png");
+  }
 
   const promoVideo = await fetch(`${baseUrl}/drpay-promo.mp4`, { method: "HEAD" });
   assert.equal(promoVideo.status, 200);
@@ -171,6 +195,9 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   const adminHtml = await page.text();
   assert.match(adminHtml, /DRPAY Super Admin/);
   assert.doesNotMatch(adminHtml, /SwiftPay/i);
+  assert.match(adminHtml, /Reconcile the adjustment/);
+  assert.match(adminHtml, /Create ₩500,000 KRW QR/);
+  assert.match(adminHtml, /verified KRW QR payment/);
 
   const anonymous = await fetch(`${baseUrl}/v1/admin/users`);
   assert.equal(anonymous.status, 401);
@@ -589,6 +616,107 @@ test("internal adjustments are audited but do not affect the provider balance; a
   assert.equal(transferEvent.details.amount, 25);
   assert.equal(JSON.stringify(transferEvent).includes("123456"), false);
   assert.equal(Number(await store.adjustmentTotal()), 100);
+});
+
+test("super admins must verify a ₩500,000 QR payment before transferring the remaining adjustment", async () => {
+  const headers = {
+    authorization: "Bearer admin-token",
+    "content-type": "application/json"
+  };
+  const before = await (await fetch(`${baseUrl}/v1/admin/balance-adjustments`, {
+    headers: { authorization: "Bearer admin-token" }
+  })).json();
+  const adjustment = await fetch(`${baseUrl}/v1/admin/balance-adjustments`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ amount: 100_000, reason: "KRW adjustment reconciliation test" })
+  });
+  assert.equal(adjustment.status, 201);
+
+  const transferInput = {
+    amount: 1,
+    referenceNo: `ADJ-BEF-${randomUUID()}`,
+    channel: "INSTAPAY",
+    institutionCode: "TESTBANK",
+    recipientInformation: { accountNumber: "123456", fullName: "Test Merchant" },
+    adjustmentTransfer: true
+  };
+  const blockedTransfer = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(transferInput)
+  });
+  assert.equal(blockedTransfer.status, 409);
+
+  const quoteResponse = await fetch(`${baseUrl}/v1/payments/qrph/quote`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ amountKrw: 500_000 })
+  });
+  assert.equal(quoteResponse.status, 200);
+  const quote = await quoteResponse.json();
+  assert.equal(quote.customerAmountKrw, 500_000);
+  assert.equal(quote.settlementAmountPhp, 20_000);
+
+  const merchantQr = await fetch(`${baseUrl}/v1/payments/qrph`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer merchant-token",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ quoteToken: quote.quoteToken, adjustmentSettlement: true })
+  });
+  assert.equal(merchantQr.status, 403);
+
+  const qrResponse = await fetch(`${baseUrl}/v1/payments/qrph`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ quoteToken: quote.quoteToken, adjustmentSettlement: true })
+  });
+  assert.equal(qrResponse.status, 201);
+  const qr = await qrResponse.json();
+  assert.equal(qr.customerAmountKrw, 500_000);
+  assert.equal(qr.amount, 20_000);
+  assert.equal(qr.currency, "PHP");
+  assert.equal(qr.qrImageBase64, Buffer.from("test-qr-image").toString("base64"));
+  assert.match(qr.referenceNo, /^ADJ-KRW-/);
+
+  const pending = await (await fetch(`${baseUrl}/v1/admin/balance-adjustments`, {
+    headers: { authorization: "Bearer admin-token" }
+  })).json();
+  assert.equal(pending.latestPayment.status, "PENDING");
+  assert.equal(pending.outstanding, before.outstanding + 100_000);
+  assert.equal(pending.canTransfer, false);
+
+  const statusResponse = await fetch(
+    `${baseUrl}/v1/admin/balance-adjustments/krw-payments/${encodeURIComponent(qr.paymentId)}/status`,
+    { headers: { authorization: "Bearer admin-token" } }
+  );
+  assert.equal(statusResponse.status, 200);
+  assert.equal((await statusResponse.json()).status, "EXECUTED");
+
+  const settled = await (await fetch(`${baseUrl}/v1/admin/balance-adjustments`, {
+    headers: { authorization: "Bearer admin-token" }
+  })).json();
+  assert.equal(settled.latestPayment.status, "EXECUTED");
+  assert.equal(settled.latestPayment.settledAmountPhp, 20_000);
+  assert.equal(settled.outstanding, before.outstanding + 80_000);
+  assert.equal(settled.canTransfer, true);
+
+  const transfer = await fetch(`${baseUrl}/v1/disbursements`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      ...transferInput,
+      amount: 50_000,
+      referenceNo: `ADJ-AFT-${randomUUID()}`
+    })
+  });
+  assert.equal(transfer.status, 202);
+  const afterTransfer = await (await fetch(`${baseUrl}/v1/admin/balance-adjustments`, {
+    headers: { authorization: "Bearer admin-token" }
+  })).json();
+  assert.equal(afterTransfer.outstanding, before.outstanding + 30_000);
 });
 
 test("internal server errors are logged with redacted diagnostics while responses stay generic", async () => {

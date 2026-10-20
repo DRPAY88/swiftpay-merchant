@@ -44,7 +44,8 @@ const directQrPaymentSchema = z.object({
 }).strict();
 const quotedQrPaymentSchema = z.object({
   quoteToken: z.string().min(1).max(2048),
-  rejectDuplicatedPayments: z.boolean().default(true)
+  rejectDuplicatedPayments: z.boolean().default(true),
+  adjustmentSettlement: z.literal(true).optional()
 }).strict();
 const qrPaymentSchema = z.union([directQrPaymentSchema, quotedQrPaymentSchema]);
 const krwPhpQuoteRequestSchema = z.object({
@@ -95,7 +96,8 @@ const disbursementSchema = z.object({
     mobileNumber: z.string().regex(/^[0-9+-]*$/).max(35).optional(),
     email: z.string().email().max(255).optional()
   }),
-  remarks: z.string().trim().max(80).optional()
+  remarks: z.string().trim().max(80).optional(),
+  adjustmentTransfer: z.boolean().default(false)
 });
 const merchantEmailSchema = z.string().trim().email().max(255).transform((email) => email.toLowerCase());
 const merchantStatusSchema = z.object({
@@ -1182,17 +1184,39 @@ export function createApp({
 
   app.get("/v1/admin/balance-adjustments", requireSuperAdmin, asyncRoute(async (req, res) => {
     const limit = z.coerce.number().int().min(1).max(200).catch(100).parse(req.query.limit);
-    const [total, adjustments] = await Promise.all([
-      userStore.adjustmentTotal(),
+    const [summary, adjustments] = await Promise.all([
+      userStore.getBalanceAdjustmentSummary(),
       userStore.listAdjustments(limit)
     ]);
-    res.json({ total, adjustments, affectsProviderFunds: false });
+    res.json({
+      ...summary,
+      adjustments,
+      affectsProviderFunds: false
+    });
   }));
 
   app.post("/v1/admin/balance-adjustments", requireSuperAdmin, asyncRoute(async (req, res) => {
     const input = parse(adjustmentSchema, req.body);
     const adjustment = await userStore.createAdjustment(input.amount, input.reason, req.principal.sub);
     res.status(201).json({ ...adjustment, affectsProviderFunds: false });
+  }));
+
+  app.get("/v1/admin/balance-adjustments/krw-payments/:paymentId/status", requireSuperAdmin, asyncRoute(async (req, res) => {
+    const paymentId = z.string().trim().min(1).max(128).parse(req.params.paymentId);
+    const payment = await userStore.getAdjustmentKrwPayment(paymentId);
+    if (!payment) throw new SwiftPayError(404, "Adjustment QR payment not found");
+    if (["EXECUTED", "REJECTED", "CANCELED", "EXPIRED", "ERROR"].includes(payment.status)) {
+      return res.json({ paymentId, status: payment.status, settledAmountPhp: Number(payment.settled_amount_php) });
+    }
+    const result = await requestProvider("payments/status", { paymentToken: paymentId });
+    const providerStatus = typeof result.data === "string" ? result.data : result.data?.status;
+    const status = z.enum(["PENDING", "EXECUTED", "REJECTED", "CANCELED", "EXPIRED", "ERROR"])
+      .safeParse(providerStatus);
+    if (!status.success) {
+      throw new SwiftPayError(502, "The payment service returned an invalid QR payment status");
+    }
+    const reconciled = await userStore.reconcileAdjustmentKrwPaymentStatus(paymentId, status.data);
+    res.json({ paymentId, ...reconciled });
   }));
 
   app.post("/v1/admin/manual-bank-deposits", requireSuperAdmin, asyncRoute(async (req, res) => {
@@ -1322,17 +1346,38 @@ export function createApp({
       throw new FxQuoteError(400, "Foreign-currency QR payments require a locked PHP quote; request a new quote first");
     }
     const request = parse(qrPaymentSchema, req.body);
+    const isAdjustmentSettlement = "adjustmentSettlement" in request && request.adjustmentSettlement === true;
+    if (isAdjustmentSettlement && req.principal.role !== "super_admin") {
+      throw new SwiftPayError(403, "Only a super admin can create an adjustment QR payment");
+    }
     const quote = "quoteToken" in request
       ? verifyFxPhpQuote(request.quoteToken, req.principal.sub, config.sessionSigningKey)
       : null;
+    if (
+      isAdjustmentSettlement &&
+      (!quote || quote.customerCurrency !== "KRW" || quote.customerAmount !== 500_000)
+    ) {
+      throw new FxQuoteError(400, "Adjustment reconciliation requires a locked ₩500,000 KRW quote");
+    }
+    if (isAdjustmentSettlement && !userStore?.createAdjustmentKrwPaymentIntent) {
+      throw new SwiftPayError(503, "Adjustment reconciliation storage is unavailable");
+    }
+    const adjustmentReference = isAdjustmentSettlement ? `ADJ-KRW-${quote.quoteId}` : null;
     const input = quote
       ? {
           amount: quote.amountPhp,
-          referenceNo: `${quote.customerCurrency}-${quote.quoteId}`,
+          referenceNo: adjustmentReference || `${quote.customerCurrency}-${quote.quoteId}`,
           currency: "PHP",
           rejectDuplicatedPayments: request.rejectDuplicatedPayments
         }
       : request;
+    if (isAdjustmentSettlement) {
+      await userStore.createAdjustmentKrwPaymentIntent(
+        input.referenceNo,
+        quote.amountPhp,
+        req.principal.sub
+      );
+    }
     const isInternalMerchant = req.principal.role === "merchant" && req.principal.walletMode === "internal";
     if (isInternalMerchant && !userStore?.createMerchantWalletCollection) {
       throw new SwiftPayError(503, "Merchant wallet collection storage is unavailable");
@@ -1357,6 +1402,12 @@ export function createApp({
           providerOutcome: "rejected"
         });
       }
+      if (isAdjustmentSettlement) {
+        await userStore.finishAdjustmentKrwPaymentCreation(
+          input.referenceNo,
+          error instanceof SwiftPayError && error.status < 500 ? "REJECTED" : "UNKNOWN"
+        );
+      }
       throw error;
     }
     const providerPayment = z.object({
@@ -1370,6 +1421,9 @@ export function createApp({
       instapayBankCode: z.string().nullable().optional()
     }).safeParse(bootstrap.data);
     if (!providerPayment.success || !Number.isFinite(Number(providerPayment.data.amount))) {
+      if (isAdjustmentSettlement) {
+        await userStore.finishAdjustmentKrwPaymentCreation(input.referenceNo, "UNKNOWN");
+      }
       throw new SwiftPayError(502, "The payment service returned an incomplete QRPH payment");
     }
 
@@ -1380,6 +1434,9 @@ export function createApp({
           settlementMismatch: true
         });
       }
+      if (isAdjustmentSettlement) {
+        await userStore.finishAdjustmentKrwPaymentCreation(input.referenceNo, "UNKNOWN");
+      }
       throw new SwiftPayError(502, "The payment service returned a QRPH payment with a different reference");
     }
     if (payment.currency && payment.currency !== input.currency) {
@@ -1387,6 +1444,9 @@ export function createApp({
         await userStore.finishMerchantWalletCollection(req.principal.sub, input.referenceNo, "ERROR", {
           settlementMismatch: true
         });
+      }
+      if (isAdjustmentSettlement) {
+        await userStore.finishAdjustmentKrwPaymentCreation(input.referenceNo, "UNKNOWN");
       }
       throw new SwiftPayError(502, "The payment service returned a QRPH payment in a different currency");
     }
@@ -1397,6 +1457,9 @@ export function createApp({
           settlementMismatch: true
         });
       }
+      if (isAdjustmentSettlement) {
+        await userStore.finishAdjustmentKrwPaymentCreation(input.referenceNo, "UNKNOWN");
+      }
       throw new SwiftPayError(502, "The payment service returned a PHP QR amount that does not match the locked quote");
     }
     if (isInternalMerchant) {
@@ -1405,7 +1468,7 @@ export function createApp({
         input.referenceNo,
         payment.paymentId
       );
-    } else if (userStore?.recordWebhookEvent) {
+    } else if (userStore?.recordWebhookEvent && !isAdjustmentSettlement) {
       await userStore.recordWebhookEvent({
         eventKey: `payment:${payment.paymentId}`,
         eventType: "payment",
@@ -1431,8 +1494,23 @@ export function createApp({
         responseType: "bytes"
       });
       qrImageBase64 = image.data.toString("base64");
-    } catch {
+    } catch (error) {
+      console.warn("QR image unavailable; returning the provider QR payload instead", error.message);
       qrImageBase64 = null;
+    }
+
+    if (isAdjustmentSettlement) {
+      try {
+        await userStore.recordAdjustmentKrwPaymentOrder(
+          input.referenceNo,
+          payment.paymentId,
+          payment.qrCode,
+          qrImageBase64
+        );
+      } catch (error) {
+        await userStore.finishAdjustmentKrwPaymentCreation(input.referenceNo, "UNKNOWN");
+        throw error;
+      }
     }
 
     res.status(201).json({
@@ -1749,6 +1827,9 @@ export function createApp({
 
   app.post("/v1/disbursements", requireScope("swiftpay:disbursements:write"), asyncRoute(async (req, res) => {
     const input = parse(disbursementSchema, req.body);
+    if (input.adjustmentTransfer && req.principal.role !== "super_admin") {
+      throw new SwiftPayError(403, "Only a super admin can transfer the remaining adjustment balance");
+    }
     if (input.channel === "PESONET" && input.type && input.type !== "P2P") {
       throw new SwiftPayError(400, "PESONET only supports P2P transfers");
     }
@@ -1778,6 +1859,14 @@ export function createApp({
       }
       await reserveWallet(req.principal.sub, input.referenceNo, input.amount);
     }
+    let adjustmentTransferReserved = false;
+    if (input.adjustmentTransfer) {
+      if (!userStore?.reserveAdjustmentTransfer || !userStore?.finishAdjustmentTransfer) {
+        throw new SwiftPayError(503, "Adjustment transfer reconciliation is unavailable");
+      }
+      await userStore.reserveAdjustmentTransfer(input.referenceNo, input.amount, req.principal.sub);
+      adjustmentTransferReserved = true;
+    }
     let auditId = null;
     try {
       auditId = userStore
@@ -1785,10 +1874,14 @@ export function createApp({
         referenceNo: input.referenceNo,
         amount: input.amount,
         channel: input.channel,
-        institutionCode: input.institutionCode
+        institutionCode: input.institutionCode,
+        adjustmentTransfer: input.adjustmentTransfer
       })
         : null;
     } catch (error) {
+      if (adjustmentTransferReserved) {
+        await userStore.finishAdjustmentTransfer(input.referenceNo, "REJECTED");
+      }
       if (isLedgerWallet) {
         try {
           await finishWallet(
@@ -1831,6 +1924,16 @@ export function createApp({
           console.error("Transfer outcome could not be saved to the audit log");
         }
       }
+      if (adjustmentTransferReserved) {
+        try {
+          await userStore.finishAdjustmentTransfer(
+            input.referenceNo,
+            error instanceof SwiftPayError && error.status < 500 ? "REJECTED" : "UNKNOWN"
+          );
+        } catch {
+          console.error("Adjustment transfer reservation requires reconciliation");
+        }
+      }
       if (!(error instanceof SwiftPayError) || error.status >= 500) {
         return res.status(202).json({
           status: "UNKNOWN",
@@ -1859,6 +1962,13 @@ export function createApp({
           });
         } catch {
           console.error("Transfer outcome could not be saved to the audit log");
+        }
+      }
+      if (adjustmentTransferReserved) {
+        try {
+          await userStore.finishAdjustmentTransfer(input.referenceNo, "UNKNOWN");
+        } catch {
+          console.error("Adjustment transfer reservation requires reconciliation");
         }
       }
       return res.status(202).json({
@@ -1899,6 +2009,13 @@ export function createApp({
           status: "PENDING",
           auditStatus: "reconciliation_required"
         });
+      }
+    }
+    if (adjustmentTransferReserved) {
+      try {
+        await userStore.finishAdjustmentTransfer(input.referenceNo, "PENDING");
+      } catch {
+        console.error("Accepted adjustment transfer requires reconciliation");
       }
     }
     res.status(202).json({ id: result.data?.id, referenceNo: input.referenceNo, status: "PENDING" });

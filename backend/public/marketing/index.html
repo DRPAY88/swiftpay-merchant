@@ -4,12 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#071a38">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="DRPAY">
   <meta name="description" content="Create a DRPAY account, pay by KRW QR, and track PHP credited to your personal wallet after verified settlement.">
   <link rel="canonical" href="https://denpay.cc/">
   <title>DRPAY — KRW QR payments, clearly tracked</title>
   <link rel="icon" href="/checkout-assets/drpay_mark.png" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/site.css?v=4">
   <script src="/rates.js?v=3" defer></script>
+  <script src="/pwa.js?v=1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -40,6 +45,7 @@
             Download for Android
           </a>
           <a class="text-link" href="#how-it-works">See how it works <span aria-hidden="true">→</span></a>
+          <a class="text-link" href="#iphone-install">Install on iPhone <span aria-hidden="true">→</span></a>
         </div>
         <p class="download-note">No wallet credit for pending or unverified payments.</p>
       </div>
@@ -268,6 +274,20 @@
       </div>
     </section>
 
+    <section class="iphone-install-section" id="iphone-install">
+      <div class="shell iphone-install-panel">
+        <div class="iphone-install-copy">
+          <p class="eyebrow">IPHONE HOME SCREEN</p>
+          <h2>Save the DRPAY website<br><span>to your iPhone.</span></h2>
+          <p>Open <strong>denpay.cc</strong> in Safari, tap <strong>Share</strong>, then choose <strong>Add to Home Screen</strong>. Tap <strong>Add</strong> to finish.</p>
+        </div>
+        <aside class="iphone-install-note">
+          <strong>What gets installed</strong>
+          <p>This adds the DRPAY website as a Home Screen web app. Merchant sign-in, wallet, and payment features are currently available in the Android app, not this iPhone web app.</p>
+        </aside>
+      </div>
+    </section>
+
     <section class="download-section shell" id="download">
       <div class="download-panel">
         <div class="download-content">
@@ -307,6 +327,10 @@
             <p>DRPAY runs on Android 7.0 and newer.</p>
           </details>
           <details>
+            <summary>Can I install DRPAY on iPhone?</summary>
+            <p>In Safari, open denpay.cc, tap Share, then Add to Home Screen. This installs the DRPAY website; merchant sign-in, wallet, and payment features are not currently available on iPhone.</p>
+          </details>
+          <details>
             <summary>How do I install the APK?</summary>
             <p>Download the APK, open it, and follow Android's installation prompts.</p>
           </details>
@@ -334,7 +358,7 @@
     </div>
     <div class="shell footer-bottom">
       <span>© <span id="year">2026</span> DRPAY. All rights reserved.</span>
-      <span>Official app download for Android.</span>
+      <span>Android app download · iPhone Home Screen website</span>
     </div>
   </footer>
 </body>

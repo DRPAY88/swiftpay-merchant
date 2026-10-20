@@ -155,6 +155,34 @@ export function createAdminStore(
         actor_email TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS balance_adjustment_krw_payments (
+        reference_no TEXT PRIMARY KEY,
+        payment_id TEXT UNIQUE,
+        customer_amount_krw NUMERIC(14, 0) NOT NULL CHECK (customer_amount_krw = 500000),
+        expected_amount_php NUMERIC(14, 2) NOT NULL CHECK (expected_amount_php > 0),
+        offset_amount_php NUMERIC(14, 2) NOT NULL CHECK (offset_amount_php > 0),
+        adjustment_id_at_create BIGINT NOT NULL DEFAULT 0,
+        settled_amount_php NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (settled_amount_php >= 0),
+        status TEXT NOT NULL CHECK (status IN ('CREATING', 'PENDING', 'EXECUTED', 'REJECTED', 'CANCELED', 'EXPIRED', 'ERROR', 'UNKNOWN')),
+        qr_code TEXT,
+        qr_image_base64 TEXT,
+        actor_email TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS balance_adjustment_krw_payment_active
+        ON balance_adjustment_krw_payments ((1))
+        WHERE status IN ('CREATING', 'PENDING', 'UNKNOWN');
+      ALTER TABLE balance_adjustment_krw_payments
+        ADD COLUMN IF NOT EXISTS adjustment_id_at_create BIGINT NOT NULL DEFAULT 0;
+      CREATE TABLE IF NOT EXISTS balance_adjustment_transfers (
+        reference_no TEXT PRIMARY KEY,
+        amount NUMERIC(14, 2) NOT NULL CHECK (amount > 0),
+        status TEXT NOT NULL CHECK (status IN ('PENDING', 'EXECUTED', 'REJECTED', 'UNKNOWN')),
+        actor_email TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
       CREATE TABLE IF NOT EXISTS manual_bank_deposits (
         id TEXT PRIMARY KEY,
         amount NUMERIC(14, 2) NOT NULL CHECK (amount > 0),
@@ -1241,6 +1269,338 @@ export function createAdminStore(
     });
   }
 
+  async function getBalanceAdjustmentSummary() {
+    const [totals, latestPayment] = await Promise.all([
+      pool.query(
+        `SELECT
+           (SELECT COALESCE(SUM(amount), 0) FROM balance_adjustments) AS total,
+           (SELECT COALESCE(SUM(settled_amount_php), 0)
+            FROM balance_adjustment_krw_payments WHERE status = 'EXECUTED') AS settled,
+           (SELECT COALESCE(SUM(amount), 0)
+            FROM balance_adjustment_transfers
+            WHERE status IN ('PENDING', 'UNKNOWN', 'EXECUTED')) AS transferred,
+           (SELECT COALESCE(MAX(id), 0) FROM balance_adjustments WHERE amount > 0) AS latest_positive_adjustment_id,
+           (SELECT COALESCE(MAX(adjustment_id_at_create), 0)
+            FROM balance_adjustment_krw_payments WHERE status = 'EXECUTED') AS latest_settled_adjustment_id`
+      ),
+      pool.query(
+        `SELECT reference_no, payment_id, customer_amount_krw, expected_amount_php,
+                offset_amount_php, settled_amount_php, status, qr_code, qr_image_base64,
+                created_at, updated_at
+         FROM balance_adjustment_krw_payments
+         ORDER BY created_at DESC, reference_no DESC
+         LIMIT 1`
+      )
+    ]);
+    const total = Number(totals.rows[0].total);
+    const settledPhp = Number(totals.rows[0].settled);
+    const transferredPhp = Number(totals.rows[0].transferred);
+    const outstanding = total > 0 ? Math.max(0, total - settledPhp - transferredPhp) : 0;
+    const payment = latestPayment.rows[0] || null;
+    return {
+      total,
+      settledPhp,
+      transferredPhp,
+      outstanding,
+      canTransfer: outstanding > 0 &&
+        Number(totals.rows[0].latest_settled_adjustment_id) > 0 &&
+        Number(totals.rows[0].latest_positive_adjustment_id) <= Number(totals.rows[0].latest_settled_adjustment_id),
+      latestPayment: payment ? {
+        referenceNo: payment.reference_no,
+        paymentId: payment.payment_id,
+        customerAmountKrw: Number(payment.customer_amount_krw),
+        expectedAmountPhp: Number(payment.expected_amount_php),
+        offsetAmountPhp: Number(payment.offset_amount_php),
+        settledAmountPhp: Number(payment.settled_amount_php),
+        status: payment.status,
+        qrCode: payment.qr_code,
+        qrImageBase64: payment.qr_image_base64,
+        createdAt: payment.created_at,
+        updatedAt: payment.updated_at
+      } : null
+    };
+  }
+
+  async function createAdjustmentKrwPaymentIntent(referenceNo, expectedAmountPhp, actor) {
+    try {
+      return await withAudit(
+        actor,
+        "balance.adjustment_krw_payment.created",
+        referenceNo,
+        { customerAmountKrw: 500_000, expectedAmountPhp, currency: "PHP" },
+        async (client) => {
+          await client.query("SELECT id FROM balance_adjustments ORDER BY id LIMIT 1 FOR UPDATE");
+          const active = await client.query(
+            `SELECT reference_no FROM balance_adjustment_krw_payments
+             WHERE status IN ('CREATING', 'PENDING', 'UNKNOWN')
+             LIMIT 1`
+          );
+          if (active.rowCount) {
+            throw new AdminStoreError(409, "An adjustment QR payment is already awaiting reconciliation");
+          }
+          const latestPositiveAdjustment = await client.query(
+            "SELECT COALESCE(MAX(id), 0) AS id FROM balance_adjustments WHERE amount > 0"
+          );
+          const totals = await client.query(
+            `SELECT
+               (SELECT COALESCE(SUM(amount), 0) FROM balance_adjustments) AS total,
+               (SELECT COALESCE(SUM(settled_amount_php), 0)
+                FROM balance_adjustment_krw_payments WHERE status = 'EXECUTED') AS settled,
+               (SELECT COALESCE(SUM(amount), 0)
+                FROM balance_adjustment_transfers
+                WHERE status IN ('PENDING', 'UNKNOWN', 'EXECUTED')) AS transferred`
+          );
+          const row = totals.rows[0];
+          const gross = Number(row.total);
+          const outstanding = gross > 0
+            ? Math.max(0, gross - Number(row.settled) - Number(row.transferred))
+            : 0;
+          if (outstanding <= 0) {
+            throw new AdminStoreError(409, "There is no positive adjustment balance to reconcile");
+          }
+          const offsetAmountPhp = Math.min(expectedAmountPhp, outstanding);
+          const created = await client.query(
+            `INSERT INTO balance_adjustment_krw_payments
+               (reference_no, customer_amount_krw, expected_amount_php, offset_amount_php,
+                adjustment_id_at_create, status, actor_email)
+             VALUES ($1, 500000, $2, $3, $4, 'CREATING', $5)
+             RETURNING reference_no, expected_amount_php, offset_amount_php, status`,
+            [referenceNo, expectedAmountPhp, offsetAmountPhp, latestPositiveAdjustment.rows[0].id, actor]
+          );
+          return {
+            referenceNo: created.rows[0].reference_no,
+            expectedAmountPhp: Number(created.rows[0].expected_amount_php),
+            offsetAmountPhp: Number(created.rows[0].offset_amount_php),
+            status: created.rows[0].status
+          };
+        }
+      );
+    } catch (error) {
+      if (error.code === "23505") {
+        throw new AdminStoreError(409, "An adjustment QR payment is already awaiting reconciliation");
+      }
+      throw error;
+    }
+  }
+
+  async function finishAdjustmentKrwPaymentCreation(referenceNo, status) {
+    if (!["REJECTED", "ERROR", "UNKNOWN"].includes(status)) {
+      throw new Error("Invalid adjustment QR payment creation status");
+    }
+    await pool.query(
+      `UPDATE balance_adjustment_krw_payments
+       SET status = $2, updated_at = NOW()
+       WHERE reference_no = $1 AND status = 'CREATING'`,
+      [referenceNo, status]
+    );
+  }
+
+  async function recordAdjustmentKrwPaymentOrder(referenceNo, paymentId, qrCode, qrImageBase64) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const updated = await client.query(
+        `UPDATE balance_adjustment_krw_payments
+         SET payment_id = COALESCE(payment_id, $2),
+             qr_code = $3,
+             qr_image_base64 = $4,
+             status = CASE WHEN status = 'CREATING' THEN 'PENDING' ELSE status END,
+             updated_at = NOW()
+         WHERE reference_no = $1
+         RETURNING status`,
+        [referenceNo, paymentId, qrCode, qrImageBase64]
+      );
+      if (!updated.rowCount) throw new AdminStoreError(404, "Adjustment QR payment intent not found");
+      const event = await client.query(
+        `SELECT payment_id, status, amount, currency, details
+         FROM swiftpay_webhook_events
+         WHERE event_type = 'payment' AND reference_no = $1 AND payment_id = $2
+         LIMIT 1`,
+        [referenceNo, paymentId]
+      );
+      if (event.rowCount && event.rows[0].details?.verifiedWebhook === true) {
+        await reconcileAdjustmentKrwPaymentEvent(client, {
+          referenceNo,
+          paymentId,
+          status: event.rows[0].status,
+          amount: event.rows[0].amount,
+          currency: event.rows[0].currency,
+          verifiedWebhook: true
+        });
+      }
+      await client.query("COMMIT");
+      return { status: updated.rows[0].status };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function reconcileAdjustmentKrwPaymentEvent(client, event) {
+    if (!event.verifiedWebhook) return null;
+    const found = await client.query(
+      `SELECT reference_no, payment_id, expected_amount_php, offset_amount_php,
+              settled_amount_php, status, actor_email
+       FROM balance_adjustment_krw_payments
+       WHERE reference_no = $1
+       FOR UPDATE`,
+      [event.referenceNo]
+    );
+    if (!found.rowCount) return null;
+    const payment = found.rows[0];
+    const amountMatches = event.amount === null || event.amount === undefined ||
+      Math.round(Number(event.amount) * 100) === Math.round(Number(payment.expected_amount_php) * 100);
+    const currencyMatches = event.currency === null || event.currency === undefined || event.currency === "PHP";
+    const paymentMatches = !payment.payment_id || payment.payment_id === event.paymentId;
+    const status = paymentMatches && amountMatches && currencyMatches
+      ? event.status
+      : "ERROR";
+    const terminal = ["EXECUTED", "REJECTED", "CANCELED", "EXPIRED", "ERROR"].includes(payment.status);
+    const nextStatus = terminal ? payment.status : status;
+    const settledAmount = nextStatus === "EXECUTED" ? payment.offset_amount_php : 0;
+    await client.query(
+      `UPDATE balance_adjustment_krw_payments
+       SET payment_id = COALESCE(payment_id, $2),
+           status = $3,
+           settled_amount_php = $4,
+           updated_at = NOW()
+       WHERE reference_no = $1`,
+      [event.referenceNo, event.paymentId, nextStatus, settledAmount]
+    );
+    if (!terminal && nextStatus === "EXECUTED") {
+      await client.query(
+        `INSERT INTO admin_audit (actor_email, action, target, details)
+         VALUES ($1, 'balance.adjustment_krw_payment.settled', $2, $3)`,
+        [
+          payment.actor_email,
+          event.referenceNo,
+          JSON.stringify({ paymentId: event.paymentId, amountPhp: settledAmount, currency: "PHP" })
+        ]
+      );
+    }
+    return { status: nextStatus, settledAmountPhp: Number(settledAmount) };
+  }
+
+  async function reconcileAdjustmentKrwPaymentStatus(paymentId, status) {
+    if (!["PENDING", "EXECUTED", "REJECTED", "CANCELED", "EXPIRED", "ERROR"].includes(status)) {
+      throw new AdminStoreError(502, "Payment provider returned an invalid payment status");
+    }
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const found = await client.query(
+        `SELECT reference_no, payment_id, offset_amount_php, settled_amount_php, status, actor_email
+         FROM balance_adjustment_krw_payments WHERE payment_id = $1 FOR UPDATE`,
+        [paymentId]
+      );
+      if (!found.rowCount) throw new AdminStoreError(404, "Adjustment QR payment not found");
+      const payment = found.rows[0];
+      const terminal = ["EXECUTED", "REJECTED", "CANCELED", "EXPIRED", "ERROR"].includes(payment.status);
+      const nextStatus = terminal ? payment.status : status;
+      const settledAmount = nextStatus === "EXECUTED" ? payment.offset_amount_php : 0;
+      await client.query(
+        `UPDATE balance_adjustment_krw_payments
+         SET status = $2, settled_amount_php = $3, updated_at = NOW()
+         WHERE payment_id = $1`,
+        [paymentId, nextStatus, settledAmount]
+      );
+      if (!terminal && nextStatus === "EXECUTED") {
+        await client.query(
+          `INSERT INTO admin_audit (actor_email, action, target, details)
+           VALUES ($1, 'balance.adjustment_krw_payment.settled', $2, $3)`,
+          [
+            payment.actor_email,
+            payment.reference_no,
+            JSON.stringify({ paymentId, amountPhp: Number(settledAmount), currency: "PHP", source: "provider_status" })
+          ]
+        );
+      }
+      await client.query("COMMIT");
+      return { status: nextStatus, settledAmountPhp: Number(settledAmount) };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function getAdjustmentKrwPayment(paymentId) {
+    const result = await pool.query(
+      `SELECT reference_no, payment_id, expected_amount_php, offset_amount_php,
+              settled_amount_php, status
+       FROM balance_adjustment_krw_payments
+       WHERE payment_id = $1`,
+      [paymentId]
+    );
+    return result.rows[0] || null;
+  }
+
+  async function reserveAdjustmentTransfer(referenceNo, amount, actor) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT id FROM balance_adjustments ORDER BY id LIMIT 1 FOR UPDATE");
+      const paid = await client.query(
+        `SELECT COALESCE(SUM(settled_amount_php), 0)::text AS amount,
+                COALESCE(MAX(adjustment_id_at_create), 0) AS latest_adjustment_id
+         FROM balance_adjustment_krw_payments WHERE status = 'EXECUTED'`
+      );
+      if (Number(paid.rows[0].amount) <= 0) {
+        throw new AdminStoreError(409, "Complete and verify the ₩500,000 adjustment QR payment before transferring the remaining adjustment");
+      }
+      const latestPositiveAdjustment = await client.query(
+        "SELECT COALESCE(MAX(id), 0) AS id FROM balance_adjustments WHERE amount > 0"
+      );
+      if (Number(latestPositiveAdjustment.rows[0].id) > Number(paid.rows[0].latest_adjustment_id)) {
+        throw new AdminStoreError(409, "Complete and verify a new ₩500,000 QR payment for the latest adjustment before transferring");
+      }
+      const total = await client.query(
+        `SELECT
+           (SELECT COALESCE(SUM(amount), 0) FROM balance_adjustments) AS gross,
+           (SELECT COALESCE(SUM(settled_amount_php), 0)
+            FROM balance_adjustment_krw_payments WHERE status = 'EXECUTED') AS settled,
+           (SELECT COALESCE(SUM(amount), 0)
+            FROM balance_adjustment_transfers
+            WHERE status IN ('PENDING', 'UNKNOWN', 'EXECUTED')) AS transferred`
+      );
+      const available = Math.max(
+        0,
+        Number(total.rows[0].gross) - Number(total.rows[0].settled) - Number(total.rows[0].transferred)
+      );
+      if (amount > available + 0.000001) {
+        throw new AdminStoreError(409, "Transfer amount exceeds the remaining adjusted PHP balance");
+      }
+      await client.query(
+        `INSERT INTO balance_adjustment_transfers (reference_no, amount, status, actor_email)
+         VALUES ($1, $2, 'PENDING', $3)`,
+        [referenceNo, amount, actor]
+      );
+      await client.query("COMMIT");
+      return { remaining: Math.max(0, available - amount) };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function finishAdjustmentTransfer(referenceNo, status) {
+    if (!["PENDING", "EXECUTED", "REJECTED", "UNKNOWN"].includes(status)) {
+      throw new Error("Invalid adjustment transfer status");
+    }
+    await pool.query(
+      `UPDATE balance_adjustment_transfers
+       SET status = $2, updated_at = NOW()
+       WHERE reference_no = $1
+         AND status IN ('PENDING', 'UNKNOWN')`,
+      [referenceNo, status]
+    );
+  }
+
   async function createManualBankDeposit({ id, amount, bankName, referenceNo, notes }, actor) {
     return withAudit(
       actor,
@@ -1321,7 +1681,11 @@ export function createAdminStore(
         [event.eventKey]
       );
       const previousStatus = inserted.rows.length > 0 ? null : existing.rows[0].status;
-      const details = { ...existing.rows[0].details, ...event.details };
+      const details = {
+        ...existing.rows[0].details,
+        ...event.details,
+        ...(event.verifiedWebhook ? { verifiedWebhook: true } : {})
+      };
       const updatedEvent = await client.query(
         `UPDATE swiftpay_webhook_events
          SET payment_id = COALESCE($2, payment_id),
@@ -1424,6 +1788,14 @@ export function createAdminStore(
             }
           }
         }
+        await reconcileAdjustmentKrwPaymentEvent(client, {
+          referenceNo: event.referenceNo,
+          paymentId: event.paymentId,
+          status: effectiveStatus,
+          amount,
+          currency,
+          verifiedWebhook: event.verifiedWebhook === true
+        });
       } else if (event.eventType === "disbursement") {
         const reservationStatus = effectiveStatus === "EXECUTED"
           ? "EXECUTED"
@@ -1456,6 +1828,19 @@ export function createAdminStore(
             [`merchant-disbursement:${event.referenceNo}`, reservationStatus, JSON.stringify(event.details || {})]
           );
         }
+        const adjustmentTransferStatus = effectiveStatus === "EXECUTED"
+          ? "EXECUTED"
+          : ["REJECTED", "ERROR"].includes(effectiveStatus) ? "REJECTED" : "PENDING";
+        await client.query(
+          `UPDATE balance_adjustment_transfers
+           SET status = CASE
+                 WHEN status IN ('EXECUTED', 'REJECTED') THEN status
+                 ELSE $2
+               END,
+               updated_at = NOW()
+           WHERE reference_no = $1`,
+          [event.referenceNo, adjustmentTransferStatus]
+        );
       }
       if (
         event.notifyIncoming &&
@@ -1731,6 +2116,14 @@ export function createAdminStore(
     getPaymentWebhookStatus,
     listPaymentWebhookTransactions,
     getKrwQrPaymentBalance,
+    getBalanceAdjustmentSummary,
+    createAdjustmentKrwPaymentIntent,
+    finishAdjustmentKrwPaymentCreation,
+    recordAdjustmentKrwPaymentOrder,
+    reconcileAdjustmentKrwPaymentStatus,
+    getAdjustmentKrwPayment,
+    reserveAdjustmentTransfer,
+    finishAdjustmentTransfer,
     listAdjustments,
     adjustmentTotal,
     recordAudit: (actor, action, target, details) =>
