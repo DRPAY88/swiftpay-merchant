@@ -230,6 +230,23 @@ h1 span,
   margin-left: 5px;
 }
 
+.iphone-availability-note {
+  max-width: 500px;
+  margin: 18px 0 0;
+  color: #526783;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.iphone-availability-note strong {
+  color: var(--navy);
+}
+
+.iphone-availability-note a {
+  color: var(--blue);
+  font-weight: 700;
+}
+
 .download-note {
   margin: 19px 0 0;
   color: #7c8ba0;
