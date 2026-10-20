@@ -191,61 +191,82 @@
 
         .hero {
             background:
-                radial-gradient(ellipse at 100% 0%, rgba(213,177,109,0.24), transparent 42%),
-                linear-gradient(145deg, #163C70, #0B1F3A 58%, #071429);
-            padding: max(24px, env(safe-area-inset-top)) 20px 34px;
+                radial-gradient(circle at 90% 10%, rgba(213,177,109,0.35) 0%, transparent 50%),
+                radial-gradient(circle at 10% 90%, rgba(27,79,156,0.4) 0%, transparent 60%),
+                linear-gradient(135deg, #1B4F9C 0%, #0B1F3A 60%, #061224 100%);
+            padding: max(28px, env(safe-area-inset-top)) 24px 38px;
             color: white;
             text-align: left;
-            border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-            margin: 0 12px;
-            box-shadow: 0 14px 34px rgba(11,31,58,0.2);
+            border-radius: var(--radius-lg);
+            margin: 12px 16px;
+            box-shadow: 0 20px 40px rgba(11,31,58,0.28);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.12);
             animation: fintech-enter 360ms var(--motion-easing) both;
         }
 
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50px;
+            right: -50px;
+            width: 180px;
+            height: 180px;
+            background: rgba(213,177,109,0.15);
+            border-radius: 50%;
+            filter: blur(40px);
+            pointer-events: none;
+        }
+
         .hero-logo {
-            min-height: 38px;
-            background: rgba(255,255,255,0.14);
-            border-radius: 12px;
-            border: 0;
-            margin: 0 0 28px;
+            min-height: 42px;
+            background: rgba(255,255,255,0.16);
+            backdrop-filter: blur(12px);
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255,255,255,0.2);
+            margin: 0 0 24px;
             display: flex;
             align-items: center;
             justify-content: flex-start;
             width: fit-content;
-            padding: 6px 10px;
+            padding: 8px 14px;
             color: white;
             font-size: 15px;
             font-weight: 800;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
         }
 
         .hero-logo img {
-            width: 30px;
-            height: 30px;
+            width: 32px;
+            height: 32px;
             padding: 3px;
-            border-radius: 8px;
+            border-radius: 10px;
             background: white;
             object-fit: contain;
         }
 
         .balance-amount {
-            font-size: 36px;
+            font-size: 38px;
             font-weight: 800;
+            letter-spacing: -0.02em;
             margin-bottom: 0;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
 
         .action-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 12px 4px;
-            margin-top: 16px;
-            padding: 0 14px;
+            gap: 16px 8px;
+            margin-top: 20px;
+            padding: 0 16px;
         }
 
         .action-card {
-            background: transparent;
-            padding: 8px 2px;
-            border: 0;
-            border-radius: var(--radius-md);
+            background: white;
+            padding: 12px 6px;
+            border: 1px solid rgba(11,31,58,0.06);
+            border-radius: var(--radius-lg);
             display: flex;
             flex-direction: column;
             align-items: center;
