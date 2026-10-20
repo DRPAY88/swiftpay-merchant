@@ -520,9 +520,15 @@ export function createApp({
     }
     return { paymentId: token, status: status.status, source };
   }
-  async function reconcileWalletPaymentStatus({ token, status, updateStatus, source }) {
+  async function reconcileWalletPaymentStatus({
+    token,
+    status,
+    updateStatus,
+    source,
+    recoverSettlementMismatch = false
+  }) {
     if (
-      status.status !== "PENDING" ||
+      (status.status !== "PENDING" && !recoverSettlementMismatch) ||
       !["topup", "collection"].includes(status.kind) ||
       !updateStatus
     ) {
@@ -681,7 +687,7 @@ export function createApp({
   const webhookLimiter = rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: "draft-8", legacyHeaders: false });
   app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
   app.get("/download", (_req, res) => {
-    res.redirect(302, "/DRPAY-Merchant-v1.0.23.apk");
+    res.redirect(302, "/DRPAY-Merchant-v1.0.24.apk");
   });
   app.get("/checkout/:code", asyncRoute(async (req, res) => {
     const code = paymentLinkCodeSchema.parse(req.params.code);
@@ -1298,9 +1304,17 @@ export function createApp({
             token,
             status,
             updateStatus: userStore?.reconcileMerchantWalletCollection
-              ? (nextStatus) => userStore.reconcileMerchantWalletCollection(req.principal.sub, token, nextStatus)
+              ? (nextStatus) => userStore.reconcileMerchantWalletCollection(
+                req.principal.sub,
+                token,
+                nextStatus,
+                status.details?.settlementMismatch === true
+              )
               : null,
-            source: "merchant_wallet"
+            source: "merchant_wallet",
+            recoverSettlementMismatch: status.kind === "collection" &&
+              status.status === "ERROR" &&
+              status.details?.settlementMismatch === true
           });
       return res.json(response);
     }

@@ -116,7 +116,7 @@ private fun MainNavigationIcon(
     }
 
     Surface(
-        modifier = Modifier.size(width = 52.dp, height = 36.dp),
+        modifier = Modifier.size(width = 52.dp, height = 40.dp),
         shape = RoundedCornerShape(14.dp),
         color = containerColor
     ) {
@@ -125,7 +125,7 @@ private fun MainNavigationIcon(
                 imageVector = image,
                 contentDescription = description,
                 tint = iconColor,
-                modifier = Modifier.size(21.dp)
+                modifier = Modifier.size(22.dp)
             )
         }
     }
@@ -379,7 +379,7 @@ fun SwiftPayApp() {
                             Text(
                                 "Home",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (activeTab == Route.Home) FontWeight.ExtraBold else FontWeight.Medium,
+                                fontWeight = if (activeTab == Route.Home) FontWeight.SemiBold else FontWeight.Medium,
                                 color = if (activeTab == Route.Home) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
@@ -392,7 +392,7 @@ fun SwiftPayApp() {
                             Text(
                                 "Wallet",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (activeTab == Route.Wallet) FontWeight.ExtraBold else FontWeight.Medium,
+                                fontWeight = if (activeTab == Route.Wallet) FontWeight.SemiBold else FontWeight.Medium,
                                 color = if (activeTab == Route.Wallet) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
@@ -405,7 +405,7 @@ fun SwiftPayApp() {
                             Text(
                                 "Crypto",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (activeTab == Route.Crypto) FontWeight.ExtraBold else FontWeight.Medium,
+                                fontWeight = if (activeTab == Route.Crypto) FontWeight.SemiBold else FontWeight.Medium,
                                 color = if (activeTab == Route.Crypto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
@@ -418,7 +418,7 @@ fun SwiftPayApp() {
                             Text(
                                 "Profile",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (activeTab == Route.Profile) FontWeight.ExtraBold else FontWeight.Medium,
+                                fontWeight = if (activeTab == Route.Profile) FontWeight.SemiBold else FontWeight.Medium,
                                 color = if (activeTab == Route.Profile) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },

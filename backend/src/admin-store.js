@@ -483,13 +483,17 @@ export function createAdminStore(
     return result.rows[0] || null;
   }
 
-  async function reconcileMerchantWalletCollection(email, paymentId, status) {
+  async function reconcileMerchantWalletCollection(email, paymentId, status, recoverSettlementMismatch = false) {
     const updated = await pool.query(
       `UPDATE merchant_wallet_transactions
       SET status = $3, updated_at = NOW()
-      WHERE email = $1 AND payment_id = $2 AND kind = 'collection' AND status = 'PENDING'
+      WHERE email = $1 AND payment_id = $2 AND kind = 'collection'
+        AND (
+          status = 'PENDING' OR
+          ($4::boolean AND status = 'ERROR' AND details->>'settlementMismatch' = 'true')
+        )
       RETURNING status`,
-      [email, paymentId, status]
+      [email, paymentId, status, recoverSettlementMismatch]
     );
     if (updated.rows[0]) return updated.rows[0].status;
     const current = await pool.query(

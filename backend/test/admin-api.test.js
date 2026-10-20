@@ -43,6 +43,7 @@ before(async () => {
     verifyAccessToken: async (token) => {
       if (token === "admin-token") return { sub: "support@swiftpay.site", scope };
       if (token === "merchant-token") return { sub: "merchant@example.com", scope };
+      if (token === "internal-merchant-token") return { sub: "qr-merchant@example.com", scope };
       if (token === "customer-token") return { sub: "customer@example.com", scope };
       if (token === "second-customer-token") return { sub: "second-customer@example.com", scope };
       if (token === "krw-customer-token") return { sub: "krw-customer@example.com", scope };
@@ -138,7 +139,7 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /current KRW-to-PHP rate configured/);
   assert.match(homepageHtml, /English narration and original instrumental music/);
   assert.match(homepageHtml, /polished English voice-over \+ original instrumental music/);
-  assert.match(homepageHtml, /Version 1\.0\.23/);
+  assert.match(homepageHtml, /Version 1\.0\.24/);
   assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=9"/);
   assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=9"/);
   assert.match(homepageHtml, /id="market-rates"/);
@@ -148,7 +149,8 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /apple-mobile-web-app-capable/);
   assert.match(homepageHtml, /href="\/manifest\.webmanifest"/);
   assert.match(homepageHtml, /Add to Home Screen/);
-  assert.match(homepageHtml, /not this iPhone web app/);
+  assert.match(homepageHtml, /no downloadable iPhone merchant app yet/);
+  assert.match(homepageHtml, /Home Screen shortcut opens the marketing website only/);
 
   const ratesScript = await fetch(`${baseUrl}/rates.js`);
   assert.equal(ratesScript.status, 200);
@@ -184,8 +186,8 @@ test("admin dashboard is served while its APIs require a signed super-admin role
 
   const download = await fetch(`${baseUrl}/download`, { redirect: "manual" });
   assert.equal(download.status, 302);
-  assert.equal(download.headers.get("location"), "/DRPAY-Merchant-v1.0.23.apk");
-  const apk = await fetch(`${baseUrl}/DRPAY-Merchant-v1.0.23.apk`, { method: "HEAD" });
+  assert.equal(download.headers.get("location"), "/DRPAY-Merchant-v1.0.24.apk");
+  const apk = await fetch(`${baseUrl}/DRPAY-Merchant-v1.0.24.apk`, { method: "HEAD" });
   assert.equal(apk.status, 200);
   assert.equal(apk.headers.get("content-type"), "application/vnd.android.package-archive");
   assert.ok(Number(apk.headers.get("content-length")) > 40_000_000);
@@ -804,6 +806,59 @@ test("merchant wallet payment history includes PHP payment webhook receipts", as
   });
   assert.equal(nextPaymentPage.status, 200);
   assert.equal((await nextPaymentPage.json())[0].id, "00000000-0000-4000-8000-000000000004");
+});
+
+test("internal merchant QR collections recover from webhook metadata mismatch after provider confirms settlement", async () => {
+  await store.ensureSelfServiceMerchant("qr-merchant@example.com");
+  const merchantHeaders = {
+    authorization: "Bearer internal-merchant-token",
+    "content-type": "application/json"
+  };
+  const created = await fetch(`${baseUrl}/v1/payments/qrph`, {
+    method: "POST",
+    headers: merchantHeaders,
+    body: JSON.stringify({
+      amount: 125,
+      referenceNo: "QR-SETTLEMENT-RECOVERY",
+      currency: "PHP"
+    })
+  });
+  assert.equal(created.status, 201);
+  const payment = await created.json();
+  assert.equal(payment.bankAccountNumber, null);
+  assert.equal(Number(await store.getMerchantWalletBalance("qr-merchant@example.com")), 0);
+
+  await store.recordWebhookEvent({
+    eventKey: `payment:${payment.paymentId}`,
+    eventType: "payment",
+    paymentId: payment.paymentId,
+    referenceNo: payment.referenceNo,
+    status: "EXECUTED",
+    amount: 126,
+    currency: "PHP",
+    verifiedWebhook: true
+  });
+  assert.equal(
+    (await store.listMerchantWalletTransactions("qr-merchant@example.com", 10))[0].status,
+    "ERROR"
+  );
+  assert.equal(Number(await store.getMerchantWalletBalance("qr-merchant@example.com")), 0);
+
+  const reconciled = await fetch(
+    `${baseUrl}/v1/payments/${encodeURIComponent(payment.paymentId)}/status`,
+    { headers: merchantHeaders }
+  );
+  assert.equal(reconciled.status, 200);
+  assert.deepEqual(await reconciled.json(), {
+    paymentId: payment.paymentId,
+    status: "EXECUTED",
+    source: "provider_reconciliation"
+  });
+  assert.equal(Number(await store.getMerchantWalletBalance("qr-merchant@example.com")), 125);
+  const activity = await fetch(`${baseUrl}/v1/wallet/activity`, {
+    headers: merchantHeaders
+  });
+  assert.equal((await activity.json())[0].status, "EXECUTED");
 });
 
 test("super admins can record verified manual bank deposits for merchant wallet history", async () => {
