@@ -116,8 +116,8 @@ private fun MainNavigationIcon(
     }
 
     Surface(
-        modifier = Modifier.size(width = 52.dp, height = 40.dp),
-        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.size(48.dp),
+        shape = RoundedCornerShape(16.dp),
         color = containerColor
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -369,7 +369,7 @@ fun SwiftPayApp() {
         } else {
             val activeTab = navigationState.selectedMainTab()
             NavigationSuiteScaffold(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                containerColor = MaterialTheme.colorScheme.surface,
                 navigationSuiteItems = {
                     item(
                         selected = activeTab == Route.Home,
