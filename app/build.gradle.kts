@@ -26,6 +26,7 @@ fun paymentBackendUrl(defaultUrl: String): String =
 
 plugins {
     alias(libs.plugins.android.application)
+    id("org.jetbrains.kotlin.android")
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
@@ -33,14 +34,14 @@ plugins {
 
 android {
     namespace = "com.example.myapplication"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.swiftpay.site"
         minSdk = 24
-        targetSdk = 37
-        versionCode = 25
-        versionName = "1.0.24"
+        targetSdk = 36
+        versionCode = 26
+        versionName = "1.0.25"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "FCM_PROJECT_ID", buildConfigString(optionalProperty("FCM_PROJECT_ID")))
@@ -85,6 +86,12 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
 }
 

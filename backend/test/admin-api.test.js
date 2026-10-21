@@ -139,7 +139,7 @@ test("admin dashboard is served while its APIs require a signed super-admin role
   assert.match(homepageHtml, /current KRW-to-PHP rate configured/);
   assert.match(homepageHtml, /English narration and original instrumental music/);
   assert.match(homepageHtml, /polished English voice-over \+ original instrumental music/);
-  assert.match(homepageHtml, /Version 1\.0\.24/);
+  assert.match(homepageHtml, /Version 1\.0\.25/);
   assert.match(homepageHtml, /src="\/drpay-promo\.mp4\?v=9"/);
   assert.match(homepageHtml, /poster="\/drpay-promo-poster\.jpg\?v=9"/);
   assert.match(homepageHtml, /id="market-rates"/);
@@ -186,8 +186,8 @@ test("admin dashboard is served while its APIs require a signed super-admin role
 
   const download = await fetch(`${baseUrl}/download`, { redirect: "manual" });
   assert.equal(download.status, 302);
-  assert.equal(download.headers.get("location"), "/DRPAY-Merchant-v1.0.24.apk");
-  const apk = await fetch(`${baseUrl}/DRPAY-Merchant-v1.0.24.apk`, { method: "HEAD" });
+  assert.equal(download.headers.get("location"), "/DRPAY-Merchant-v1.0.25.apk");
+  const apk = await fetch(`${baseUrl}/DRPAY-Merchant-v1.0.25.apk`, { method: "HEAD" });
   assert.equal(apk.status, 200);
   assert.equal(apk.headers.get("content-type"), "application/vnd.android.package-archive");
   assert.ok(Number(apk.headers.get("content-length")) > 40_000_000);
